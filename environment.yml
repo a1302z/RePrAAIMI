@@ -4,9 +4,10 @@ channels:
   - pytorch
 dependencies:
   - python==3.10
-  - pytorch::pytorch
+  - pytorch::pytorch==1.11
   - pytorch::torchvision
-  - pytorch::cudatoolkit==11.2
+  - conda-forge::cudatoolkit
+  - conda-forge::cudnn==8.2.1.32
   - black
   - pytest
   - pylint
