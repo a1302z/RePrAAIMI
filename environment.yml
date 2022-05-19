@@ -1,0 +1,13 @@
+name: objaxdp
+channels: 
+  - conda-forge
+  - pytorch
+dependencies:
+  - python==3.10
+  - pytorch::pytorch
+  - pytorch::torchvision
+  - pytorch::cudatoolkit==11.2
+  - black
+  - pytest
+  - pylint
+  - pip
