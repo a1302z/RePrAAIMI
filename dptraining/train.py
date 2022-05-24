@@ -14,6 +14,7 @@ from dptraining.datasets import CIFAR10Creator
 from dptraining.utils.loss import CSELogitsSparse
 from dptraining.models.cifar10models import Cifar10ConvNet
 from dptraining.utils.augment import Augmentation
+from dptraining.utils.scheduler import CosineSchedule, ConstantSchedule, LinearSchedule
 
 
 def create_train_op(model_vars, loss_gv, opt, augment_op):
@@ -78,15 +79,17 @@ def main(args):
         ["random_vertical_flips", "random_horizontal_flips", "random_img_shift"]
     )
     augment_op = augmenter.create_augmentation_op()
+    scheduler: LinearSchedule
+    if args.lr_schedule == "cos":
+        scheduler = CosineSchedule(args.lr, args.epochs)
+    else:
+        scheduler = ConstantSchedule(args.lr, args.epochs)
 
     train_op = create_train_op(model_vars, loss_gv, opt, augment_op)
 
     epoch_time = []
     for epoch in range(args.epochs):
-        if args.lr_schedule == "cos":
-            lr = args.lr * 0.5 * (1 + np.cos(np.pi * (epoch + 1) / (args.epochs + 1)))
-        else:
-            lr = args.lr
+        lr = next(scheduler)
         cur_epoch_time = train(train_loader, train_op, lr)
         print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
         epoch_time.append(cur_epoch_time)
