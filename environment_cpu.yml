@@ -4,8 +4,9 @@ channels:
   - pytorch
 dependencies:
   - python==3.10
-  - pytorch::pytorch-cpu==1.11
+  - pytorch::pytorch==1.11
   - pytorch::torchvision
+  - pytorch::cpuonly
   - black
   - pytest
   - pylint
