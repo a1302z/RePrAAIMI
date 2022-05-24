@@ -1,0 +1,12 @@
+name: objaxdp_cpu
+channels: 
+  - conda-forge
+  - pytorch
+dependencies:
+  - python==3.10
+  - pytorch::pytorch-cpu==1.11
+  - pytorch::torchvision
+  - black
+  - pytest
+  - pylint
+  - pip

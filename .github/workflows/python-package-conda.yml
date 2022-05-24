@@ -20,9 +20,7 @@ jobs:
         echo $CONDA/bin >> $GITHUB_PATH
     - name: Install dependencies
       run: |
-        bash setup_env.sh
-        conda activate objax_dp
+        bash setup_cpu_env.sh
     - name: Test with pytest
       run: |
-        conda install pytest
-        pytest
+        conda run -n objaxdp_cpu pytest
