@@ -1,3 +1,8 @@
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path.cwd()))
+from dptraining.utils.augment import Augmentation
 from dptraining.datasets import CIFAR10Creator
 
 

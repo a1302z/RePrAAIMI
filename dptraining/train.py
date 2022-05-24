@@ -1,9 +1,6 @@
 import argparse
 import time
 
-import jax
-import jax.numpy as jn
-
 import numpy as np
 
 import objax
@@ -16,6 +13,19 @@ sys.path.insert(0, str(Path.cwd()))
 from dptraining.datasets import CIFAR10Creator
 from dptraining.utils.loss import CSELogitsSparse
 from dptraining.models.cifar10models import Cifar10ConvNet
+from dptraining.utils.augment import Augmentation
+
+
+def create_train_op(model_vars, loss_gv, opt, augment_op):
+    @objax.Function.with_vars(model_vars + loss_gv.vars() + opt.vars())
+    def train_op(x, y, learning_rate):
+        x = augment_op(x)
+        grads, loss = loss_gv(x, y)
+        opt(learning_rate, grads)
+        return loss
+
+    train_op = objax.Jit(train_op)
+    return train_op
 
 
 def train(train_loader, train_op, lr):
@@ -62,44 +72,12 @@ def main(args):
     # Loss and training op
     loss_fn = CSELogitsSparse.create_loss_fn(model_vars, model)
 
-    if args.disable_dp:
-        loss_gv = objax.GradValues(loss_fn, model.vars())
-    else:
-        loss_gv = objax.privacy.dpsgd.PrivateGradValues(
-            loss_fn,
-            model_vars,
-            args.sigma,
-            args.max_per_sample_grad_norm,
-            microbatch=1,
-            batch_axis=(0, 0),
-            use_norm_accumulation=args.norm_acc,
-        )
+    loss_gv = create_loss_gradient(args, model, model_vars, loss_fn)
 
-    @objax.Function.with_vars(objax.random.DEFAULT_GENERATOR.vars())
-    def augment_op(x):
-        # random flip
-        x = jax.lax.cond(
-            objax.random.uniform(()) < 0.5,
-            lambda t: t,
-            lambda t: t[:, :, ::-1],
-            operand=x,
-        )
-        # random crop
-        x_pad = jn.pad(x, [[0, 0], [4, 4], [4, 4]], "reflect")
-        offset = objax.random.randint((2,), 0, 4)
-        return jax.lax.dynamic_slice(x_pad, (0, offset[0], offset[1]), (3, 32, 32))
+    augmenter = Augmentation.from_string_list(["random_flips", "random_img_shift"])
+    augment_op = augmenter.create_augmentation_op()
 
-    augment_op = objax.Vectorize(augment_op)
-
-    @objax.Function.with_vars(model_vars + loss_gv.vars() + opt.vars())
-    def train_op(x, y, learning_rate):
-        if args.disable_dp:
-            x = augment_op(x)
-        grads, loss = loss_gv(x, y)
-        opt(learning_rate, grads)
-        return loss
-
-    train_op = objax.Jit(train_op)
+    train_op = create_train_op(model_vars, loss_gv, opt, augment_op)
 
     epoch_time = []
     for epoch in range(args.epochs):
@@ -126,6 +104,23 @@ def main(args):
         print("Average epoch time (except first): ", np.average(epoch_time[1:]))
         print("Median epoch time (except first): ", np.median(epoch_time[1:]))
     print("Total training time (excluding evaluation): ", np.sum(epoch_time))
+
+
+def create_loss_gradient(args, model, model_vars, loss_fn):
+    if args.disable_dp:
+        loss_gv = objax.GradValues(loss_fn, model.vars())
+    else:
+        loss_gv = objax.privacy.dpsgd.PrivateGradValues(
+            loss_fn,
+            model_vars,
+            args.sigma,
+            args.max_per_sample_grad_norm,
+            microbatch=1,
+            batch_axis=(0, 0),
+            use_norm_accumulation=args.norm_acc,
+        )
+
+    return loss_gv
 
 
 def parse_args():

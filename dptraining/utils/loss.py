@@ -1,10 +1,10 @@
 from typing import Callable
 import objax
-from abc import ABC, abstractclassmethod
+from abc import ABC, abstractstaticmethod
 
 
 class LossFunctionCreator(ABC):
-    @abstractclassmethod
+    @abstractstaticmethod
     def create_loss_fn(model_vars, model) -> Callable:
         pass
 
