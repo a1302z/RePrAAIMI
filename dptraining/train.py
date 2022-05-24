@@ -74,7 +74,9 @@ def main(args):
 
     loss_gv = create_loss_gradient(args, model, model_vars, loss_fn)
 
-    augmenter = Augmentation.from_string_list(["random_flips", "random_img_shift"])
+    augmenter = Augmentation.from_string_list(
+        ["random_vertical_flips", "random_horizontal_flips", "random_img_shift"]
+    )
     augment_op = augmenter.create_augmentation_op()
 
     train_op = create_train_op(model_vars, loss_gv, opt, augment_op)
