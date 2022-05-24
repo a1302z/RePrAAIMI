@@ -10,11 +10,10 @@ import sys
 
 sys.path.insert(0, str(Path.cwd()))
 
-from dptraining.datasets import CIFAR10Creator
-from dptraining.utils.loss import CSELogitsSparse
-from dptraining.models.cifar10models import Cifar10ConvNet
+from dptraining.datasets import make_loader_from_args
+from dptraining.models import make_model_from_args
+from dptraining.utils import make_loss_from_args, make_scheduler_from_args
 from dptraining.utils.augment import Augmentation
-from dptraining.utils.scheduler import CosineSchedule, ConstantSchedule, LinearSchedule
 
 
 def create_train_op(model_vars, loss_gv, opt, augment_op):
@@ -27,88 +26,6 @@ def create_train_op(model_vars, loss_gv, opt, augment_op):
 
     train_op = objax.Jit(train_op)
     return train_op
-
-
-def train(train_loader, train_op, lr):
-    start_time = time.time()
-    for x, y in train_loader:
-        train_op(x, y, lr)
-    return time.time() - start_time
-
-
-def test(test_loader, predict_op):
-    num_correct = 0
-    for x, y in test_loader:
-        y_pred = predict_op(x)
-        num_correct += np.count_nonzero(np.argmax(y_pred, axis=1) == y)
-    print(f"\tTest set:\tAccuracy: {num_correct/len(test_loader.dataset)}")
-
-
-def main(args):
-    train_ds, test_ds = CIFAR10Creator.make_datasets(
-        (),
-        {"root": "./data", "download": True},
-        (),
-        {"root": "./data", "download": True},
-    )
-    train_loader, test_loader = CIFAR10Creator.make_dataloader(
-        train_ds,
-        test_ds,
-        (),
-        {"batch_size": args.batch_size, "shuffle": True},
-        (),
-        {"batch_size": args.batch_size_test, "shuffle": False},
-    )
-
-    # Model
-    model = Cifar10ConvNet()
-    model_vars = model.vars()
-
-    # Optimizer
-    opt = objax.optimizer.Momentum(model_vars, momentum=args.momentum, nesterov=False)
-
-    # Prediction operation
-    predict_op = objax.Jit(lambda x: objax.functional.softmax(model(x)), model_vars)
-
-    # Loss and training op
-    loss_fn = CSELogitsSparse.create_loss_fn(model_vars, model)
-
-    loss_gv = create_loss_gradient(args, model, model_vars, loss_fn)
-
-    augmenter = Augmentation.from_string_list(
-        ["random_vertical_flips", "random_horizontal_flips", "random_img_shift"]
-    )
-    augment_op = augmenter.create_augmentation_op()
-    scheduler: LinearSchedule
-    if args.lr_schedule == "cos":
-        scheduler = CosineSchedule(args.lr, args.epochs)
-    else:
-        scheduler = ConstantSchedule(args.lr, args.epochs)
-
-    train_op = create_train_op(model_vars, loss_gv, opt, augment_op)
-
-    epoch_time = []
-    for epoch in range(args.epochs):
-        lr = next(scheduler)
-        cur_epoch_time = train(train_loader, train_op, lr)
-        print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
-        epoch_time.append(cur_epoch_time)
-        test(test_loader, predict_op)
-        if not args.disable_dp:
-            epsilon = objax.privacy.dpsgd.analyze_dp(
-                q=args.batch_size / len(train_ds),
-                noise_multiplier=args.sigma,
-                steps=len(train_loader) * (epoch + 1),
-                delta=args.delta,
-            )
-            print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {args.delta})")
-
-    print("Average epoch time (all epochs): ", np.average(epoch_time))
-    print("Median epoch time (all epochs): ", np.median(epoch_time))
-    if len(epoch_time) > 1:
-        print("Average epoch time (except first): ", np.average(epoch_time[1:]))
-        print("Median epoch time (except first): ", np.median(epoch_time[1:]))
-    print("Total training time (excluding evaluation): ", np.sum(epoch_time))
 
 
 def create_loss_gradient(args, model, model_vars, loss_fn):
@@ -128,8 +45,69 @@ def create_loss_gradient(args, model, model_vars, loss_fn):
     return loss_gv
 
 
+def train(train_loader, train_op, lr):
+    start_time = time.time()
+    for x, y in train_loader:
+        train_op(x, y, lr)
+    return time.time() - start_time
+
+
+def test(test_loader, predict_op):
+    num_correct = 0
+    for x, y in test_loader:
+        y_pred = predict_op(x)
+        num_correct += np.count_nonzero(np.argmax(y_pred, axis=1) == y)
+    print(f"\tTest set:\tAccuracy: {num_correct/len(test_loader.dataset)}")
+
+
+def main(args):
+    train_loader, test_loader = make_loader_from_args(args)
+    model = make_model_from_args(args)
+    model_vars = model.vars()
+
+    opt = objax.optimizer.Momentum(model_vars, momentum=args.momentum, nesterov=False)
+
+    predict_op = objax.Jit(lambda x: objax.functional.softmax(model(x)), model_vars)
+
+    loss_class = make_loss_from_args(args)
+    loss_fn = loss_class.create_loss_fn(model_vars, model)
+    loss_gv = create_loss_gradient(args, model, model_vars, loss_fn)
+
+    augmenter = Augmentation.from_string_list(
+        ["random_horizontal_flips", "random_vertical_flips", "random_img_shift"]
+    )
+    augment_op = augmenter.create_augmentation_op()
+    scheduler = make_scheduler_from_args(args)
+
+    train_op = create_train_op(model_vars, loss_gv, opt, augment_op)
+
+    epoch_time = []
+    for epoch in range(args.epochs):
+        lr = next(scheduler)
+        cur_epoch_time = train(train_loader, train_op, lr)
+        print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
+        epoch_time.append(cur_epoch_time)
+        test(test_loader, predict_op)
+        if not args.disable_dp:
+            epsilon = objax.privacy.dpsgd.analyze_dp(
+                q=args.batch_size / len(train_loader.dataset),
+                noise_multiplier=args.sigma,
+                steps=len(train_loader) * (epoch + 1),
+                delta=args.delta,
+            )
+            print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {args.delta})")
+
+    print("Average epoch time (all epochs): ", np.average(epoch_time))
+    print("Median epoch time (all epochs): ", np.median(epoch_time))
+    if len(epoch_time) > 1:
+        print("Average epoch time (except first): ", np.average(epoch_time[1:]))
+        print("Median epoch time (except first): ", np.median(epoch_time[1:]))
+    print("Total training time (excluding evaluation): ", np.sum(epoch_time))
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Objax CIFAR10 DP Training")
+    parser.add_argument("--dataset", default="CIFAR10", type=str, help="Dataset to use")
     parser.add_argument(
         "--epochs",
         default=90,
