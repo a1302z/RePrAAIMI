@@ -1,8 +1,6 @@
 import argparse
 import time
 
-from functools import partial
-
 import jax
 import jax.numpy as jn
 
@@ -15,28 +13,9 @@ import sys
 
 sys.path.insert(0, str(Path.cwd()))
 
-from dptraining.datasets import MakeCIFAR10
-
-
-class Cifar10ConvNet(objax.nn.Sequential):
-    def __init__(self, nclass=10):
-        ops = [
-            objax.nn.Conv2D(3, 32, k=3, strides=1, padding=1),
-            objax.functional.relu,
-            partial(objax.functional.average_pool_2d, size=2, strides=2),
-            objax.nn.Conv2D(32, 64, k=3, strides=1, padding=1),
-            objax.functional.relu,
-            partial(objax.functional.average_pool_2d, size=2, strides=2),
-            objax.nn.Conv2D(64, 64, k=3, strides=1, padding=1),
-            objax.functional.relu,
-            partial(objax.functional.average_pool_2d, size=2, strides=2),
-            objax.nn.Conv2D(64, 128, k=3, strides=1, padding=1),
-            objax.functional.relu,
-            lambda x: x.mean((2, 3)),
-            objax.functional.flatten,
-            objax.nn.Linear(128, nclass, use_bias=True),
-        ]
-        super().__init__(ops)
+from dptraining.datasets import CIFAR10Creator
+from dptraining.utils.loss import CSELogitsSparse
+from dptraining.models.cifar10models import Cifar10ConvNet
 
 
 def train(train_loader, train_op, lr):
@@ -55,13 +34,13 @@ def test(test_loader, predict_op):
 
 
 def main(args):
-    train_ds, test_ds = MakeCIFAR10.make_datasets(
+    train_ds, test_ds = CIFAR10Creator.make_datasets(
         (),
         {"root": "./data", "download": True},
         (),
         {"root": "./data", "download": True},
     )
-    train_loader, test_loader = MakeCIFAR10.make_dataloader(
+    train_loader, test_loader = CIFAR10Creator.make_dataloader(
         train_ds,
         test_ds,
         (),
@@ -81,10 +60,7 @@ def main(args):
     predict_op = objax.Jit(lambda x: objax.functional.softmax(model(x)), model_vars)
 
     # Loss and training op
-    @objax.Function.with_vars(model_vars)
-    def loss_fn(x, label):
-        logit = model(x)
-        return objax.functional.loss.cross_entropy_logits_sparse(logit, label).mean()
+    loss_fn = CSELogitsSparse.create_loss_fn(model_vars, model)
 
     if args.disable_dp:
         loss_gv = objax.GradValues(loss_fn, model.vars())
@@ -146,8 +122,9 @@ def main(args):
 
     print("Average epoch time (all epochs): ", np.average(epoch_time))
     print("Median epoch time (all epochs): ", np.median(epoch_time))
-    print("Average epoch time (except first): ", np.average(epoch_time[1:]))
-    print("Median epoch time (except first): ", np.median(epoch_time[1:]))
+    if len(epoch_time) > 1:
+        print("Average epoch time (except first): ", np.average(epoch_time[1:]))
+        print("Median epoch time (except first): ", np.median(epoch_time[1:]))
     print("Total training time (excluding evaluation): ", np.sum(epoch_time))
 
 

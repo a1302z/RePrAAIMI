@@ -39,7 +39,7 @@ class NumpyCIFAR10(CIFAR10):
         return img, target
 
 
-class MakeCIFAR10(DataLoaderCreator):
+class CIFAR10Creator(DataLoaderCreator):
     CIFAR_MEAN = (0.4914, 0.4822, 0.4465)
     CIFAR_STDDEV = (0.2023, 0.1994, 0.2010)
 
@@ -47,11 +47,13 @@ class MakeCIFAR10(DataLoaderCreator):
         x = x.astype(np.float32)
         x = x / 255.0
         x = x.transpose(0, 3, 1, 2)
-        x = (x - np.reshape(MakeCIFAR10.CIFAR_MEAN, [1, 3, 1, 1])) / np.reshape(
-            MakeCIFAR10.CIFAR_STDDEV, [1, 3, 1, 1]
+        x = (x - np.reshape(CIFAR10Creator.CIFAR_MEAN, [1, 3, 1, 1])) / np.reshape(
+            CIFAR10Creator.CIFAR_STDDEV, [1, 3, 1, 1]
         )
-        # x = x.transpose(0, 2, 3, 1)
         return x
+
+    def transpose_to_HWC(dataset: Dataset):
+        dataset.data.transpose(0, 2, 3, 1)
 
     def numpy_collate(batch: List[np.array]) -> Tuple[np.array, np.array]:
         return np.stack([b[0] for b in batch]), np.array(
@@ -59,13 +61,26 @@ class MakeCIFAR10(DataLoaderCreator):
         )
 
     def make_datasets(
-        train_args, train_kwargs, test_args, test_kwargs, normalize_by_default=True
+        train_args,
+        train_kwargs,
+        test_args,
+        test_kwargs,
+        numpy_optimisation=True,
+        normalize_by_default=True,
     ) -> Tuple[Dataset, Dataset]:
-        train_ds = NumpyCIFAR10(*train_args, **train_kwargs)
-        test_ds = NumpyCIFAR10(*test_args, **test_kwargs)
+        if normalize_by_default and not numpy_optimisation:
+            raise ValueError(
+                "CIFAR10 Creator can only normalize by default if numpy optimisation is activated"
+            )
+        if numpy_optimisation:
+            train_ds = NumpyCIFAR10(*train_args, **train_kwargs)
+            test_ds = NumpyCIFAR10(*test_args, **test_kwargs)
+        else:
+            train_ds = CIFAR10(*train_args, **train_kwargs)
+            test_ds = CIFAR10(*test_args, **test_kwargs)
         if normalize_by_default:
-            train_ds.data = MakeCIFAR10.normalize_images(train_ds.data)
-            test_ds.data = MakeCIFAR10.normalize_images(test_ds.data)
+            train_ds.data = CIFAR10Creator.normalize_images(train_ds.data)
+            test_ds.data = CIFAR10Creator.normalize_images(test_ds.data)
         return train_ds, test_ds
 
     def make_dataloader(
@@ -77,9 +92,9 @@ class MakeCIFAR10(DataLoaderCreator):
         test_kwargs,
     ) -> Tuple[DataLoader, DataLoader]:
         if not "collate_fn" in train_kwargs:
-            train_kwargs["collate_fn"] = MakeCIFAR10.numpy_collate
+            train_kwargs["collate_fn"] = CIFAR10Creator.numpy_collate
         if not "collate_fn" in test_kwargs:
-            test_kwargs["collate_fn"] = MakeCIFAR10.numpy_collate
+            test_kwargs["collate_fn"] = CIFAR10Creator.numpy_collate
         train_dl = DataLoader(train_ds, *train_args, **train_kwargs)
         test_dl = DataLoader(test_ds, *test_args, **test_kwargs)
         return train_dl, test_dl

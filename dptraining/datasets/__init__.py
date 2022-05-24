@@ -1,1 +1,1 @@
-from dptraining.datasets.cifar10 import MakeCIFAR10
+from dptraining.datasets.cifar10 import CIFAR10Creator
