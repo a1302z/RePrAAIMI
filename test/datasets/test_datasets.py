@@ -1,4 +1,10 @@
 import pytest
+
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path.cwd()))
+
 from dptraining.datasets import CIFAR10Creator
 
 
