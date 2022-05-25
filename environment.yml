@@ -12,3 +12,5 @@ dependencies:
   - pytest
   - pylint
   - pip
+  - pip: 
+    - hydra

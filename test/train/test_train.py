@@ -1,4 +1,3 @@
-from argparse import Namespace
 import sys
 from pathlib import Path
 
@@ -7,17 +6,24 @@ from dptraining.train import main
 
 
 def test_train_cifar_one_epoch():
-    args = Namespace(
-        epochs=1,
-        batch_size=128,
-        batch_size_test=1,
-        disable_dp=False,
-        lr=0.1,
-        lr_schedule="cos",
-        momentum=0.9,
-        sigma=1.5,
-        max_per_sample_grad_norm=10.0,
-        delta=1e-5,
-        norm_acc=False,
-    )
-    main(args)
+    config = {
+        "dataset": "CIFAR10",
+        "hyperparams": {
+            "epochs": 1,
+            "batch_size": 128,
+            "batch_size_test": 1,
+            "lr": 0.1,
+            "momentum": 0.9,
+        },
+        "scheduler": {
+            "type": "cosine",
+        },
+        "DP": {
+            "disable_dp": False,
+            "sigma": 1.5,
+            "max_per_sample_grad_norm": 10.0,
+            "delta": 1e-5,
+            "norm_acc": False,
+        },
+    }
+    main(config)

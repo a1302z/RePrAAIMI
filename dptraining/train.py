@@ -1,4 +1,5 @@
-import argparse
+import hydra
+from omegaconf import DictConfig
 import time
 
 import numpy as np
@@ -10,9 +11,9 @@ import sys
 
 sys.path.insert(0, str(Path.cwd()))
 
-from dptraining.datasets import make_loader_from_args
-from dptraining.models import make_model_from_args
-from dptraining.utils import make_loss_from_args, make_scheduler_from_args
+from dptraining.datasets import make_loader_from_config
+from dptraining.models import make_model_from_config
+from dptraining.utils import make_loss_from_config, make_scheduler_from_config
 from dptraining.utils.augment import Augmentation
 
 
@@ -28,18 +29,18 @@ def create_train_op(model_vars, loss_gv, opt, augment_op):
     return train_op
 
 
-def create_loss_gradient(args, model, model_vars, loss_fn):
-    if args.disable_dp:
+def create_loss_gradient(config, model, model_vars, loss_fn):
+    if config["DP"]["disable_dp"]:
         loss_gv = objax.GradValues(loss_fn, model.vars())
     else:
         loss_gv = objax.privacy.dpsgd.PrivateGradValues(
             loss_fn,
             model_vars,
-            args.sigma,
-            args.max_per_sample_grad_norm,
+            config["DP"]["sigma"],
+            config["DP"]["max_per_sample_grad_norm"],
             microbatch=1,
             batch_axis=(0, 0),
-            use_norm_accumulation=args.norm_acc,
+            use_norm_accumulation=config["DP"]["norm_acc"],
         )
 
     return loss_gv
@@ -60,42 +61,50 @@ def test(test_loader, predict_op):
     print(f"\tTest set:\tAccuracy: {num_correct/len(test_loader.dataset)}")
 
 
-def main(args):
-    train_loader, test_loader = make_loader_from_args(args)
-    model = make_model_from_args(args)
+@hydra.main(
+    version_base=None,
+    config_path=Path.cwd() / "configs",
+    config_name="base_config.yaml",
+)
+def main(config: DictConfig):
+    print(config)
+    train_loader, test_loader = make_loader_from_config(config)
+    model = make_model_from_config(config)
     model_vars = model.vars()
 
-    opt = objax.optimizer.Momentum(model_vars, momentum=args.momentum, nesterov=False)
+    opt = objax.optimizer.Momentum(
+        model_vars, momentum=config["hyperparams"]["momentum"], nesterov=False
+    )
 
     predict_op = objax.Jit(lambda x: objax.functional.softmax(model(x)), model_vars)
 
-    loss_class = make_loss_from_args(args)
+    loss_class = make_loss_from_config(config)
     loss_fn = loss_class.create_loss_fn(model_vars, model)
-    loss_gv = create_loss_gradient(args, model, model_vars, loss_fn)
+    loss_gv = create_loss_gradient(config, model, model_vars, loss_fn)
 
     augmenter = Augmentation.from_string_list(
         ["random_horizontal_flips", "random_vertical_flips", "random_img_shift"]
     )
     augment_op = augmenter.create_augmentation_op()
-    scheduler = make_scheduler_from_args(args)
+    scheduler = make_scheduler_from_config(config)
 
     train_op = create_train_op(model_vars, loss_gv, opt, augment_op)
 
     epoch_time = []
-    for epoch in range(args.epochs):
+    for epoch in range(config["hyperparams"]["epochs"]):
         lr = next(scheduler)
         cur_epoch_time = train(train_loader, train_op, lr)
         print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
         epoch_time.append(cur_epoch_time)
         test(test_loader, predict_op)
-        if not args.disable_dp:
+        if not config["DP"]["disable_dp"]:
             epsilon = objax.privacy.dpsgd.analyze_dp(
-                q=args.batch_size / len(train_loader.dataset),
-                noise_multiplier=args.sigma,
+                q=config["hyperparams"]["batch_size"] / len(train_loader.dataset),
+                noise_multiplier=config["DP"]["sigma"],
                 steps=len(train_loader) * (epoch + 1),
-                delta=args.delta,
+                delta=config["DP"]["delta"],
             )
-            print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {args.delta})")
+            print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {config['DP']['delta']})")
 
     print("Average epoch time (all epochs): ", np.average(epoch_time))
     print("Median epoch time (all epochs): ", np.median(epoch_time))
@@ -105,81 +114,5 @@ def main(args):
     print("Total training time (excluding evaluation): ", np.sum(epoch_time))
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Objax CIFAR10 DP Training")
-    parser.add_argument("--dataset", default="CIFAR10", type=str, help="Dataset to use")
-    parser.add_argument(
-        "--epochs",
-        default=90,
-        type=int,
-        metavar="N",
-        help="number of total epochs to run",
-    )
-    parser.add_argument(
-        "--batch-size",
-        default=2000,
-        type=int,
-        metavar="N",
-        help="Batch size for training",
-    )
-    parser.add_argument(
-        "--batch-size-test",
-        default=200,
-        type=int,
-        metavar="N",
-        help="Batch size for test",
-    )
-    parser.add_argument(
-        "--disable-dp",
-        action="store_true",
-        default=False,
-        help="Disable privacy training and just train with vanilla SGD",
-    )
-    parser.add_argument(
-        "--lr",
-        "--learning-rate",
-        default=0.1,
-        type=float,
-        metavar="LR",
-        help="initial learning rate",
-        dest="lr",
-    )
-    parser.add_argument(
-        "--lr-schedule", type=str, choices=["constant", "cos"], default="cos"
-    )
-    parser.add_argument(
-        "--momentum", default=0.9, type=float, metavar="M", help="SGD momentum"
-    )
-    parser.add_argument(
-        "--sigma",
-        type=float,
-        default=1.5,
-        metavar="S",
-        help="Noise multiplier (default 1.5)",
-    )
-    parser.add_argument(
-        "-c",
-        "--max-per-sample-grad_norm",
-        type=float,
-        default=10.0,
-        metavar="C",
-        help="Clip per-sample gradients to this norm (default 10.0)",
-    )
-    parser.add_argument(
-        "--delta",
-        type=float,
-        default=1e-5,
-        metavar="D",
-        help="Target delta (default: 1e-5)",
-    )
-    parser.add_argument(
-        "--norm-acc",
-        action="store_true",
-        default=False,
-        help="Enables norm accumulation in Objax DP-SGD code.",
-    )
-    return parser.parse_args()
-
-
 if __name__ == "__main__":
-    main(parse_args())
+    main()
