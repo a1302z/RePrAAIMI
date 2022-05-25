@@ -1,4 +1,6 @@
+project: dptraining
 dataset: CIFAR10
+log_wandb: True
 hyperparams:
   epochs: 90
   batch_size: 2000

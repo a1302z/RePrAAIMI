@@ -1,13 +1,16 @@
+from typing import Iterable
 import hydra
-from omegaconf import DictConfig
+import wandb
 import time
 
 import numpy as np
 
 import objax
+import sys
 
 from pathlib import Path
-import sys
+from sklearn import metrics
+from tqdm import tqdm
 
 sys.path.insert(0, str(Path.cwd()))
 
@@ -46,19 +49,39 @@ def create_loss_gradient(config, model, model_vars, loss_fn):
     return loss_gv
 
 
-def train(train_loader, train_op, lr):
+def train(config, train_loader, train_op, lr):
     start_time = time.time()
     for x, y in train_loader:
-        train_op(x, y, lr)
+        train_loss = train_op(x, y, lr)
+        if config["log_wandb"]:
+            wandb.log({"train_loss": train_loss[0].item()}, commit=False)
     return time.time() - start_time
 
 
-def test(test_loader, predict_op):
-    num_correct = 0
+def test(config, test_loader, predict_op):
+    correct, predicted = [], []
     for x, y in test_loader:
         y_pred = predict_op(x)
-        num_correct += np.count_nonzero(np.argmax(y_pred, axis=1) == y)
-    print(f"\tTest set:\tAccuracy: {num_correct/len(test_loader.dataset)}")
+        # num_correct += np.count_nonzero(np.argmax(y_pred, axis=1) == y)
+        correct.append(y)
+        predicted.append(y_pred)
+    correct = np.concatenate(correct)
+    predicted = np.concatenate(predicted)
+
+    if config["log_wandb"]:
+        wandb.log(
+            {
+                "val": metrics.classification_report(
+                    correct, predicted.argmax(axis=1), output_dict=True
+                )
+            }
+        )
+    else:
+        print(
+            metrics.classification_report(
+                correct, predicted.argmax(axis=1), output_dict=False
+            )
+        )
 
 
 @hydra.main(
@@ -66,8 +89,12 @@ def test(test_loader, predict_op):
     config_path=Path.cwd() / "configs",
     config_name="base_config.yaml",
 )
-def main(config: DictConfig):
-    print(config)
+def main(config):
+    if config["log_wandb"]:
+        wandb.init(
+            project=config["project"],
+            config=config,
+        )
     train_loader, test_loader = make_loader_from_config(config)
     model = make_model_from_config(config)
     model_vars = model.vars()
@@ -91,12 +118,25 @@ def main(config: DictConfig):
     train_op = create_train_op(model_vars, loss_gv, opt, augment_op)
 
     epoch_time = []
-    for epoch in range(config["hyperparams"]["epochs"]):
+    epoch_iter: Iterable
+    if config["log_wandb"]:
+        epoch_iter = tqdm(
+            range(config["hyperparams"]["epochs"]),
+            total=config["hyperparams"]["epochs"],
+            desc="Epoch",
+            leave=True,
+        )
+    else:
+        epoch_iter = range(config["hyperparams"]["epochs"])
+    for epoch in epoch_iter:
         lr = next(scheduler)
-        cur_epoch_time = train(train_loader, train_op, lr)
-        print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
+        cur_epoch_time = train(config, train_loader, train_op, lr)
+        if config["log_wandb"]:
+            wandb.log({"epoch": epoch})
+        else:
+            print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
         epoch_time.append(cur_epoch_time)
-        test(test_loader, predict_op)
+        test(config, test_loader, predict_op)
         if not config["DP"]["disable_dp"]:
             epsilon = objax.privacy.dpsgd.analyze_dp(
                 q=config["hyperparams"]["batch_size"] / len(train_loader.dataset),
@@ -104,14 +144,18 @@ def main(config: DictConfig):
                 steps=len(train_loader) * (epoch + 1),
                 delta=config["DP"]["delta"],
             )
-            print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {config['DP']['delta']})")
+            if config["log_wandb"]:
+                wandb.log({"ε": epsilon})
+            else:
+                print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {config['DP']['delta']})")
 
-    print("Average epoch time (all epochs): ", np.average(epoch_time))
-    print("Median epoch time (all epochs): ", np.median(epoch_time))
-    if len(epoch_time) > 1:
-        print("Average epoch time (except first): ", np.average(epoch_time[1:]))
-        print("Median epoch time (except first): ", np.median(epoch_time[1:]))
-    print("Total training time (excluding evaluation): ", np.sum(epoch_time))
+    if not config["log_wandb"]:
+        print("Average epoch time (all epochs): ", np.average(epoch_time))
+        print("Median epoch time (all epochs): ", np.median(epoch_time))
+        if len(epoch_time) > 1:
+            print("Average epoch time (except first): ", np.average(epoch_time[1:]))
+            print("Median epoch time (except first): ", np.median(epoch_time[1:]))
+        print("Total training time (excluding evaluation): ", np.sum(epoch_time))
 
 
 if __name__ == "__main__":

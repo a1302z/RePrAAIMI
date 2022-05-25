@@ -7,6 +7,8 @@ from dptraining.train import main
 
 def test_train_cifar_one_epoch():
     config = {
+        "project": "test",
+        "log_wandb": False,
         "dataset": "CIFAR10",
         "hyperparams": {
             "epochs": 1,
