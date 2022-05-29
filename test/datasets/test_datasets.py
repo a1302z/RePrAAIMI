@@ -3,13 +3,12 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path.cwd()))
-from dptraining.utils.augment import Augmentation
-from dptraining.datasets import CIFAR10Creator
+from dptraining.datasets import CIFAR10Creator, ImageNetCreator
 
 
 def access_dataset(train_ds, test_ds):
-    x_train = train_ds[0]
-    x_test = test_ds[len(test_ds) - 1]
+    train_ds[0]
+    test_ds[len(test_ds) - 1]
 
 
 def test_cifar10():
@@ -56,5 +55,15 @@ def test_cifar10_standard_torchvision():
         {"root": "./data", "download": True},
         normalize_by_default=False,
         numpy_optimisation=False,
+    )
+    access_dataset(train_ds, test_ds)
+
+
+def test_imagenet():
+    train_ds, test_ds = ImageNetCreator.make_datasets(
+        (),
+        {"root": "./data/ILSVRC2012", "split": "train"},
+        (),
+        {"root": "./data/ILSVRC2012", "split": "val"},
     )
     access_dataset(train_ds, test_ds)

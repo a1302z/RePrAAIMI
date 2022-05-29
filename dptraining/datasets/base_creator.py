@@ -10,7 +10,7 @@ class DataLoaderCreator(ABC):
     ) -> Tuple[Dataset, Dataset]:
         pass
 
-    @abstractstaticmethod
+    @staticmethod
     def make_dataloader(
         train_ds: Dataset,
         test_ds: Dataset,
@@ -19,4 +19,6 @@ class DataLoaderCreator(ABC):
         test_args,
         test_kwargs,
     ) -> Tuple[DataLoader, DataLoader]:
-        pass
+        train_dl = DataLoader(train_ds, *train_args, **train_kwargs)
+        test_dl = DataLoader(test_ds, *test_args, **test_kwargs)
+        return train_dl, test_dl

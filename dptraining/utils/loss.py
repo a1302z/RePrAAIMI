@@ -13,7 +13,7 @@ class CSELogitsSparse(LossFunctionCreator):
     def create_loss_fn(model_vars, model):
         @objax.Function.with_vars(model_vars)
         def loss_fn(x, label):
-            logit = model(x)
+            logit = model(x, training=True)
             return objax.functional.loss.cross_entropy_logits_sparse(
                 logit, label
             ).mean()

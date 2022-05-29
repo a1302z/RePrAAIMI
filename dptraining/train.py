@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path.cwd()))
 from dptraining.datasets import make_loader_from_config
 from dptraining.models import make_model_from_config
 from dptraining.utils import make_loss_from_config, make_scheduler_from_config
-from dptraining.utils.augment import Augmentation
+from dptraining.utils.augment import Transformation
 
 
 def create_train_op(model_vars, loss_gv, opt, augment_op):
@@ -51,7 +51,9 @@ def create_loss_gradient(config, model, model_vars, loss_fn):
 
 def train(config, train_loader, train_op, lr):
     start_time = time.time()
-    for x, y in train_loader:
+    for x, y in tqdm(
+        train_loader, total=len(train_loader), desc="Training", leave=False
+    ):
         train_loss = train_op(x, y, lr)
         if config["log_wandb"]:
             wandb.log({"train_loss": train_loss[0].item()}, commit=False)
@@ -87,7 +89,6 @@ def test(config, test_loader, predict_op):
 @hydra.main(
     version_base=None,
     config_path=Path.cwd() / "configs",
-    config_name="base_config.yaml",
 )
 def main(config):
     if config["log_wandb"]:
@@ -103,16 +104,16 @@ def main(config):
         model_vars, momentum=config["hyperparams"]["momentum"], nesterov=False
     )
 
-    predict_op = objax.Jit(lambda x: objax.functional.softmax(model(x)), model_vars)
+    predict_op = objax.Jit(
+        lambda x: objax.functional.softmax(model(x, training=False)), model_vars
+    )
 
     loss_class = make_loss_from_config(config)
     loss_fn = loss_class.create_loss_fn(model_vars, model)
     loss_gv = create_loss_gradient(config, model, model_vars, loss_fn)
 
-    augmenter = Augmentation.from_string_list(
-        ["random_horizontal_flips", "random_vertical_flips", "random_img_shift"]
-    )
-    augment_op = augmenter.create_augmentation_op()
+    augmenter = Transformation.from_dict_list(config["augmentations"])
+    augment_op = augmenter.create_vectorized_transform()
     scheduler = make_scheduler_from_config(config)
 
     train_op = create_train_op(model_vars, loss_gv, opt, augment_op)
@@ -132,7 +133,7 @@ def main(config):
         lr = next(scheduler)
         cur_epoch_time = train(config, train_loader, train_op, lr)
         if config["log_wandb"]:
-            wandb.log({"epoch": epoch})
+            wandb.log({"epoch": epoch, "lr": lr})
         else:
             print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
         epoch_time.append(cur_epoch_time)

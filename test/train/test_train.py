@@ -9,7 +9,14 @@ def test_train_cifar_one_epoch():
     config = {
         "project": "test",
         "log_wandb": False,
-        "dataset": "CIFAR10",
+        "loader": {"num_workers": 2},
+        "model": {"name": "cifar10model", "num_classes": 10},
+        "augmentations": {
+            "random_vertical_flips": None,
+            "random_horizontal_flips": None,
+            "random_img_shift": {"img_shape": (3, 32, 32)},
+        },
+        "dataset": {"name": "CIFAR10", "root": "./data"},
         "hyperparams": {
             "epochs": 1,
             "batch_size": 128,
