@@ -2,9 +2,9 @@ from dptraining.models.cifar10models import Cifar10ConvNet
 from objax.zoo import resnet_v2
 from objax import nn, functional
 
-SUPPORTED_MODELS = ["cifar10model", "resnet18"]
-SUPPORTED_NORMALIZATION = ["bn", "gn"]
-SUPPORTED_ACTIVATION = ["relu", "selu", "leakyrelu"]
+SUPPORTED_MODELS = ("cifar10model", "resnet18")
+SUPPORTED_NORMALIZATION = ("bn", "gn")
+SUPPORTED_ACTIVATION = ("relu", "selu", "leakyrelu")
 
 
 def make_normalization_from_config(config):

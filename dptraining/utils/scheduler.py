@@ -18,6 +18,9 @@ class LinearSchedule(Schedule):
         self._max_steps: int = max_steps
         self._steps: int = 0
 
+    def __iter__(self):
+        return self
+
     def __next__(self) -> float:
         if self._steps < self._max_steps:
             new_lr = self.calc_lr(self._base_lr, self._steps, self._max_steps)

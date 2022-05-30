@@ -1,2 +1,2 @@
-pytest
-pylint --rcfile .pylintrc dptraining/ 
+pytest test/ --profile
+pylint --rcfile .pylintrc dptraining/ --load-plugins=perflint

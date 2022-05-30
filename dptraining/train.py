@@ -57,10 +57,13 @@ def train(config, train_loader, train_op, learning_rate):
         else len(train_loader) + 1
     )
     for i, (x, y) in tqdm(  # pylint:disable=invalid-name
-        enumerate(train_loader), total=len(train_loader), desc="Training", leave=False
+        enumerate(train_loader),  # pylint:disable=loop-invariant-statement
+        total=len(train_loader),
+        desc="Training",
+        leave=False,
     ):
         train_loss = train_op(x, y, learning_rate)
-        if config["log_wandb"]:
+        if config["log_wandb"]:  # pylint:disable=loop-invariant-statement
             wandb.log({"train_loss": train_loss[0].item()}, commit=False)
         if i > max_batches:
             break
@@ -69,13 +72,20 @@ def train(config, train_loader, train_op, learning_rate):
 
 def test(config, test_loader, predict_op):
     correct, predicted = [], []
-    for x, y in tqdm(  # pylint:disable=invalid-name
-        test_loader, total=len(test_loader), desc="Testing", leave=False
+    max_batches = (
+        config["hyperparams"]["overfit"]
+        if "overfit" in config["hyperparams"]
+        else len(test_loader) + 1
+    )
+    for i, (x, y) in tqdm(  # pylint:disable=invalid-name
+        enumerate(test_loader), total=len(test_loader), desc="Testing", leave=False
     ):
         y_pred = predict_op(x)
         # num_correct += np.count_nonzero(np.argmax(y_pred, axis=1) == y)
         correct.append(y)
         predicted.append(y_pred)
+        if i > max_batches:
+            break
     correct = np.concatenate(correct)
     predicted = np.concatenate(predicted)
 
@@ -127,6 +137,11 @@ def main(config):  # pylint:disable=too-many-locals
 
     train_op = create_train_op(model_vars, loss_gv, opt, augment_op)
 
+    sampling_rate: float = config["hyperparams"]["batch_size"] / len(
+        train_loader.dataset
+    )
+    sigma, delta = config["DP"]["sigma"], config["DP"]["delta"]
+
     epoch_time = []
     epoch_iter: Iterable
     if config["log_wandb"]:
@@ -138,10 +153,9 @@ def main(config):  # pylint:disable=too-many-locals
         )
     else:
         epoch_iter = range(config["hyperparams"]["epochs"])
-    for epoch in epoch_iter:
-        learning_rate = next(scheduler)
+    for epoch, learning_rate in zip(epoch_iter, scheduler):
         cur_epoch_time = train(config, train_loader, train_op, learning_rate)
-        if config["log_wandb"]:
+        if config["log_wandb"]:  # pylint:disable=loop-invariant-statement
             wandb.log({"epoch": epoch, "lr": learning_rate})
         else:
             print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
@@ -149,15 +163,18 @@ def main(config):  # pylint:disable=too-many-locals
         test(config, test_loader, predict_op)
         if not config["DP"]["disable_dp"]:
             epsilon = objax.privacy.dpsgd.analyze_dp(
-                q=config["hyperparams"]["batch_size"] / len(train_loader.dataset),
-                noise_multiplier=config["DP"]["sigma"],
-                steps=len(train_loader) * (epoch + 1),
-                delta=config["DP"]["delta"],
-            )
-            if config["log_wandb"]:
-                wandb.log({"ε": epsilon})
+                q=sampling_rate,
+                noise_multiplier=sigma,
+                steps=len(train_loader)  # pylint:disable=loop-invariant-statement
+                * (epoch + 1),  # pylint:disable=loop-invariant-statement
+                delta=delta,
+            )  # pylint:disable=loop-invariant-statement
+            if config["log_wandb"]:  # pylint:disable=loop-invariant-statement
+                wandb.log({"ε": epsilon})  # pylint:disable=loop-invariant-statement
             else:
-                print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {config['DP']['delta']})")
+                print(
+                    f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})"  # pylint:disable=loop-invariant-statement
+                )
 
     if not config["log_wandb"]:
         print("Average epoch time (all epochs): ", np.average(epoch_time))

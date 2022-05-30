@@ -3,7 +3,7 @@ from dptraining.datasets.imagenet import ImageNetCreator
 from dptraining.utils.augment import Transformation
 
 
-SUPPORTED_DATASETS = ["cifar10", "imagenet"]
+SUPPORTED_DATASETS = ("cifar10", "imagenet")
 
 
 def make_loader_from_config(config):

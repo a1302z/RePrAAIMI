@@ -1,7 +1,7 @@
 from dptraining.utils.loss import CSELogitsSparse
 from dptraining.utils.scheduler import CosineSchedule, ConstantSchedule, LinearSchedule
 
-SUPPORTED_SCHEDULES = ["cosine", "const"]
+SUPPORTED_SCHEDULES = ("cosine", "const")
 
 
 def make_scheduler_from_config(config):

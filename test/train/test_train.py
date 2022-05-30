@@ -8,7 +8,7 @@ from dptraining.train import main
 jax.config.update("jax_platform_name", "cpu")
 
 
-def test_train_cifar_one_epoch():
+def test_train_cifar_one_batch():
     config = {
         "project": "test",
         "log_wandb": False,

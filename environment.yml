@@ -17,3 +17,5 @@ dependencies:
   - pip: 
     - hydra-core
     - tqdm 
+    - perflint
+    - pytest-profiling
