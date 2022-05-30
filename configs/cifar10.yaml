@@ -27,6 +27,7 @@ hyperparams:
   momentum: 0.9
 scheduler:
   type: cosine
+  normalize_lr: True
 DP:
   disable_dp: False
   sigma: 1.5

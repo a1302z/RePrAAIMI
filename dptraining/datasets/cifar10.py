@@ -45,17 +45,17 @@ class CIFAR10Creator(DataLoaderCreator):
     CIFAR_STDDEV = (0.2023, 0.1994, 0.2010)
 
     @staticmethod
-    def normalize_images(x: np.array):
-        x = x.astype(np.float32)
-        x = x / 255.0
-        x = x.transpose(0, 3, 1, 2)
-        x = (x - np.reshape(CIFAR10Creator.CIFAR_MEAN, [1, 3, 1, 1])) / np.reshape(
-            CIFAR10Creator.CIFAR_STDDEV, [1, 3, 1, 1]
-        )
-        return x
+    def normalize_images(image: np.array):
+        image = image.astype(np.float32)
+        image = image / 255.0
+        image = image.transpose(0, 3, 1, 2)
+        image = (
+            image - np.reshape(CIFAR10Creator.CIFAR_MEAN, [1, 3, 1, 1])
+        ) / np.reshape(CIFAR10Creator.CIFAR_STDDEV, [1, 3, 1, 1])
+        return image
 
     @staticmethod
-    def transpose_to_HWC(dataset: Dataset):
+    def transpose_to_hwc(dataset: Dataset):
         dataset.data.transpose(0, 2, 3, 1)
 
     @staticmethod
@@ -71,7 +71,7 @@ class CIFAR10Creator(DataLoaderCreator):
         )
 
     @staticmethod
-    def make_datasets(
+    def make_datasets(  # pylint:disable=too-many-arguments
         train_args,
         train_kwargs,
         test_args,
@@ -95,7 +95,7 @@ class CIFAR10Creator(DataLoaderCreator):
         return train_ds, test_ds
 
     @staticmethod
-    def make_dataloader(
+    def make_dataloader(  # pylint:disable=too-many-arguments,duplicate-code
         train_ds: Dataset,
         test_ds: Dataset,
         train_args,

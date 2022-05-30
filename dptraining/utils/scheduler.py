@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod, abstractstaticmethod
+from abc import ABC, abstractmethod
 import numpy as np
 
 
@@ -23,24 +23,24 @@ class LinearSchedule(Schedule):
             new_lr = self.calc_lr(self._base_lr, self._steps, self._max_steps)
             self._steps += 1
             return new_lr
-        else:
-            raise StopIteration
+        raise StopIteration
 
-    @abstractstaticmethod
-    def calc_lr(lr: float, step: int, max_steps: int):
+    @staticmethod
+    @abstractmethod
+    def calc_lr(learning_rate: float, step: int, max_steps: int):
         pass
 
 
 class CosineSchedule(LinearSchedule):
     @staticmethod
-    def calc_lr(lr: float, step: int, max_steps: int):
-        return lr * 0.5 * (1 + np.cos(np.pi * (step + 1) / (max_steps + 1)))
+    def calc_lr(learning_rate: float, step: int, max_steps: int):
+        return learning_rate * 0.5 * (1 + np.cos(np.pi * (step + 1) / (max_steps + 1)))
 
 
 class ConstantSchedule(LinearSchedule):
     @staticmethod
-    def calc_lr(lr: float, step: int, max_steps: int):
-        return lr
+    def calc_lr(learning_rate: float, step: int, max_steps: int):
+        return learning_rate
 
 
 ## nice option would be an extension for an adaptive schedule

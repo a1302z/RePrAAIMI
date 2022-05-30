@@ -6,6 +6,8 @@ SUPPORTED_SCHEDULES = ["cosine", "const"]
 
 def make_scheduler_from_config(config):
     scheduler: LinearSchedule
+    if config["scheduler"]["normalize_lr"]:
+        config["hyperparams"]["lr"] *= config["hyperparams"]["batch_size"]
     if config["scheduler"]["type"] == "cosine":
         scheduler = CosineSchedule(
             config["hyperparams"]["lr"], config["hyperparams"]["epochs"]
@@ -22,5 +24,5 @@ def make_scheduler_from_config(config):
     return scheduler
 
 
-def make_loss_from_config(config):
+def make_loss_from_config(config):  # pylint:disable=unused-argument
     return CSELogitsSparse

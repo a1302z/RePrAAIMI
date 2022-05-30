@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import Optional
-import objax, jax, jax.numpy as jn
+import objax
+import jax
+import jax.numpy as jn
 
 
 class Transform(ABC):
     @abstractmethod
-    def __call__(self, x):
+    def __call__(self, x):  # pylint:disable=invalid-name
         pass
 
 

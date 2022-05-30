@@ -1,5 +1,5 @@
 import objax
-from typing import Callable, Dict, Any, Union
+from typing import Callable, Any
 from torchvision import transforms
 from omegaconf import DictConfig
 
@@ -31,47 +31,48 @@ class Transformation:
 
     def __init__(self, transformations: list[Callable]):
         self._transformations: list[Callable]
-        if all([isinstance(var, Callable) for var in transformations]):
+        if all(isinstance(var, Callable) for var in transformations):
             self._transformations = transformations
         else:
             raise ValueError("Uncallable transforms")
 
     @classmethod
     def from_string_list(cls, transformations: list[str]):
-        if not all([isinstance(var, str) for var in transformations]):
+        if not all(isinstance(var, str) for var in transformations):
             raise ValueError("Transforms need to be defined consistently as strings")
         if not all(
-            [
-                var in Transformation._mapping
-                for var in transformations
-                if isinstance(var, str)
-            ]
+            var in Transformation._mapping
+            for var in transformations
+            if isinstance(var, str)
         ):
-
+            u_transf = [
+                var for var in transformations if var not in Transformation._mapping
+            ]
             raise ValueError(
-                f"{[var for var in transformations if var not in Transformation._mapping]} not known."
+                f"{u_transf} not known."
                 f" Supported ops are: {Transformation._mapping.keys()}"
             )
         return cls([Transformation._mapping[aug]() for aug in transformations])
 
     @classmethod
     def from_dict_list(cls, transformations: dict[dict[str, Any]]):
-        if not (
-            isinstance(transformations, dict) or isinstance(transformations, DictConfig)
-        ):
+        if not isinstance(transformations, (dict, DictConfig)):
             raise ValueError(
                 "Transforms with args need to be defined as dict (of dicts)"
             )
         if not all(
-            [
-                var in Transformation._mapping
-                for var in transformations.keys()
-                if isinstance(var, DictConfig) or isinstance(var, dict)
-            ]
+            var in Transformation._mapping
+            for var in transformations.keys()
+            if isinstance(var, (DictConfig, dict))
         ):
+            u_transf = [
+                var
+                for var in transformations.keys()
+                if var not in Transformation._mapping
+            ]
             raise ValueError(
-                f"{[var for var in transformations.keys() if var not in Transformation._mapping]} not known."
-                f" Supported ops are: {Transformation._mapping.keys()}"
+                f"{u_transf} not known. "
+                f"Supported ops are: {Transformation._mapping.keys()}"
             )
         return cls(
             [
@@ -82,7 +83,7 @@ class Transformation:
             ]
         )
 
-    def __call__(self, x):
+    def __call__(self, x):  # pylint:disable=invalid-name
         for transf in self._transformations:
             x = transf(x)
         return x
@@ -97,13 +98,14 @@ class Transformation:
             raise ValueError("Transforms need to be defined as strings")
         if not new_transform in Transformation._mapping.keys():
             raise ValueError(
-                f"{new_transform} not known. Supported ops are: {Transformation._mapping.keys()}"
+                f"{new_transform} not known. "
+                f"Supported ops are: {Transformation._mapping.keys()}"
             )
         self._transformations.append(new_transform)
 
     def create_vectorized_transform(self):
         @objax.Function.with_vars(objax.random.DEFAULT_GENERATOR.vars())
-        def augment_op(x):
+        def augment_op(x):  # pylint:disable=invalid-name
             for transf in self._transformations:
                 x = transf(x)
             return x

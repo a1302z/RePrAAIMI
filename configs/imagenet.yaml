@@ -33,11 +33,12 @@ model:
 hyperparams:
   epochs: 10
   batch_size: 200
-  batch_size_test: 32
+  batch_size_test: 200
   lr: 0.1
   momentum: 0.9
 scheduler:
   type: cosine
+  normalize_lr: True
 DP:
   disable_dp: False
   sigma: 1.5

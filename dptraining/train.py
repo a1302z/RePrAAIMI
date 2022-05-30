@@ -22,7 +22,7 @@ from dptraining.utils.augment import Transformation
 
 def create_train_op(model_vars, loss_gv, opt, augment_op):
     @objax.Function.with_vars(model_vars + loss_gv.vars() + opt.vars())
-    def train_op(x, y, learning_rate):
+    def train_op(x, y, learning_rate):  # pylint:disable=invalid-name
         x = augment_op(x)
         grads, loss = loss_gv(x, y)
         opt(learning_rate, grads)
@@ -49,20 +49,29 @@ def create_loss_gradient(config, model, model_vars, loss_fn):
     return loss_gv
 
 
-def train(config, train_loader, train_op, lr):
+def train(config, train_loader, train_op, learning_rate):
     start_time = time.time()
-    for x, y in tqdm(
-        train_loader, total=len(train_loader), desc="Training", leave=False
+    max_batches = (
+        config["hyperparams"]["overfit"]
+        if "overfit" in config["hyperparams"]
+        else len(train_loader) + 1
+    )
+    for i, (x, y) in tqdm(  # pylint:disable=invalid-name
+        enumerate(train_loader), total=len(train_loader), desc="Training", leave=False
     ):
-        train_loss = train_op(x, y, lr)
+        train_loss = train_op(x, y, learning_rate)
         if config["log_wandb"]:
             wandb.log({"train_loss": train_loss[0].item()}, commit=False)
+        if i > max_batches:
+            break
     return time.time() - start_time
 
 
 def test(config, test_loader, predict_op):
     correct, predicted = [], []
-    for x, y in test_loader:
+    for x, y in tqdm(  # pylint:disable=invalid-name
+        test_loader, total=len(test_loader), desc="Testing", leave=False
+    ):
         y_pred = predict_op(x)
         # num_correct += np.count_nonzero(np.argmax(y_pred, axis=1) == y)
         correct.append(y)
@@ -81,7 +90,7 @@ def test(config, test_loader, predict_op):
     else:
         print(
             metrics.classification_report(
-                correct, predicted.argmax(axis=1), output_dict=False
+                correct, predicted.argmax(axis=1), output_dict=False, zero_division=0
             )
         )
 
@@ -90,7 +99,7 @@ def test(config, test_loader, predict_op):
     version_base=None,
     config_path=Path.cwd() / "configs",
 )
-def main(config):
+def main(config):  # pylint:disable=too-many-locals
     if config["log_wandb"]:
         wandb.init(
             project=config["project"],
@@ -130,10 +139,10 @@ def main(config):
     else:
         epoch_iter = range(config["hyperparams"]["epochs"])
     for epoch in epoch_iter:
-        lr = next(scheduler)
-        cur_epoch_time = train(config, train_loader, train_op, lr)
+        learning_rate = next(scheduler)
+        cur_epoch_time = train(config, train_loader, train_op, learning_rate)
         if config["log_wandb"]:
-            wandb.log({"epoch": epoch, "lr": lr})
+            wandb.log({"epoch": epoch, "lr": learning_rate})
         else:
             print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
         epoch_time.append(cur_epoch_time)
@@ -160,4 +169,4 @@ def main(config):
 
 
 if __name__ == "__main__":
-    main()
+    main()  # pylint:disable=no-value-for-parameter

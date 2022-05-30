@@ -1,5 +1,5 @@
 from typing import Tuple
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 from torchvision.datasets import ImageNet
 from dptraining.datasets.base_creator import DataLoaderCreator
 

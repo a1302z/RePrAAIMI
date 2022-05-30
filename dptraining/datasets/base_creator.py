@@ -1,17 +1,18 @@
-from abc import ABC, abstractstaticmethod
+import abc
 from typing import Tuple
 from torch.utils.data import Dataset, DataLoader
 
 
-class DataLoaderCreator(ABC):
-    @abstractstaticmethod
+class DataLoaderCreator(abc.ABC):
+    @staticmethod
+    @abc.abstractmethod
     def make_datasets(
         train_args, train_kwargs, test_args, test_kwargs
     ) -> Tuple[Dataset, Dataset]:
         pass
 
     @staticmethod
-    def make_dataloader(
+    def make_dataloader(  # pylint:disable=too-many-arguments
         train_ds: Dataset,
         test_ds: Dataset,
         train_args,
