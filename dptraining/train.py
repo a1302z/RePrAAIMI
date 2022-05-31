@@ -79,7 +79,10 @@ def test(config, test_loader, predict_op):
         else len(test_loader) + 1
     )
     for i, (x, y) in tqdm(  # pylint:disable=invalid-name
-        enumerate(test_loader), total=len(test_loader), desc="Testing", leave=False
+        enumerate(test_loader),  # pylint:disable=loop-invariant-statement
+        total=len(test_loader),
+        desc="Testing",
+        leave=False,
     ):
         y_pred = predict_op(x)
         # num_correct += np.count_nonzero(np.argmax(y_pred, axis=1) == y)

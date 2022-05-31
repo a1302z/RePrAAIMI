@@ -31,7 +31,7 @@ def test_train_cifar_one_batch():
         "scheduler": {"type": "cosine", "normalize_lr": True},
         "DP": {
             "disable_dp": False,
-            "sigma": 1.5,
+            "epsilon": 7.5,
             "max_per_sample_grad_norm": 10.0,
             "delta": 1e-5,
             "norm_acc": False,
