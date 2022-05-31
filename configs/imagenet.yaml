@@ -1,5 +1,5 @@
 project: imagenet_dpsgd
-log_wandb: True
+log_wandb: False
 dataset: 
   name: imagenet
   root: ./data/ILSVRC2012
@@ -16,7 +16,7 @@ test_transforms:
       size: 224
   ToTensor:
 loader:
-  num_workers: 32
+  num_workers: 16
   prefetch_factor: 8
   pin_memory: True
 augmentations:
@@ -31,17 +31,17 @@ model:
   normalization: gn
   activation: selu
 hyperparams:
-  epochs: 10
-  batch_size: 200
-  batch_size_test: 200
-  lr: 0.1
+  epochs: 3
+  batch_size: 512
+  batch_size_test: 256
+  lr: 1e-3
   momentum: 0.9
 scheduler:
   type: cosine
   normalize_lr: True
 DP:
   disable_dp: False
-  sigma: 1.5
-  max_per_sample_grad_norm: 10.0
+  epsilon: 10
+  max_per_sample_grad_norm: 1.0
   delta: 1e-5
   norm_acc: False

@@ -18,6 +18,7 @@ from dptraining.datasets import make_loader_from_config
 from dptraining.models import make_model_from_config
 from dptraining.utils import make_loss_from_config, make_scheduler_from_config
 from dptraining.utils.augment import Transformation
+from dptraining.privacy import EpsCalculator
 
 
 def create_train_op(model_vars, loss_gv, opt, augment_op):
@@ -32,14 +33,14 @@ def create_train_op(model_vars, loss_gv, opt, augment_op):
     return train_op
 
 
-def create_loss_gradient(config, model, model_vars, loss_fn):
+def create_loss_gradient(config, model, model_vars, loss_fn, sigma):
     if config["DP"]["disable_dp"]:
         loss_gv = objax.GradValues(loss_fn, model.vars())
     else:
         loss_gv = objax.privacy.dpsgd.PrivateGradValues(
             loss_fn,
             model_vars,
-            config["DP"]["sigma"],
+            sigma,
             config["DP"]["max_per_sample_grad_norm"],
             microbatch=1,
             batch_axis=(0, 0),
@@ -127,20 +128,33 @@ def main(config):  # pylint:disable=too-many-locals
         lambda x: objax.functional.softmax(model(x, training=False)), model_vars
     )
 
+    sampling_rate: float = config["hyperparams"]["batch_size"] / len(
+        train_loader.dataset
+    )
+    delta = config["DP"]["delta"]
+    eps_calc = EpsCalculator(config, train_loader)
+    sigma = eps_calc.calc_noise_for_eps()
+    final_epsilon = objax.privacy.dpsgd.analyze_dp(
+        q=sampling_rate,
+        noise_multiplier=sigma,
+        steps=len(train_loader) * config["hyperparams"]["epochs"],
+        delta=delta,
+    )
+
+    print(
+        f"This training will lead to a final epsilon of {final_epsilon:.2f}"
+        f" at a noise multiplier of {sigma:.2f} and a delta of {delta:2f}"
+    )
+
     loss_class = make_loss_from_config(config)
     loss_fn = loss_class.create_loss_fn(model_vars, model)
-    loss_gv = create_loss_gradient(config, model, model_vars, loss_fn)
+    loss_gv = create_loss_gradient(config, model, model_vars, loss_fn, sigma)
 
     augmenter = Transformation.from_dict_list(config["augmentations"])
     augment_op = augmenter.create_vectorized_transform()
     scheduler = make_scheduler_from_config(config)
 
     train_op = create_train_op(model_vars, loss_gv, opt, augment_op)
-
-    sampling_rate: float = config["hyperparams"]["batch_size"] / len(
-        train_loader.dataset
-    )
-    sigma, delta = config["DP"]["sigma"], config["DP"]["delta"]
 
     epoch_time = []
     epoch_iter: Iterable
@@ -170,7 +184,9 @@ def main(config):  # pylint:disable=too-many-locals
                 delta=delta,
             )  # pylint:disable=loop-invariant-statement
             if config["log_wandb"]:  # pylint:disable=loop-invariant-statement
-                wandb.log({"ε": epsilon})  # pylint:disable=loop-invariant-statement
+                wandb.log(
+                    {"epsilon": epsilon}
+                )  # pylint:disable=loop-invariant-statement
             else:
                 print(
                     f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})"  # pylint:disable=loop-invariant-statement
