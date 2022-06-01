@@ -3,12 +3,49 @@ from typing import Optional
 import objax
 import jax
 import jax.numpy as jn
+import numpy as np
 
 
 class Transform(ABC):
     @abstractmethod
     def __call__(self, x):  # pylint:disable=invalid-name
         pass
+
+
+class PILToNumpy(Transform):
+    def __call__(self, x):
+        x = np.array(x, dtype=np.float32) / 255.0
+        return x
+
+
+class NormalizeNumpyImg(Transform):
+    def __init__(self, mean, std) -> None:
+        super().__init__()
+        self._mean = np.array(mean).reshape(  # pylint:disable=too-many-function-args
+            -1, 1, 1
+        )
+        self._std = np.array(std).reshape(  # pylint:disable=too-many-function-args
+            -1, 1, 1
+        )
+
+    def __call__(self, x):
+        x = (x - self._mean) / self._std
+        return x
+
+
+class NormalizeNumpyBatch(Transform):
+    def __init__(self, mean, std) -> None:
+        super().__init__()
+        self._mean = np.array(mean).reshape(  # pylint:disable=too-many-function-args
+            1, -1, 1, 1
+        )
+        self._std = np.array(std).reshape(  # pylint:disable=too-many-function-args
+            1, -1, 1, 1
+        )
+
+    def __call__(self, x):
+        x = (x - self._mean) / self._std
+        return x
 
 
 class PILToJAXNumpy(Transform):
@@ -77,3 +114,35 @@ class RandomImageShiftsJax(Transform):
         )
         offset = objax.random.randint((2,), 0, self._max_shift)
         return jax.lax.dynamic_slice(x_pad, (0, offset[0], offset[1]), img_shape)
+
+
+class MakeComplexOnlyReal(Transform):
+    def __init__(self) -> None:
+        pass
+
+    def __call__(self, x):
+        return x + 1j * jn.zeros_like(x)
+
+
+class MakeComplexRealAndImaginary(Transform):
+    def __init__(self) -> None:
+        pass
+
+    def __call__(self, x):
+        return x + 1j * x
+
+
+class TransposeNumpyBatchToCHW(Transform):
+    def __init__(self) -> None:
+        pass
+
+    def __call__(self, data: np.array, labels=None):
+        return data.transpose(0, 3, 1, 2)
+
+
+class TransposeNumpyImgToCHW(Transform):
+    def __init__(self) -> None:
+        pass
+
+    def __call__(self, data: np.array, labels=None):
+        return data.transpose(2, 0, 1)

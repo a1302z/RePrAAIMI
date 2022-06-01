@@ -5,10 +5,19 @@ import sys
 from pathlib import Path
 from itertools import product
 from objax import nn
+from itertools import product
+import pytest
 
 sys.path.insert(0, str(Path.cwd()))
 
-from dptraining.models import make_model_from_config, ResNet9, Cifar10ConvNet
+from dptraining.models import (
+    make_model_from_config,
+    ResNet9,
+    Cifar10ConvNet,
+    SUPPORTED_ACTIVATION,
+    SUPPORTED_MODELS,
+    SUPPORTED_NORMALIZATION,
+)
 
 
 def test_cifar10convnet():
@@ -61,7 +70,7 @@ def test_resnet9():
     scale_norms = [True, False]
 
     for nf, sn in product(norm_funcs, scale_norms):
-        m = ResNet9(norm_func=nf, scale_norm=sn)
+        m = ResNet9(norm_cls=nf, scale_norm=sn)
         x = np.random.randn(2, 3, 32, 32)
         m(x, training=True)
         m(x, training=False)
@@ -81,3 +90,26 @@ def test_make_resnet9():
     )
     random_input_data = np.random.randn(2, 12, 224, 224)
     m(random_input_data, training=False)
+
+
+def test_all_options():
+    fake_data = np.random.randn(6, 3, 39, 39)
+    for model, act, norm in product(
+        SUPPORTED_MODELS, SUPPORTED_ACTIVATION, SUPPORTED_NORMALIZATION
+    ):
+        config = {
+            "model": {
+                "name": model,
+                "in_channels": 3,
+                "num_classes": 5,
+                "activation": act,
+                "normalization": norm,
+            }
+        }
+        if model == "cifar10model":
+            with pytest.warns(UserWarning):
+                model = make_model_from_config(config)
+        else:
+            model = make_model_from_config(config)
+        pred = model(fake_data, training=True)
+        assert pred.shape[1] == 5

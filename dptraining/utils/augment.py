@@ -5,11 +5,18 @@ from omegaconf import DictConfig
 
 
 from dptraining.utils.transform import (
+    NormalizeNumpyBatch,
+    NormalizeNumpyImg,
     PILToJAXNumpy,
     NormalizeJAX,
+    PILToNumpy,
     RandomVerticalFlipsJax,
     RandomHorizontalFlipsJax,
     RandomImageShiftsJax,
+    MakeComplexOnlyReal,
+    MakeComplexRealAndImaginary,
+    TransposeNumpyBatchToCHW,
+    TransposeNumpyImgToCHW,
 )
 
 torchvision_transforms = {
@@ -24,8 +31,15 @@ class Transformation:
         "random_horizontal_flips": RandomHorizontalFlipsJax,
         "random_vertical_flips": RandomVerticalFlipsJax,
         "random_img_shift": RandomImageShiftsJax,
+        "pil_to_numpy": PILToNumpy,
+        "normalize_np_img": NormalizeNumpyImg,
+        "normalize_np_batch": NormalizeNumpyBatch,
         "pil_to_jax": PILToJAXNumpy,
         "normalize_jax": NormalizeJAX,
+        "make_complex_real": MakeComplexOnlyReal,
+        "make_complex_both": MakeComplexRealAndImaginary,
+        "numpy_batch_to_chw": TransposeNumpyBatchToCHW,
+        "numpy_img_to_chw": TransposeNumpyImgToCHW,
         **torchvision_transforms,
     }
 

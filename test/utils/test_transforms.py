@@ -1,4 +1,5 @@
 import numpy as np
+from jax import numpy as jnp
 import sys
 from pathlib import Path
 from functools import partial
@@ -9,6 +10,10 @@ from dptraining.utils.transform import (
     RandomHorizontalFlipsJax,
     RandomVerticalFlipsJax,
     RandomImageShiftsJax,
+    MakeComplexOnlyReal,
+    MakeComplexRealAndImaginary,
+    TransposeNumpyImgToCHW,
+    TransposeNumpyBatchToCHW,
 )
 
 
@@ -76,3 +81,35 @@ def test_img_shifts():
     op = a.create_vectorized_transform()
     x = np.random.randn(10, 3, 32, 32)
     y = op(x)
+
+
+def test_complex_conversion_real():
+    a = Transformation.from_string_list(["make_complex_real"])
+    op = a.create_vectorized_transform()
+    x = np.random.randn(10, 3, 32, 32)
+    y = op(x)
+    assert y.dtype == jnp.complex64
+    assert y.imag.sum() < 1e-3
+
+
+def test_complex_conversion_real():
+    a = Transformation.from_string_list(["make_complex_both"])
+    op = a.create_vectorized_transform()
+    x = np.random.randn(10, 3, 32, 32)
+    y = op(x)
+    assert y.dtype == jnp.complex64
+    assert jnp.sum(jnp.abs(y.real - y.imag)) < 1e-3
+
+
+def test_transpose_to_hwc():
+    tf = Transformation.from_string_list(["numpy_img_to_chw"])
+    data = np.random.randn(224, 224, 3)
+    out = tf(data)
+    assert out.shape == (3, 224, 224)
+
+
+def test_transpose_to_hwc_batch():
+    tf = Transformation.from_string_list(["numpy_batch_to_chw"])
+    data = np.random.randn(10, 224, 224, 3)
+    out = tf(data)
+    assert out.shape == (10, 3, 224, 224)

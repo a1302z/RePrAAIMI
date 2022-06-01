@@ -4,30 +4,26 @@ dataset:
   name: CIFAR10
   root: ./data
 loader: 
-  num_workers: 3
+  num_workers: 12
 augmentations:
-  # random_vertical_flips:
-  #     flip_prob: 0.5
-  # random_horizontal_flips:
-  #     flip_prob: 0.5
-  # random_img_shift:
-  #     img_shape: 
-  #       - 3
-  #       - 32
-  #       - 32
+  make_complex_real:
+test_augmentations:
+  make_complex_real:
 model:
+  complex: True
   name: resnet9
   in_channels: 3
   num_classes: 10
-  activation: mish
+  activation: conjmish
   normalization: gn
+  pooling: conjmaxpool
   scale_norm: True
 optim:
   name: nadam
 hyperparams:
   epochs: 50
-  batch_size: 1024
-  batch_size_test: 200
+  batch_size: 512
+  batch_size_test: 256
   lr: 2e-3
   momentum: 0.9
 scheduler:

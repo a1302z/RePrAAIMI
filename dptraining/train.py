@@ -19,7 +19,7 @@ from dptraining.models import make_model_from_config
 from dptraining.utils import make_loss_from_config, make_scheduler_from_config
 from dptraining.optim import make_optim_from_config
 from dptraining.utils.augment import Transformation
-from dptraining.privacy import EpsCalculator
+from dptraining.privacy import EpsCalculator, ComplexPrivateGradValues
 
 
 def create_train_op(model_vars, loss_gv, opt, augment_op):
@@ -37,6 +37,16 @@ def create_train_op(model_vars, loss_gv, opt, augment_op):
 def create_loss_gradient(config, model, model_vars, loss_fn, sigma):
     if config["DP"]["disable_dp"]:
         loss_gv = objax.GradValues(loss_fn, model.vars())
+    elif "complex" in config["model"] and config["model"]["complex"]:
+        loss_gv = ComplexPrivateGradValues(
+            loss_fn,
+            model_vars,
+            sigma,
+            config["DP"]["max_per_sample_grad_norm"],
+            microbatch=1,
+            batch_axis=(0, 0),
+            use_norm_accumulation=config["DP"]["norm_acc"],
+        )
     else:
         loss_gv = objax.privacy.dpsgd.PrivateGradValues(
             loss_fn,
@@ -58,13 +68,13 @@ def train(config, train_loader, train_op, learning_rate):
         if "overfit" in config["hyperparams"]
         else len(train_loader) + 1
     )
-    for i, (x, y) in tqdm(  # pylint:disable=invalid-name
+    for i, (img, label) in tqdm(
         enumerate(train_loader),  # pylint:disable=loop-invariant-statement
         total=len(train_loader),
         desc="Training",
         leave=False,
     ):
-        train_loss = train_op(x, y, learning_rate)
+        train_loss = train_op(img, label, learning_rate)
         if config["log_wandb"]:  # pylint:disable=loop-invariant-statement
             wandb.log({"train_loss": train_loss[0].item()}, commit=False)
         if i > max_batches:
@@ -72,21 +82,22 @@ def train(config, train_loader, train_op, learning_rate):
     return time.time() - start_time
 
 
-def test(config, test_loader, predict_op):
+def test(config, test_loader, predict_op, test_aug):
     correct, predicted = [], []
     max_batches = (
         config["hyperparams"]["overfit"]
         if "overfit" in config["hyperparams"]
         else len(test_loader) + 1
     )
-    for i, (x, y) in tqdm(  # pylint:disable=invalid-name
+    for i, (image, label) in tqdm(
         enumerate(test_loader),  # pylint:disable=loop-invariant-statement
         total=len(test_loader),
         desc="Testing",
         leave=False,
     ):
-        y_pred = predict_op(x)
-        correct.append(y)
+        image = test_aug(image)
+        y_pred = predict_op(image)
+        correct.append(label)
         predicted.append(y_pred)
         if i > max_batches:
             break
@@ -113,7 +124,9 @@ def test(config, test_loader, predict_op):
     version_base=None,
     config_path=Path.cwd() / "configs",
 )
-def main(config):  # pylint:disable=too-many-locals
+def main(
+    config,
+):  # pylint:disable=too-many-locals,too-many-branches,too-many-statements
     if config["log_wandb"]:
         wandb.init(
             project=config["project"],
@@ -153,6 +166,11 @@ def main(config):  # pylint:disable=too-many-locals
 
     augmenter = Transformation.from_dict_list(config["augmentations"])
     augment_op = augmenter.create_vectorized_transform()
+    if "test_augmentations" in config:
+        test_augmenter = Transformation.from_dict_list(config["test_augmentations"])
+        test_aug = test_augmenter.create_vectorized_transform()
+    else:
+        test_aug = lambda x: x
     scheduler = make_scheduler_from_config(config)
 
     train_op = create_train_op(model_vars, loss_gv, opt, augment_op)
@@ -175,7 +193,7 @@ def main(config):  # pylint:disable=too-many-locals
         else:
             print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
         epoch_time.append(cur_epoch_time)
-        test(config, test_loader, predict_op)
+        test(config, test_loader, predict_op, test_aug)
         if not config["DP"]["disable_dp"]:
             epsilon = objax.privacy.dpsgd.analyze_dp(
                 q=sampling_rate,

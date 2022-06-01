@@ -1,9 +1,20 @@
 from dptraining.datasets.cifar10 import CIFAR10Creator
 from dptraining.datasets.imagenet import ImageNetCreator
+from dptraining.datasets.utils import collate_np_arrays
 from dptraining.utils.augment import Transformation
 
 
 SUPPORTED_DATASETS = ("cifar10", "imagenet")
+
+
+def make_collate_fn(config):
+    if "collate_fn" in config["loader"]:
+        if config["loader"]["collate_fn"] == "numpy":
+            config["loader"]["collate_fn"] = collate_np_arrays
+        else:
+            raise ValueError(
+                f"collate_fn {config['loader']['collate_fn']} not supported."
+            )
 
 
 def make_loader_from_config(config):
@@ -23,6 +34,7 @@ def make_loader_from_config(config):
         if "train_transforms" in config
         else None
     )
+    make_collate_fn(config)
     if config["dataset"]["name"].lower() == "cifar10":
         train_ds, test_ds = CIFAR10Creator.make_datasets(
             (),

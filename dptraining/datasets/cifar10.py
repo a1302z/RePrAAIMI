@@ -1,30 +1,10 @@
 import numpy as np
-from jax import numpy as jnp
-from typing import Tuple, Any, List
+from typing import Tuple, Any
 from torchvision.datasets import CIFAR10
 from torch.utils.data import Dataset, DataLoader
 
 from dptraining.datasets.base_creator import DataLoaderCreator
-
-
-# class NumpyDataset(Dataset):
-#     def __init__(self, x, y, batch_size, shuffle=True):
-#         self.batch_size = batch_size
-#         self.shuffle = shuffle
-#         self.size = len(y)
-#         self.x = np.array(x, dtype=np.float32)
-#         self.y = np.array(y, dtype=int)
-
-#     def __getitem__(self):
-#         example_indices = np.arange(self.size)
-#         if self.shuffle:
-#             np.random.shuffle(example_indices)
-#         for idx in range(0, self.size, self.batch_size):
-#             indices = example_indices[idx : idx + self.batch_size]
-#             yield (self.x[indices], self.y[indices])
-
-#     def __len__(self):
-#         return self.size
+from dptraining.datasets.utils import collate_np_arrays
 
 
 class NumpyCIFAR10(CIFAR10):
@@ -57,18 +37,6 @@ class CIFAR10Creator(DataLoaderCreator):
     @staticmethod
     def transpose_to_hwc(dataset: Dataset):
         dataset.data.transpose(0, 2, 3, 1)
-
-    @staticmethod
-    def numpy_collate(batch: List[np.array]) -> Tuple[np.array, np.array]:
-        return np.stack([b[0] for b in batch]), np.array(
-            [b[1] for b in batch], dtype=int
-        )
-
-    @staticmethod
-    def jax_collate(batch):
-        return jnp.stack([b[0] for b in batch]), np.array(
-            [b[1] for b in batch], dtype=int
-        )
 
     @staticmethod
     def make_datasets(  # pylint:disable=too-many-arguments
@@ -106,9 +74,9 @@ class CIFAR10Creator(DataLoaderCreator):
     ) -> Tuple[DataLoader, DataLoader]:
         if numpy_collate:
             if not "collate_fn" in train_kwargs:
-                train_kwargs["collate_fn"] = CIFAR10Creator.numpy_collate
+                train_kwargs["collate_fn"] = collate_np_arrays
             if not "collate_fn" in test_kwargs:
-                test_kwargs["collate_fn"] = CIFAR10Creator.numpy_collate
+                test_kwargs["collate_fn"] = collate_np_arrays
         train_dl = DataLoader(train_ds, *train_args, **train_kwargs)
         test_dl = DataLoader(test_ds, *test_args, **test_kwargs)
         return train_dl, test_dl
