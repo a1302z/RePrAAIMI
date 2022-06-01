@@ -3,11 +3,12 @@ import pytest
 import numpy as np
 import sys
 from pathlib import Path
+from itertools import product
+from objax import nn
 
 sys.path.insert(0, str(Path.cwd()))
 
-from dptraining.models.cifar10models import Cifar10ConvNet
-from dptraining.models import make_model_from_config
+from dptraining.models import make_model_from_config, ResNet9, Cifar10ConvNet
 
 
 def test_cifar10convnet():
@@ -52,4 +53,31 @@ def test_resnet18():
         }
     )
     random_input_data = np.random.randn(2, 3, 224, 224)
+    m(random_input_data, training=False)
+
+
+def test_resnet9():
+    norm_funcs = [nn.BatchNorm2D, nn.GroupNorm2D]
+    scale_norms = [True, False]
+
+    for nf, sn in product(norm_funcs, scale_norms):
+        m = ResNet9(norm_func=nf, scale_norm=sn)
+        x = np.random.randn(2, 3, 32, 32)
+        m(x, training=True)
+        m(x, training=False)
+
+
+def test_make_resnet9():
+    m = make_model_from_config(
+        {
+            "model": {
+                "name": "resnet9",
+                "activation": "selu",
+                "normalization": "gn",
+                "in_channels": 12,
+                "num_classes": 256,
+            }
+        }
+    )
+    random_input_data = np.random.randn(2, 12, 224, 224)
     m(random_input_data, training=False)

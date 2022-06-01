@@ -1,5 +1,5 @@
 import objax
-from typing import Callable, Any
+from typing import Callable, Any, Optional
 from torchvision import transforms
 from omegaconf import DictConfig
 
@@ -55,7 +55,9 @@ class Transformation:
         return cls([Transformation._mapping[aug]() for aug in transformations])
 
     @classmethod
-    def from_dict_list(cls, transformations: dict[dict[str, Any]]):
+    def from_dict_list(cls, transformations: Optional[dict[dict[str, Any]]]):
+        if transformations is None:
+            return cls([])
         if not isinstance(transformations, (dict, DictConfig)):
             raise ValueError(
                 "Transforms with args need to be defined as dict (of dicts)"

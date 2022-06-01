@@ -34,6 +34,7 @@ hyperparams:
   epochs: 3
   batch_size: 512
   batch_size_test: 256
+  optim: Adam
   lr: 1e-3
   momentum: 0.9
 scheduler:

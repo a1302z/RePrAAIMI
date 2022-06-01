@@ -20,6 +20,7 @@ def test_train_cifar_one_batch():
             "random_img_shift": {"img_shape": (3, 32, 32)},
         },
         "dataset": {"name": "CIFAR10", "root": "./data"},
+        "optim": {"name": "momentum", "momentum": 0.5},
         "hyperparams": {
             "epochs": 1,
             "batch_size": 128,

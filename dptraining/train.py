@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path.cwd()))
 from dptraining.datasets import make_loader_from_config
 from dptraining.models import make_model_from_config
 from dptraining.utils import make_loss_from_config, make_scheduler_from_config
+from dptraining.optim import make_optim_from_config
 from dptraining.utils.augment import Transformation
 from dptraining.privacy import EpsCalculator
 
@@ -85,7 +86,6 @@ def test(config, test_loader, predict_op):
         leave=False,
     ):
         y_pred = predict_op(x)
-        # num_correct += np.count_nonzero(np.argmax(y_pred, axis=1) == y)
         correct.append(y)
         predicted.append(y_pred)
         if i > max_batches:
@@ -97,7 +97,7 @@ def test(config, test_loader, predict_op):
         wandb.log(
             {
                 "val": metrics.classification_report(
-                    correct, predicted.argmax(axis=1), output_dict=True
+                    correct, predicted.argmax(axis=1), output_dict=True, zero_division=0
                 )
             }
         )
@@ -123,9 +123,7 @@ def main(config):  # pylint:disable=too-many-locals
     model = make_model_from_config(config)
     model_vars = model.vars()
 
-    opt = objax.optimizer.Momentum(
-        model_vars, momentum=config["hyperparams"]["momentum"], nesterov=False
-    )
+    opt = make_optim_from_config(config, model_vars)
 
     predict_op = objax.Jit(
         lambda x: objax.functional.softmax(model(x, training=False)), model_vars

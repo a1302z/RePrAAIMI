@@ -1,4 +1,5 @@
 import sys
+import numpy as np
 from pathlib import Path
 
 sys.path.insert(0, str(Path.cwd()))
@@ -6,13 +7,26 @@ sys.path.insert(0, str(Path.cwd()))
 from dptraining.models import make_activation_from_config
 
 
+def put_data_in_it(f):
+    data = np.random.randn(10, 3, 64, 64)
+    f(data)
+
+
 def test_relu():
-    make_activation_from_config({"model": {"activation": "relu"}})
+    f = make_activation_from_config({"model": {"activation": "relu"}})
+    put_data_in_it(f)
 
 
 def test_selu():
-    make_activation_from_config({"model": {"activation": "selu"}})
+    f = make_activation_from_config({"model": {"activation": "selu"}})
+    put_data_in_it(f)
 
 
 def test_leakyrelu():
-    make_activation_from_config({"model": {"activation": "leakyrelu"}})
+    f = make_activation_from_config({"model": {"activation": "leakyrelu"}})
+    put_data_in_it(f)
+
+
+def test_mish():
+    f = make_activation_from_config({"model": {"activation": "mish"}})
+    put_data_in_it(f)
