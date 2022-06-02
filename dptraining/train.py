@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path.cwd()))
 
 
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+# os.environ["CUDA_VISIBLE_DEVICES"] = ""
 # os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 
 
@@ -38,6 +39,7 @@ def main(
 
     # This is absolutely disgusting but necessary to disable gpu training
     import objax
+    from jax import device_count
     from dptraining.datasets import make_loader_from_config
     from dptraining.models import make_model_from_config
     from dptraining.utils import make_loss_from_config, make_scheduler_from_config
@@ -57,9 +59,23 @@ def main(
 
     opt = make_optim_from_config(config, model_vars)
 
-    predict_op = objax.Jit(
-        lambda x: objax.functional.softmax(model(x, training=False)), model_vars
-    )
+    parallel = "parallel" in config["general"] and config["general"]["parallel"]
+    if parallel:
+        n_devices = device_count()
+        assert (
+            config["hyperparams"]["batch_size"] > n_devices
+            and config["hyperparams"]["batch_size"] > n_devices
+        ), "Batch size must be larger than number of devices"
+    if parallel:
+        predict_op = objax.Parallel(
+            lambda x: objax.functional.softmax(model(x, training=False)),
+            model_vars,
+            reduce=np.concatenate,
+        )
+    else:
+        predict_op = objax.Jit(
+            lambda x: objax.functional.softmax(model(x, training=False)), model_vars
+        )
 
     sampling_rate: float = config["hyperparams"]["batch_size"] / len(
         train_loader.dataset
@@ -92,12 +108,14 @@ def main(
         test_aug = lambda x: x
     scheduler = make_scheduler_from_config(config)
 
+    train_vars = model_vars + loss_gv.vars() + opt.vars()
     train_op = create_train_op(
-        model_vars,
+        train_vars,
         loss_gv,
         opt,
         augment_op,
         complex_valued="complex" in config["model"] and config["model"]["complex"],
+        parallel=parallel,
     )
 
     epoch_time = []
@@ -112,13 +130,15 @@ def main(
     else:
         epoch_iter = range(config["hyperparams"]["epochs"])
     for epoch, learning_rate in zip(epoch_iter, scheduler):
-        cur_epoch_time = train(config, train_loader, train_op, learning_rate)
+        cur_epoch_time = train(
+            config, train_loader, train_op, learning_rate, train_vars, parallel
+        )
         if config["general"]["log_wandb"]:  # pylint:disable=loop-invariant-statement
             wandb.log({"epoch": epoch, "lr": learning_rate})
         else:
             print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
         epoch_time.append(cur_epoch_time)
-        test(config, test_loader, predict_op, test_aug)
+        test(config, test_loader, predict_op, test_aug, model_vars, parallel)
         if not config["DP"]["disable_dp"]:
             epsilon = objax.privacy.dpsgd.analyze_dp(
                 q=sampling_rate,

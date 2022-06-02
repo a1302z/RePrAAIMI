@@ -1,6 +1,7 @@
 project: cifar-DP-complex
 general:
-  log_wandb: True
+  log_wandb: False
+  parallel: False
 dataset: 
   name: CIFAR10
   root: ./data
@@ -15,7 +16,7 @@ model:
   name: resnet9
   in_channels: 3
   num_classes: 10
-  conv: convws
+  conv: conv
   activation: conjmish
   normalization: gn
   pooling: conjmaxpool

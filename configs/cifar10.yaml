@@ -1,11 +1,12 @@
 project: cifar-DP
 general:
   log_wandb: False
+  parallel: False
 dataset: 
   name: CIFAR10
   root: ./data
 loader: 
-  num_workers: 3
+  num_workers: 0
 augmentations:
   # random_vertical_flips:
   #     flip_prob: 0.5
