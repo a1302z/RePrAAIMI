@@ -113,7 +113,7 @@ class ComplexWSConv2D(ComplexConv2D):
         )
         mean = jn.mean(self.weights.value, axis=(1, 2, 3), keepdims=True)
         std = jn.std(self.weights.value, axis=(1, 2, 3), keepdims=True)
-        self.weights.assign((self.weights.value - mean) / (std + 1e-5))
+        self.weights.assign((self.weights.value - mean) * lax.rsqrt(2.0) / (std + 1e-5))
         out = lax.conv_general_dilated(
             x,
             self.weights.value,

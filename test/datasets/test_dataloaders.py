@@ -1,3 +1,7 @@
+import os
+
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 import sys
 from pathlib import Path
 
@@ -20,9 +24,9 @@ def test_cifar10():
     train_dl, test_dl = CIFAR10Creator.make_dataloader(
         train_ds, test_ds, (), {"batch_size": 2}, (), {"batch_size": 1}
     )
-    for x, y in train_dl:
+    for _, _ in train_dl:
         pass
-    for x, y in test_dl:
+    for _, _ in test_dl:
         pass
 
 

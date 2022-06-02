@@ -1,3 +1,7 @@
+import os
+
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 import numpy as np
 import sys
 from pathlib import Path

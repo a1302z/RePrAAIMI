@@ -29,6 +29,7 @@ SUPPORTED_NORMALIZATION = ("bn", "gn")
 SUPPORTED_ACTIVATION = ("relu", "selu", "leakyrelu", "mish")
 
 SUPPORTED_COMPLEX_MODELS = ("resnet9",)
+SUPPORTED_COMPLEX_CONV = ("conv", "convws")
 SUPPORTED_COMPLEX_NORMALIZATION = ("gn",)
 SUPPORTED_COMPLEX_ACTIVATION = ("mish", "sepmish", "conjmish", "igaussian", "cardioid")
 SUPPORTED_COMPLEX_POOLING = ("conjmaxpool", "sepmaxpool", "avgpool")
@@ -66,6 +67,24 @@ def make_complex_normalization_from_config(config):
             f"{SUPPORTED_COMPLEX_NORMALIZATION} includes not supported norm layers."
         )
     return norm
+
+
+def make_complex_conv_from_config(config):
+    if config["model"]["conv"] not in SUPPORTED_COMPLEX_CONV:
+        raise ValueError(
+            f"{config['model']['conv']} not supported yet. "
+            f"Currently supported convs: {SUPPORTED_COMPLEX_CONV}"
+        )
+    if config["model"]["conv"] == "conv":
+        conv = ComplexConv2D
+    elif config["model"]["conv"] == "convws":
+        conv = ComplexWSConv2D
+    else:
+        raise ValueError(
+            f"This shouldn't happen. "
+            f"{SUPPORTED_COMPLEX_CONV} includes not supported conv layers."
+        )
+    return conv
 
 
 def make_activation_from_config(config):
@@ -182,7 +201,7 @@ def make_complex_model_from_config(config):
         model = ResNet9(
             config["model"]["in_channels"],
             config["model"]["num_classes"],
-            conv_cls=ComplexWSConv2D,
+            conv_cls=make_complex_conv_from_config(config),
             norm_cls=make_complex_normalization_from_config(config),
             act_func=make_complex_activation_from_config(config),
             pool_func=make_complex_pooling_from_config(config),

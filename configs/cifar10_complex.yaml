@@ -1,19 +1,21 @@
-project: cifar-DP
-log_wandb: False
+project: cifar-DP-complex
+general:
+  log_wandb: True
 dataset: 
   name: CIFAR10
   root: ./data
 loader: 
   num_workers: 12
 augmentations:
-  make_complex_real:
+  make_complex_both:
 test_augmentations:
-  make_complex_real:
+  make_complex_both:
 model:
   complex: True
   name: resnet9
   in_channels: 3
   num_classes: 10
+  conv: convws
   activation: conjmish
   normalization: gn
   pooling: conjmaxpool

@@ -1,5 +1,6 @@
 project: cifar-DP
-log_wandb: False
+general:
+  log_wandb: False
 dataset: 
   name: CIFAR10
   root: ./data
@@ -26,7 +27,7 @@ optim:
   name: nadam
 hyperparams:
   epochs: 50
-  batch_size: 1024
+  batch_size: 32
   batch_size_test: 200
   lr: 2e-3
   momentum: 0.9

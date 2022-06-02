@@ -1,123 +1,22 @@
+import os
+
 from typing import Iterable
 import hydra
+from omegaconf import OmegaConf
 import wandb
-import time
-
-import numpy as np
-
-import objax
-import sys
-
 from pathlib import Path
-from sklearn import metrics
+import numpy as np
 from tqdm import tqdm
+import sys
 
 sys.path.insert(0, str(Path.cwd()))
 
-from dptraining.datasets import make_loader_from_config
-from dptraining.models import make_model_from_config
-from dptraining.utils import make_loss_from_config, make_scheduler_from_config
-from dptraining.optim import make_optim_from_config
-from dptraining.utils.augment import Transformation
-from dptraining.privacy import EpsCalculator, ComplexPrivateGradValues
+
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+# os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 
 
-def create_train_op(model_vars, loss_gv, opt, augment_op):
-    @objax.Function.with_vars(model_vars + loss_gv.vars() + opt.vars())
-    def train_op(x, y, learning_rate):  # pylint:disable=invalid-name
-        x = augment_op(x)
-        grads, loss = loss_gv(x, y)
-        opt(learning_rate, grads)
-        return loss
-
-    train_op = objax.Jit(train_op)
-    return train_op
-
-
-def create_loss_gradient(config, model, model_vars, loss_fn, sigma):
-    if config["DP"]["disable_dp"]:
-        loss_gv = objax.GradValues(loss_fn, model.vars())
-    elif "complex" in config["model"] and config["model"]["complex"]:
-        loss_gv = ComplexPrivateGradValues(
-            loss_fn,
-            model_vars,
-            sigma,
-            config["DP"]["max_per_sample_grad_norm"],
-            microbatch=1,
-            batch_axis=(0, 0),
-            use_norm_accumulation=config["DP"]["norm_acc"],
-        )
-    else:
-        loss_gv = objax.privacy.dpsgd.PrivateGradValues(
-            loss_fn,
-            model_vars,
-            sigma,
-            config["DP"]["max_per_sample_grad_norm"],
-            microbatch=1,
-            batch_axis=(0, 0),
-            use_norm_accumulation=config["DP"]["norm_acc"],
-        )
-
-    return loss_gv
-
-
-def train(config, train_loader, train_op, learning_rate):
-    start_time = time.time()
-    max_batches = (
-        config["hyperparams"]["overfit"]
-        if "overfit" in config["hyperparams"]
-        else len(train_loader) + 1
-    )
-    for i, (img, label) in tqdm(
-        enumerate(train_loader),  # pylint:disable=loop-invariant-statement
-        total=len(train_loader),
-        desc="Training",
-        leave=False,
-    ):
-        train_loss = train_op(img, label, learning_rate)
-        if config["log_wandb"]:  # pylint:disable=loop-invariant-statement
-            wandb.log({"train_loss": train_loss[0].item()}, commit=False)
-        if i > max_batches:
-            break
-    return time.time() - start_time
-
-
-def test(config, test_loader, predict_op, test_aug):
-    correct, predicted = [], []
-    max_batches = (
-        config["hyperparams"]["overfit"]
-        if "overfit" in config["hyperparams"]
-        else len(test_loader) + 1
-    )
-    for i, (image, label) in tqdm(
-        enumerate(test_loader),  # pylint:disable=loop-invariant-statement
-        total=len(test_loader),
-        desc="Testing",
-        leave=False,
-    ):
-        image = test_aug(image)
-        y_pred = predict_op(image)
-        correct.append(label)
-        predicted.append(y_pred)
-        if i > max_batches:
-            break
-    correct = np.concatenate(correct)
-    predicted = np.concatenate(predicted)
-
-    if config["log_wandb"]:
-        wandb.log(
-            {
-                "val": metrics.classification_report(
-                    correct, predicted.argmax(axis=1), output_dict=True, zero_division=0
-                )
-            }
-        )
-    else:
-        print(
-            metrics.classification_report(
-                correct, predicted.argmax(axis=1), output_dict=False, zero_division=0
-            )
-        )
+# pylint:disable=import-outside-toplevel
 
 
 @hydra.main(
@@ -127,11 +26,31 @@ def test(config, test_loader, predict_op, test_aug):
 def main(
     config,
 ):  # pylint:disable=too-many-locals,too-many-branches,too-many-statements
-    if config["log_wandb"]:
+    if isinstance(config, OmegaConf):
+        config = OmegaConf.to_container(config)
+    if config["general"]["log_wandb"]:
         wandb.init(
             project=config["project"],
             config=config,
         )
+    if "cpu" in config["general"] and config["general"]["cpu"]:
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
+    # This is absolutely disgusting but necessary to disable gpu training
+    import objax
+    from dptraining.datasets import make_loader_from_config
+    from dptraining.models import make_model_from_config
+    from dptraining.utils import make_loss_from_config, make_scheduler_from_config
+    from dptraining.optim import make_optim_from_config
+    from dptraining.utils.augment import Transformation
+    from dptraining.privacy import EpsCalculator
+    from dptraining.utils.training_utils import (
+        create_train_op,
+        create_loss_gradient,
+        train,
+        test,
+    )
+
     train_loader, test_loader = make_loader_from_config(config)
     model = make_model_from_config(config)
     model_vars = model.vars()
@@ -173,11 +92,17 @@ def main(
         test_aug = lambda x: x
     scheduler = make_scheduler_from_config(config)
 
-    train_op = create_train_op(model_vars, loss_gv, opt, augment_op)
+    train_op = create_train_op(
+        model_vars,
+        loss_gv,
+        opt,
+        augment_op,
+        complex_valued="complex" in config["model"] and config["model"]["complex"],
+    )
 
     epoch_time = []
     epoch_iter: Iterable
-    if config["log_wandb"]:
+    if config["general"]["log_wandb"]:
         epoch_iter = tqdm(
             range(config["hyperparams"]["epochs"]),
             total=config["hyperparams"]["epochs"],
@@ -188,7 +113,7 @@ def main(
         epoch_iter = range(config["hyperparams"]["epochs"])
     for epoch, learning_rate in zip(epoch_iter, scheduler):
         cur_epoch_time = train(config, train_loader, train_op, learning_rate)
-        if config["log_wandb"]:  # pylint:disable=loop-invariant-statement
+        if config["general"]["log_wandb"]:  # pylint:disable=loop-invariant-statement
             wandb.log({"epoch": epoch, "lr": learning_rate})
         else:
             print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
@@ -202,7 +127,9 @@ def main(
                 * (epoch + 1),  # pylint:disable=loop-invariant-statement
                 delta=delta,
             )  # pylint:disable=loop-invariant-statement
-            if config["log_wandb"]:  # pylint:disable=loop-invariant-statement
+            if config["general"][
+                "log_wandb"
+            ]:  # pylint:disable=loop-invariant-statement
                 wandb.log(
                     {"epsilon": epsilon}
                 )  # pylint:disable=loop-invariant-statement
@@ -211,7 +138,7 @@ def main(
                     f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})"  # pylint:disable=loop-invariant-statement
                 )
 
-    if not config["log_wandb"]:
+    if not config["general"]["log_wandb"]:
         print("Average epoch time (all epochs): ", np.average(epoch_time))
         print("Median epoch time (all epochs): ", np.median(epoch_time))
         if len(epoch_time) > 1:

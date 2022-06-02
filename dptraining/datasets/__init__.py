@@ -53,6 +53,7 @@ def make_loader_from_config(config):
             {
                 "batch_size": config["hyperparams"]["batch_size"],
                 "shuffle": True,
+                "drop_last": True,
                 **config["loader"],
             },
             (),
@@ -72,13 +73,14 @@ def make_loader_from_config(config):
             (),
             {"root": config["dataset"]["root"], "split": "val", "transform": test_tf},
         )
-        train_loader, test_loader = CIFAR10Creator.make_dataloader(
+        train_loader, test_loader = ImageNetCreator.make_dataloader(
             train_ds,
             test_ds,
             (),
             {
                 "batch_size": config["hyperparams"]["batch_size"],
                 "shuffle": True,
+                "drop_last": True,
                 **config["loader"],
             },
             (),

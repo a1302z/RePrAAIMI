@@ -1,17 +1,18 @@
-import jax
+import os
+
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path.cwd()))
 from dptraining.train import main
 
-jax.config.update("jax_platform_name", "cpu")
-
 
 def test_train_cifar_one_batch():
     config = {
         "project": "test",
-        "log_wandb": False,
+        "general": {"log_wandb": False, "cpu": True},
         "loader": {"num_workers": 2},
         "model": {"name": "cifar10model", "num_classes": 10},
         "augmentations": {

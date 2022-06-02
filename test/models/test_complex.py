@@ -1,3 +1,7 @@
+import os
+
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 import sys
 import numpy as np
 from pathlib import Path
@@ -11,12 +15,14 @@ from dptraining.models import (
     SUPPORTED_COMPLEX_POOLING,
     SUPPORTED_COMPLEX_NORMALIZATION,
     SUPPORTED_COMPLEX_MODELS,
+    SUPPORTED_COMPLEX_CONV,
 )
 
 
 def test_complex_model_options():
     fake_data = np.random.randn(4, 2, 47, 47).astype(np.complex128)
-    for act, norm, pool, model in product(
+    for conv, act, norm, pool, model in product(
+        SUPPORTED_COMPLEX_CONV,
         SUPPORTED_COMPLEX_ACTIVATION,
         SUPPORTED_COMPLEX_NORMALIZATION,
         SUPPORTED_COMPLEX_POOLING,
@@ -28,6 +34,7 @@ def test_complex_model_options():
                     "name": model,
                     "in_channels": 2,
                     "num_classes": 7,
+                    "conv": conv,
                     "activation": act,
                     "normalization": norm,
                     "pooling": pool,
