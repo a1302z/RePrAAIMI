@@ -24,8 +24,15 @@ class ComplexPrivateGradValues(PrivateGradValues):
         g, v = self.clipped_grad(*[self.reshape_microbatch(x) for x in args])
         g = [
             gx
-            + random.normal(gx.shape, stddev=stddev, generator=self.keygen)
-            * one_by_sqrt_two
+            + (
+                random.normal(
+                    gx.shape, stddev=stddev * one_by_sqrt_two, generator=self.keygen
+                )
+                + 1j
+                * random.normal(
+                    gx.shape, stddev=stddev * one_by_sqrt_two, generator=self.keygen
+                )
+            )
             for gx in g
         ]
         return g, v
