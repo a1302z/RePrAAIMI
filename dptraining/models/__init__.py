@@ -15,6 +15,7 @@ from dptraining.models.complex.activations import (
 )
 from dptraining.models.complex.normalization import (
     ComplexGroupNorm2D,
+    ComplexGroupNorm2DWhitening,
 )  # pylint:disable=duplicate-code
 from dptraining.models.complex.layers import (
     ComplexConv2D,
@@ -30,7 +31,7 @@ SUPPORTED_ACTIVATION = ("relu", "selu", "leakyrelu", "mish")
 
 SUPPORTED_COMPLEX_MODELS = ("resnet9",)
 SUPPORTED_COMPLEX_CONV = ("conv", "convws")
-SUPPORTED_COMPLEX_NORMALIZATION = ("gn",)
+SUPPORTED_COMPLEX_NORMALIZATION = ("gn", "gnw")
 SUPPORTED_COMPLEX_ACTIVATION = ("mish", "sepmish", "conjmish", "igaussian", "cardioid")
 SUPPORTED_COMPLEX_POOLING = ("conjmaxpool", "sepmaxpool", "avgpool")
 
@@ -61,6 +62,8 @@ def make_complex_normalization_from_config(config):
         )
     if config["model"]["normalization"] == "gn":
         norm = ComplexGroupNorm2D
+    elif config["model"]["normalization"] == "gnw":
+        norm = ComplexGroupNorm2DWhitening
     else:
         raise ValueError(
             f"This shouldn't happen. "
