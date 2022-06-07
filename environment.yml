@@ -8,7 +8,7 @@ dependencies:
   - pytorch::torchvision
   - conda-forge::cudatoolkit
   - conda-forge::cudnn==8.2.1.32
-  - conda-forgge::wandb
+  - conda-forge::wandb
   - conda-forge::scikit-learn
   - black
   - pytest
@@ -19,3 +19,4 @@ dependencies:
     - tqdm 
     - perflint
     - pytest-profiling
+    - objax
