@@ -25,7 +25,7 @@ optim:
   name: nadam
 hyperparams:
   epochs: 50
-  batch_size: 512
+  batch_size: 896
   batch_size_test: 256
   lr: 2e-3
   momentum: 0.9

@@ -3,6 +3,7 @@ import os
 from typing import Iterable
 import hydra
 from omegaconf import OmegaConf
+import omegaconf
 import wandb
 from pathlib import Path
 import numpy as np
@@ -27,12 +28,14 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 def main(
     config,
 ):  # pylint:disable=too-many-locals,too-many-branches,too-many-statements
-    if isinstance(config, OmegaConf):
+    if isinstance(config, omegaconf.dictconfig.DictConfig):
         config = OmegaConf.to_container(config)
     if config["general"]["log_wandb"]:
-        wandb.init(
+        run = wandb.init(
             project=config["project"],
             config=config,
+            settings=wandb.Settings(start_method="thread"),
+            reinit=True,
         )
     if "cpu" in config["general"] and config["general"]["cpu"]:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -158,7 +161,9 @@ def main(
                     f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})"  # pylint:disable=loop-invariant-statement
                 )
 
-    if not config["general"]["log_wandb"]:
+    if config["general"]["log_wandb"]:
+        run.finish()
+    else:
         print("Average epoch time (all epochs): ", np.average(epoch_time))
         print("Median epoch time (all epochs): ", np.median(epoch_time))
         if len(epoch_time) > 1:
