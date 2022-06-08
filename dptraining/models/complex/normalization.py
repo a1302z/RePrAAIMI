@@ -1,10 +1,9 @@
-from jax import numpy as jn
+from jax import numpy as jn, vmap
 from objax import functional
 from objax.module import Module
 from objax.variable import TrainVar
 from objax.typing import JaxArray
 from objax.util import class_name
-from jax import vmap
 
 
 def _whiten_one(vec: JaxArray):
@@ -12,17 +11,17 @@ def _whiten_one(vec: JaxArray):
     is of shape (C,H,W), with the leading G(roup) and N (batch) dimensions omitted.
     Modified from https://gist.github.com/joelouismarino/ce239b5601fff2698895f48003f7464b
     """
-    fl = vec.flatten()
+    flat_vector = vec.flatten()
     # subtract mean to center the tensor
-    centered = fl - fl.mean()
+    centered = flat_vector - flat_vector.mean()
     # compute covariance between real and imaginary. Trabelsi call this V
     sigma = jn.cov(centered.real, centered.imag)
     # Compute inverse square root of covariance matrix.
-    U, Lambda, _ = jn.linalg.svd(sigma, full_matrices=False)
-    W = jn.dot(U, jn.dot(jn.diag(1.0 / jn.sqrt(Lambda + 1e-5)), U.T))
+    u_mat, lmbda, _ = jn.linalg.svd(sigma, full_matrices=False)
+    w_mat = jn.dot(u_mat, jn.dot(jn.diag(1.0 / jn.sqrt(lmbda + 1e-5)), u_mat.T))
     # convert complex to 2D real for dot product
     two_channel = jn.stack([centered.real, centered.imag])
-    result = jn.dot(W, two_channel)
+    result = jn.dot(w_mat, two_channel)
     # convert back to complex and reshape to original shape
     return (result[0] + result[1] * 1j).reshape(vec.shape)
 
