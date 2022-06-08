@@ -1,12 +1,13 @@
 project: cifar-DP-complex
 general:
   log_wandb: False
-  parallel: False
+  parallel: True
 dataset: 
   name: CIFAR10
   root: ./data
 loader: 
-  num_workers: 12
+  num_workers: 32
+  prefetch_factor: 16
 augmentations:
   make_complex_both:
 test_augmentations:
@@ -17,24 +18,31 @@ model:
   in_channels: 3
   num_classes: 10
   conv: conv
-  activation: conjmish
+  activation: cardioid
   normalization: gn
-  pooling: conjmaxpool
+  pooling: avgpool
   scale_norm: True
 optim:
   name: nadam
 hyperparams:
   epochs: 50
-  batch_size: 896
-  batch_size_test: 256
+  batch_size: 1800
+  batch_size_test: 1024
   lr: 2e-3
   momentum: 0.9
 scheduler:
-  type: const
+  type: reduceonplateau
   normalize_lr: False
+  patience: 5
+  min_delta: 0.01
+  factor: 0.9
+earlystopping:
+  mode: maximize
+  patience: 10
+  min_delta: 0.01
 DP:
   disable_dp: False
   epsilon: 7.5
-  max_per_sample_grad_norm: 3.0
+  max_per_sample_grad_norm: 2.0
   delta: 1e-5
   norm_acc: False

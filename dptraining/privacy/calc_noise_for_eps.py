@@ -5,10 +5,7 @@ from scipy.optimize import minimize_scalar
 
 def optimisation_f(sigma, epsilon, sampling_rate, steps, delta):
     calc_eps = analyze_dp(
-        q=sampling_rate,
-        noise_multiplier=sigma,
-        steps=steps,
-        delta=delta,
+        q=sampling_rate, noise_multiplier=sigma, steps=steps, delta=delta,
     )
     return abs(epsilon - calc_eps)
 
@@ -22,7 +19,7 @@ class EpsCalculator:
         self._delta = config["DP"]["delta"]
         self._steps = len(train_loader) * config["hyperparams"]["epochs"]
 
-    def calc_noise_for_eps(self, tol=1e-3) -> float:
+    def calc_noise_for_eps(self, tol=1e-5) -> float:
         result = minimize_scalar(
             partial(
                 optimisation_f,

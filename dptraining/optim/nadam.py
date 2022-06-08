@@ -37,13 +37,11 @@ class NAdam(Module):  # pylint:disable=too-many-instance-attributes
         )
         # for mu, c_mu in zip(self.mu, self.c_mu):
         for c_mu in self.cumulative_mu:
-            mult = self.beta1 * (1 - 0.5 * 0.96**self.psi)
+            mult = self.beta1 * (1 - 0.5 * 0.96 ** self.psi)
             c_mu.value *= mult
 
     def __call__(  # pylint:disable=arguments-differ # no clue why this warning comes up after all
-        self,
-        lr: float,
-        grads: List[JaxArray],
+        self, lr: float, grads: List[JaxArray],
     ):
         assert len(grads) == len(
             self.train_vars
@@ -62,7 +60,7 @@ class NAdam(Module):  # pylint:disable=too-many-instance-attributes
         ):
             grad += self.lmbda * param.value
             momentum.value += (1 - self.beta1) * (grad - momentum.value)
-            veloc.value += (1 - self.beta2) * (grad**2 - veloc.value)
+            veloc.value += (1 - self.beta2) * (grad ** 2 - veloc.value)
 
             pre_update = (1.0 - mu) * grad / (1 - cumul_mu.value)
             mu = self.beta1 * (  # pylint:disable=invalid-name
@@ -72,7 +70,7 @@ class NAdam(Module):  # pylint:disable=too-many-instance-attributes
             post_update = (mu * momentum.value) / (1.0 - cumul_mu.value)
 
             m_hat = pre_update + post_update
-            v_hat = veloc.value / (1.0 - self.beta2**self.step.value)
+            v_hat = veloc.value / (1.0 - self.beta2 ** self.step.value)
 
             param.value -= lr * m_hat * functional.rsqrt(v_hat + self.eps)
 

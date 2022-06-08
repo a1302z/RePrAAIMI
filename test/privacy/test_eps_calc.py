@@ -11,10 +11,7 @@ from torch import randn
 def test_calc():
     c = EpsCalculator(
         {
-            "DP": {
-                "epsilon": 25,
-                "delta": 1e-5,
-            },
+            "DP": {"epsilon": 25, "delta": 1e-5,},
             "hyperparams": {"epochs": 10, "batch_size": 50},
         },
         DataLoader(

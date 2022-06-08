@@ -1,7 +1,13 @@
 from dptraining.utils.loss import CSELogitsSparse
-from dptraining.utils.scheduler import CosineSchedule, ConstantSchedule, LinearSchedule
+from dptraining.utils.scheduler import (
+    CosineSchedule,
+    ConstantSchedule,
+    LinearSchedule,
+    ReduceOnPlateau,
+)
+from dptraining.utils.earlystopping import EarlyStopping
 
-SUPPORTED_SCHEDULES = ("cosine", "const")
+SUPPORTED_SCHEDULES = ("cosine", "const", "reduceonplateau")
 
 
 def make_scheduler_from_config(config):
@@ -16,6 +22,19 @@ def make_scheduler_from_config(config):
         scheduler = ConstantSchedule(
             config["hyperparams"]["lr"], config["hyperparams"]["epochs"]
         )
+    elif config["scheduler"]["type"] == "reduceonplateau":
+        scheduler = ReduceOnPlateau(
+            lr=config["hyperparams"]["lr"],
+            patience=config["scheduler"]["patience"],
+            factor=config["scheduler"]["factor"],
+            min_delta=config["scheduler"]["min_delta"],
+            cumulative_delta=config["scheduler"]["cumulative_delta"]
+            if "cumulative_delta" in config["scheduler"]
+            else True,
+            mode=config["scheduler"]["mode"]
+            if "mode" in config["scheduler"]
+            else "maximize",
+        )
     else:
         raise ValueError(
             f"{config['scheduler']['type']} scheduler not supported. "
@@ -26,3 +45,18 @@ def make_scheduler_from_config(config):
 
 def make_loss_from_config(config):  # pylint:disable=unused-argument
     return CSELogitsSparse
+
+
+def make_stopper_from_config(config):
+    if "earlystopping" in config:
+        return EarlyStopping(
+            patience=config["earlystopping"]["patience"],
+            min_delta=config["earlystopping"]["min_delta"],
+            mode=config["earlystopping"]["mode"]
+            if "mode" in config["earlystopping"]
+            else "maximize",
+            cumulative_delta=config["earlystopping"]["cumulative_delta"]
+            if "cumulative_delta" in config["earlystopping"]
+            else True,
+        )
+    return lambda _: False

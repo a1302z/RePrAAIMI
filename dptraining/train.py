@@ -22,8 +22,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 
 @hydra.main(
-    version_base=None,
-    config_path=Path.cwd() / "configs",
+    version_base=None, config_path=Path.cwd() / "configs",
 )
 def main(
     config,
@@ -45,7 +44,11 @@ def main(
     from jax import device_count
     from dptraining.datasets import make_loader_from_config
     from dptraining.models import make_model_from_config
-    from dptraining.utils import make_loss_from_config, make_scheduler_from_config
+    from dptraining.utils import (
+        make_loss_from_config,
+        make_scheduler_from_config,
+        make_stopper_from_config,
+    )
     from dptraining.optim import make_optim_from_config
     from dptraining.utils.augment import Transformation
     from dptraining.privacy import EpsCalculator
@@ -108,8 +111,9 @@ def main(
         test_augmenter = Transformation.from_dict_list(config["test_augmentations"])
         test_aug = test_augmenter.create_vectorized_transform()
     else:
-        test_aug = lambda x: x
+        test_aug = lambda x: x  # pylint:disable=unnecessary-lambda-assignment
     scheduler = make_scheduler_from_config(config)
+    stopper = make_stopper_from_config(config)
 
     train_vars = model_vars + loss_gv.vars() + opt.vars()
     train_op = create_train_op(
@@ -141,7 +145,8 @@ def main(
         else:
             print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
         epoch_time.append(cur_epoch_time)
-        test(config, test_loader, predict_op, test_aug, model_vars, parallel)
+        metric = test(config, test_loader, predict_op, test_aug, model_vars, parallel)
+        scheduler.update_score(metric)
         if not config["DP"]["disable_dp"]:
             epsilon = objax.privacy.dpsgd.analyze_dp(
                 q=sampling_rate,
@@ -160,6 +165,9 @@ def main(
                 print(
                     f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})"  # pylint:disable=loop-invariant-statement
                 )
+        if stopper(metric):
+            print("Early Stopping was activated -> Stopping Training")
+            break
 
     if config["general"]["log_wandb"]:
         run.finish()

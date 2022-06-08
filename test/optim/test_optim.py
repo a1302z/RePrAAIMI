@@ -30,8 +30,7 @@ def test_make_momentum():
 
 def test_make_adam():
     make_optim_from_config(
-        {"optim": {"name": "adam", "beta2": 0.7}},
-        fake_model.vars(),
+        {"optim": {"name": "adam", "beta2": 0.7}}, fake_model.vars(),
     )
 
 

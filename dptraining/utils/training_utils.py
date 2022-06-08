@@ -33,11 +33,7 @@ def create_train_op(  # pylint:disable=too-many-arguments
         return loss
 
     if parallel:
-        train_op = objax.Parallel(
-            train_op,
-            reduce=np.mean,
-            vc=train_vars,
-        )
+        train_op = objax.Parallel(train_op, reduce=np.mean, vc=train_vars,)
     else:
 
         # @objax.Function.with_vars(train_vars)
@@ -109,7 +105,13 @@ def train(  # pylint:disable=too-many-arguments
 
 
 def test(  # pylint:disable=too-many-arguments
-    config, test_loader, predict_op, test_aug, model_vars, parallel
+    config,
+    test_loader,
+    predict_op,
+    test_aug,
+    model_vars,
+    parallel,
+    score_fn=metrics.accuracy_score,
 ):
     ctx_mngr = (model_vars).replicate() if parallel else contextlib.suppress()
     with ctx_mngr:
@@ -132,19 +134,20 @@ def test(  # pylint:disable=too-many-arguments
             if i > max_batches:
                 break
     correct = np.concatenate(correct)
-    predicted = np.concatenate(predicted)
+    predicted = np.concatenate(predicted).argmax(axis=1)
 
     if config["general"]["log_wandb"]:
         wandb.log(
             {
                 "val": metrics.classification_report(
-                    correct, predicted.argmax(axis=1), output_dict=True, zero_division=0
+                    correct, predicted, output_dict=True, zero_division=0
                 )
             }
         )
     else:
         print(
             metrics.classification_report(
-                correct, predicted.argmax(axis=1), output_dict=False, zero_division=0
+                correct, predicted, output_dict=False, zero_division=0
             )
         )
+    return score_fn(correct, predicted)

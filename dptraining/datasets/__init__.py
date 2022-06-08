@@ -57,10 +57,7 @@ def make_loader_from_config(config):
                 **config["loader"],
             },
             (),
-            {
-                "batch_size": config["hyperparams"]["batch_size_test"],
-                "shuffle": False,
-            },
+            {"batch_size": config["hyperparams"]["batch_size_test"], "shuffle": False,},
         )
     elif config["dataset"]["name"].lower() == "imagenet":
         train_ds, test_ds = ImageNetCreator.make_datasets(

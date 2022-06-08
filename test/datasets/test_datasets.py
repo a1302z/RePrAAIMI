@@ -40,10 +40,7 @@ def test_cifar10_invalid_args():
     with pytest.raises(ValueError):
         train_ds, test_ds = CIFAR10Creator.make_datasets(
             (),
-            {
-                "root": "./data",
-                "download": True,
-            },
+            {"root": "./data", "download": True,},
             (),
             {"root": "./data", "download": True},
             numpy_optimisation=False,
