@@ -1,6 +1,6 @@
 import os
 
-from typing import Iterable
+from typing import Callable, Iterable
 import hydra
 from omegaconf import OmegaConf
 import omegaconf
@@ -57,7 +57,7 @@ def main(
     )
 
     train_loader, test_loader = make_loader_from_config(config)
-    model = make_model_from_config(config)
+    model: Callable = make_model_from_config(config)
     model_vars = model.vars()
 
     opt = make_optim_from_config(config, model_vars)
@@ -71,13 +71,18 @@ def main(
         ), "Batch size must be larger than number of devices"
     if parallel:
         predict_op = objax.Parallel(
-            lambda x: objax.functional.softmax(model(x, training=False)),
+            lambda x: objax.functional.softmax(
+                model(x, training=False)  # pylint:disable=not-callable
+            ),
             model_vars,
             reduce=np.concatenate,
         )
     else:
         predict_op = objax.Jit(
-            lambda x: objax.functional.softmax(model(x, training=False)), model_vars
+            lambda x: objax.functional.softmax(
+                model(x, training=False)  # pylint:disable=not-callable
+            ),
+            model_vars,
         )
 
     sampling_rate: float = config["hyperparams"]["batch_size"] / len(

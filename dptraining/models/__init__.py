@@ -1,3 +1,4 @@
+from typing import Callable
 import warnings
 from functools import partial
 from jax import numpy as jnp
@@ -36,7 +37,7 @@ SUPPORTED_COMPLEX_ACTIVATION = ("mish", "sepmish", "conjmish", "igaussian", "car
 SUPPORTED_COMPLEX_POOLING = ("conjmaxpool", "sepmaxpool", "avgpool")
 
 
-def make_normalization_from_config(config):
+def make_normalization_from_config(config: dict) -> Callable:
     match config["model"]["normalization"]:
         case "bn":
             return nn.BatchNorm2D
@@ -44,11 +45,12 @@ def make_normalization_from_config(config):
             return nn.GroupNorm2D
         case _ as fail:
             raise ValueError(
-                f"Unsupported normalization layer '{fail}'. Legal options are: {SUPPORTED_NORMALIZATION}"
+                f"Unsupported normalization layer '{fail}'. "
+                f"Legal options are: {SUPPORTED_NORMALIZATION}"
             )
 
 
-def make_complex_normalization_from_config(config):
+def make_complex_normalization_from_config(config: dict) -> Callable:
     match config["model"]["normalization"]:
         case "gn":
             return ComplexGroupNorm2D
@@ -56,11 +58,12 @@ def make_complex_normalization_from_config(config):
             return ComplexGroupNorm2DWhitening
         case _ as fail:
             raise ValueError(
-                f"Unsupported normalization layer '{fail}'. Legal options are: {SUPPORTED_COMPLEX_NORMALIZATION}"
+                f"Unsupported normalization layer '{fail}'. "
+                f"Legal options are: {SUPPORTED_COMPLEX_NORMALIZATION}"
             )
 
 
-def make_complex_conv_from_config(config):
+def make_complex_conv_from_config(config: dict) -> Callable:
     match config["model"]["conv"]:
         case "conv":
             return ComplexConv2D
@@ -68,11 +71,12 @@ def make_complex_conv_from_config(config):
             return ComplexWSConv2D
         case _ as fail:
             raise ValueError(
-                f"Unsupported convolutional layer '{fail}'. Legal options are: {SUPPORTED_COMPLEX_CONV}"
+                f"Unsupported convolutional layer '{fail}'. "
+                f"Legal options are: {SUPPORTED_COMPLEX_CONV}"
             )
 
 
-def make_activation_from_config(config):
+def make_activation_from_config(config: dict) -> Callable:
     match config["model"]["activation"]:
         case "relu":
             return functional.relu
@@ -88,7 +92,7 @@ def make_activation_from_config(config):
             )
 
 
-def make_complex_activation_from_config(config):
+def make_complex_activation_from_config(config: dict) -> Callable:
     match config["model"]["activation"]:
         case "mish":
             return ComplexMish()
@@ -102,11 +106,12 @@ def make_complex_activation_from_config(config):
             return Cardioid()
         case _ as fail:
             raise ValueError(
-                f"Unsupported activation layer '{fail}'. Legal options are: {SUPPORTED_COMPLEX_NORMALIZATION}"
+                f"Unsupported activation layer '{fail}'. "
+                f"Legal options are: {SUPPORTED_COMPLEX_NORMALIZATION}"
             )
 
 
-def make_complex_pooling_from_config(config):
+def make_complex_pooling_from_config(config: dict) -> Callable:
     match config["model"]["pooling"]:
         case "conjmaxpool":
             return ConjugateMaxPool2D(2)
@@ -116,11 +121,12 @@ def make_complex_pooling_from_config(config):
             return partial(functional.average_pool_2d, size=2)
         case _ as fail:
             raise ValueError(
-                f"Unsupported pooling layer '{fail}'. Legal options are: {SUPPORTED_COMPLEX_POOLING}"
+                f"Unsupported pooling layer '{fail}'. "
+                f"Legal options are: {SUPPORTED_COMPLEX_POOLING}"
             )
 
 
-def make_normal_model_from_config(config):
+def make_normal_model_from_config(config: dict) -> Callable:
     match config["model"]["name"]:
         case "cifar10model":
             if "activation" in config["model"]:
@@ -151,7 +157,7 @@ def make_normal_model_from_config(config):
             )
 
 
-def make_complex_model_from_config(config):
+def make_complex_model_from_config(config: dict) -> Callable:
     match config["model"]["name"]:
         case "resnet9":
             return ResNet9(
@@ -173,7 +179,7 @@ def make_complex_model_from_config(config):
             )
 
 
-def make_model_from_config(config):
+def make_model_from_config(config: dict) -> Callable:
     if "complex" in config["model"] and config["model"]["complex"]:
         model = make_complex_model_from_config(config)
     else:
