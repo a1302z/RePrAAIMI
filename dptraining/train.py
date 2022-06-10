@@ -29,13 +29,6 @@ def main(
 ):  # pylint:disable=too-many-locals,too-many-branches,too-many-statements
     if isinstance(config, omegaconf.dictconfig.DictConfig):
         config = OmegaConf.to_container(config)
-    if config["general"]["log_wandb"]:
-        run = wandb.init(
-            project=config["project"],
-            config=config,
-            settings=wandb.Settings(start_method="thread"),
-            reinit=True,
-        )
     if "cpu" in config["general"] and config["general"]["cpu"]:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
@@ -58,13 +51,6 @@ def main(
         train,
         test,
     )
-
-    train_loader, test_loader = make_loader_from_config(config)
-    model: Callable = make_model_from_config(config)
-    model_vars = model.vars()
-
-    opt = make_optim_from_config(config, model_vars)
-
     parallel = "parallel" in config["general"] and config["general"]["parallel"]
     if parallel:
         n_devices = device_count()
@@ -72,6 +58,20 @@ def main(
             config["hyperparams"]["batch_size"] > n_devices
             and config["hyperparams"]["batch_size"] > n_devices
         ), "Batch size must be larger than number of devices"
+        if config["hyperparams"]["batch_size"] % n_devices != 0:
+            config["hyperparams"]["batch_size"] -= config["hyperparams"]["batch_size"] % n_devices 
+    if config["general"]["log_wandb"]:
+        run = wandb.init(
+            project=config["project"],
+            config=config,
+            settings=wandb.Settings(start_method="thread"),
+            reinit=True,
+        )
+    train_loader, test_loader = make_loader_from_config(config)
+    model: Callable = make_model_from_config(config)
+    model_vars = model.vars()
+
+    opt = make_optim_from_config(config, model_vars)
     if parallel:
         predict_op = objax.Parallel(
             lambda x: objax.functional.softmax(
