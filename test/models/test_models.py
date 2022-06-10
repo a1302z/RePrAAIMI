@@ -15,12 +15,14 @@ import pytest
 sys.path.insert(0, str(Path.cwd()))
 
 from dptraining.models import (
+    SUPPORTED_POOLING,
     make_model_from_config,
     ResNet9,
     Cifar10ConvNet,
     SUPPORTED_ACTIVATION,
     SUPPORTED_MODELS,
     SUPPORTED_NORMALIZATION,
+    SUPPORTED_COMPLEX_POOLING,
 )
 
 
@@ -89,6 +91,7 @@ def test_make_resnet9():
                 "normalization": "gn",
                 "in_channels": 12,
                 "num_classes": 256,
+                "pooling": "maxpool",
             }
         }
     )
@@ -98,8 +101,11 @@ def test_make_resnet9():
 
 def test_all_options():
     fake_data = np.random.randn(6, 3, 39, 39)
-    for model, act, norm in product(
-        SUPPORTED_MODELS, SUPPORTED_ACTIVATION, SUPPORTED_NORMALIZATION
+    for model, act, norm, pool in product(
+        SUPPORTED_MODELS,
+        SUPPORTED_ACTIVATION,
+        SUPPORTED_NORMALIZATION,
+        SUPPORTED_POOLING,
     ):
         config = {
             "model": {
@@ -108,6 +114,7 @@ def test_all_options():
                 "num_classes": 5,
                 "activation": act,
                 "normalization": norm,
+                "pooling": pool,
             }
         }
         if model == "cifar10model":

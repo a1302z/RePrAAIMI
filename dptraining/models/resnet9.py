@@ -4,11 +4,7 @@ from objax.util import local_kwargs
 from functools import partial
 from objax.constants import ConvPadding
 
-from dptraining.models.complex import ComplexGroupNorm2D
-
-
-def is_groupnorm(instance):
-    return issubclass(instance, (nn.GroupNorm2D, ComplexGroupNorm2D))
+from dptraining.models.layers import AdaptivePooling, is_groupnorm, Flatten
 
 
 def conv_norm_act(  # pylint:disable=too-many-arguments
@@ -136,11 +132,12 @@ class ResNet9(Module):  # pylint:disable=too-many-instance-attributes
             ]
         )
 
-        self.pooling = lambda x: x.mean((2, 3))
+        # self.pooling = lambda x: x.mean((2, 3))
+        self.pooling = AdaptivePooling(functional.average_pool_2d, 2)
         # self.MP = partial(functional.average_pool_2d, ((2, 2)))
         # self.FlatFeats = lambda x: x.reshape(x.shape[0], -1)
-        # self.FlatFeats = nn.Flatten()
-        self.classifier = linear_cls(256, num_classes)
+        self.flatten = Flatten()
+        self.classifier = linear_cls(1024, num_classes)
 
         if scale_norm:
             self.scale_norm_1 = (
@@ -169,7 +166,7 @@ class ResNet9(Module):  # pylint:disable=too-many-instance-attributes
         out = self.res2(out, *args, **local_kwargs(kwargs, self.res2)) + out
         out = self.scale_norm_2(out, *args, **local_kwargs(kwargs, self.scale_norm_2))
         out = self.pooling(out, *args, **local_kwargs(kwargs, self.pooling))
-        # out = self.FlatFeats(out)
+        out = self.flatten(out)
         out = self.classifier(out, *args, **local_kwargs(kwargs, self.classifier))
         out = self.out_func(out)
         return out
