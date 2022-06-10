@@ -6,6 +6,7 @@ from objax.zoo import resnet_v2
 from objax import nn, functional
 from dptraining.models.cifar10models import Cifar10ConvNet
 from dptraining.models.resnet9 import ResNet9
+from dptraining.models.smoothnet import get_smoothnet
 from dptraining.models.activations import mish
 from dptraining.models.complex.activations import (
     IGaussian,
@@ -26,11 +27,12 @@ from dptraining.models.complex.layers import (
 from dptraining.models.complex.pooling import ConjugateMaxPool2D, SeparableMaxPool2D
 
 
-SUPPORTED_MODELS = ("cifar10model", "resnet18", "resnet9")
+SUPPORTED_MODELS = ("cifar10model", "resnet18", "resnet9", "smoothnet")
 SUPPORTED_NORMALIZATION = ("bn", "gn")
 SUPPORTED_ACTIVATION = ("relu", "selu", "leakyrelu", "mish")
+SUPPORTED_POOLING = ("maxpool", "avgpool")
 
-SUPPORTED_COMPLEX_MODELS = ("resnet9",)
+SUPPORTED_COMPLEX_MODELS = ("resnet9", "smoothnet")
 SUPPORTED_COMPLEX_CONV = ("conv", "convws")
 SUPPORTED_COMPLEX_NORMALIZATION = ("gn", "gnw")
 SUPPORTED_COMPLEX_ACTIVATION = ("mish", "sepmish", "conjmish", "igaussian", "cardioid")
@@ -111,14 +113,27 @@ def make_complex_activation_from_config(config: dict) -> Callable:
             )
 
 
-def make_complex_pooling_from_config(config: dict) -> Callable:
+def make_pooling_from_config(config: dict) -> Callable:
+    match config["model"]["pooling"]:
+        case "maxpool":
+            return functional.max_pool_2d
+        case "avgpool":
+            return functional.average_pool_2d
+        case _ as fail:
+            raise ValueError(
+                f"Unsupported pooling layer '{fail}'. "
+                f"Legal options are: {SUPPORTED_COMPLEX_POOLING}"
+            )
+
+
+def make_complex_pooling_from_config(config: dict, size, **kwargs) -> Callable:
     match config["model"]["pooling"]:
         case "conjmaxpool":
-            return ConjugateMaxPool2D(2)
+            return ConjugateMaxPool2D(size=size, **kwargs)
         case "sepmaxpool":
-            return SeparableMaxPool2D(2)
+            return SeparableMaxPool2D(size=size, **kwargs)
         case "avgpool":
-            return partial(functional.average_pool_2d, size=2)
+            return partial(functional.average_pool_2d, size=size, **kwargs)
         case _ as fail:
             raise ValueError(
                 f"Unsupported pooling layer '{fail}'. "
@@ -147,9 +162,20 @@ def make_normal_model_from_config(config: dict) -> Callable:
                 config["model"]["num_classes"],
                 norm_cls=make_normalization_from_config(config),
                 act_func=make_activation_from_config(config),
+                pool_func=partial(make_pooling_from_config(config), size=2),
                 scale_norm=config["model"]["scale_norm"]
                 if "scale_norm" in config["model"]
                 else False,
+            )
+        case "smoothnet":
+            return get_smoothnet(
+                in_channels=config["model"]["in_channels"],
+                num_classes=config["model"]["num_classes"],
+                norm_cls=make_normalization_from_config(config),
+                act_func=make_activation_from_config(config),
+                pool_func=partial(
+                    make_pooling_from_config(config), size=3, strides=1, padding=1
+                ),
             )
         case _ as fail:
             raise ValueError(
@@ -166,12 +192,31 @@ def make_complex_model_from_config(config: dict) -> Callable:
                 conv_cls=make_complex_conv_from_config(config),
                 norm_cls=make_complex_normalization_from_config(config),
                 act_func=make_complex_activation_from_config(config),
-                pool_func=make_complex_pooling_from_config(config),
+                pool_func=make_complex_pooling_from_config(
+                    config,
+                    size=2,
+                ),
                 linear_cls=ComplexLinear,
                 out_func=jnp.abs,
                 scale_norm=config["model"]["scale_norm"]
                 if "scale_norm" in config["model"]
                 else False,
+            )
+        case "smoothnet":
+            return get_smoothnet(
+                in_channels=config["model"]["in_channels"],
+                num_classes=config["model"]["num_classes"],
+                conv_cls=make_complex_conv_from_config(config),
+                norm_cls=make_complex_normalization_from_config(config),
+                act_func=make_complex_activation_from_config(config),
+                pool_func=make_complex_pooling_from_config(
+                    config,
+                    size=3,
+                    strides=1,
+                    padding=1,
+                ),
+                linear_cls=ComplexLinear,
+                out_func=jnp.abs,
             )
         case _ as fail:
             raise ValueError(

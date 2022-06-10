@@ -116,7 +116,7 @@ def main(
         test_augmenter = Transformation.from_dict_list(config["test_augmentations"])
         test_aug = test_augmenter.create_vectorized_transform()
     else:
-        test_aug = lambda x: x  # pylint:disable=unnecessary-lambda-assignment
+        test_aug = lambda x: x
     scheduler = make_scheduler_from_config(config)
     stopper = make_stopper_from_config(config)
 

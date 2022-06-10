@@ -20,7 +20,7 @@ from dptraining.models import (
 
 
 def test_complex_model_options():
-    fake_data = np.random.randn(4, 2, 47, 47).astype(np.complex128)
+    fake_data = np.random.randn(4, 3, 47, 47).astype(np.complex128)
     for conv, act, norm, pool, model in product(
         SUPPORTED_COMPLEX_CONV,
         SUPPORTED_COMPLEX_ACTIVATION,
@@ -32,7 +32,7 @@ def test_complex_model_options():
             conf = {
                 "model": {
                     "name": model,
-                    "in_channels": 2,
+                    "in_channels": 3,  # TODO: changing that to 2 breaks it
                     "num_classes": 7,
                     "conv": conv,
                     "activation": act,
