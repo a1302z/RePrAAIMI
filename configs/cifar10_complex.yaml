@@ -6,8 +6,8 @@ dataset:
   name: CIFAR10
   root: ./data
 loader: 
-  num_workers: 32
-  prefetch_factor: 16
+  num_workers: 8
+  prefetch_factor: 10
 augmentations:
   make_complex_both:
 test_augmentations:
@@ -17,9 +17,9 @@ model:
   name: resnet9
   in_channels: 3
   num_classes: 10
-  conv: conv
-  activation: cardioid
-  normalization: gn
+  conv: convws
+  activation: conjmish
+  normalization: gnw
   pooling: avgpool
   scale_norm: True
 optim:
