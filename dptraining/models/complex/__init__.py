@@ -7,7 +7,8 @@ from dptraining.models.complex.activations import (
     Cardioid,
 )
 from dptraining.models.complex.normalization import (
-    ComplexGroupNorm2D,
+    ComplexGroupNorm2DWhitening,
+    ComplexGroupNormWhitening,
 )
 from dptraining.models.complex.layers import (
     ComplexConv2D,

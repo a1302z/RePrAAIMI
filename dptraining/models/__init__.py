@@ -33,7 +33,7 @@ SUPPORTED_POOLING = ("maxpool", "avgpool")
 
 SUPPORTED_COMPLEX_MODELS = ("resnet9", "smoothnet")
 SUPPORTED_COMPLEX_CONV = ("conv", "convws")
-SUPPORTED_COMPLEX_NORMALIZATION = ("gn", "gnw")
+SUPPORTED_COMPLEX_NORMALIZATION = ("gnw",)
 SUPPORTED_COMPLEX_ACTIVATION = ("mish", "sepmish", "conjmish", "igaussian", "cardioid")
 SUPPORTED_COMPLEX_POOLING = ("conjmaxpool", "sepmaxpool", "avgpool")
 
