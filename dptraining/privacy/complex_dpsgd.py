@@ -28,10 +28,6 @@ class ComplexPrivateGradValues(PrivateGradValues):
                 random.normal(
                     gx.shape, stddev=stddev * one_by_sqrt_two, generator=self.keygen
                 )
-                + 1j
-                * random.normal(
-                    gx.shape, stddev=stddev * one_by_sqrt_two, generator=self.keygen
-                )
             )
             for gx in g
         ]
