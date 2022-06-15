@@ -6,8 +6,8 @@ dataset:
   name: CIFAR10
   root: ./data
 loader: 
-  num_workers: 8
-  prefetch_factor: 10
+  num_workers: 32
+  prefetch_factor: 16
 augmentations:
   make_complex_both:
 test_augmentations:
@@ -26,8 +26,8 @@ optim:
   name: nadam
 hyperparams:
   epochs: 50
-  batch_size: 1800
-  batch_size_test: 1024
+  batch_size: 256
+  batch_size_test: 256
   lr: 2e-3
   momentum: 0.9
 scheduler:
