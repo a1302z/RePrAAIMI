@@ -16,7 +16,6 @@ from dptraining.models.complex.activations import (
     Cardioid,
 )
 from dptraining.models.complex.normalization import (
-    ComplexGroupNorm2D,
     ComplexGroupNorm2DWhitening,
 )  # pylint:disable=duplicate-code
 from dptraining.models.complex.layers import (
@@ -54,8 +53,6 @@ def make_normalization_from_config(config: dict) -> Callable:
 
 def make_complex_normalization_from_config(config: dict) -> Callable:
     match config["model"]["normalization"]:
-        case "gn":
-            return ComplexGroupNorm2D
         case "gnw":
             return ComplexGroupNorm2DWhitening
         case _ as fail:
