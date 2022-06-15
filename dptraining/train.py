@@ -22,7 +22,8 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 
 @hydra.main(
-    version_base=None, config_path=Path.cwd() / "configs",
+    version_base=None,
+    config_path=Path.cwd() / "configs",
 )
 def main(
     config,
@@ -51,6 +52,7 @@ def main(
         train,
         test,
     )
+
     parallel = "parallel" in config["general"] and config["general"]["parallel"]
     if parallel:
         n_devices = device_count()
@@ -59,7 +61,9 @@ def main(
             and config["hyperparams"]["batch_size"] > n_devices
         ), "Batch size must be larger than number of devices"
         if config["hyperparams"]["batch_size"] % n_devices != 0:
-            config["hyperparams"]["batch_size"] -= config["hyperparams"]["batch_size"] % n_devices 
+            config["hyperparams"]["batch_size"] -= (
+                config["hyperparams"]["batch_size"] % n_devices
+            )
     if config["general"]["log_wandb"]:
         run = wandb.init(
             project=config["project"],
@@ -116,7 +120,7 @@ def main(
         test_augmenter = Transformation.from_dict_list(config["test_augmentations"])
         test_aug = test_augmenter.create_vectorized_transform()
     else:
-        test_aug = lambda x: x
+        test_aug = lambda x: x  # pylint: disable=unnecessary-lambda-assignment
     scheduler = make_scheduler_from_config(config)
     stopper = make_stopper_from_config(config)
 
