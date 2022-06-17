@@ -25,7 +25,7 @@ model:
 optim:
   name: nadam
 hyperparams:
-  epochs: 50
+  epochs: 100
   batch_size: 256
   batch_size_test: 256
   lr: 2e-3
@@ -38,11 +38,11 @@ scheduler:
   factor: 0.9
 earlystopping:
   mode: maximize
-  patience: 10
+  patience: 100
   min_delta: 0.01
 DP:
   disable_dp: False
-  epsilon: 7.5
-  max_per_sample_grad_norm: 2.0
+  epsilon: 8.0
+  max_per_sample_grad_norm: 0.5
   delta: 1e-5
   norm_acc: False
