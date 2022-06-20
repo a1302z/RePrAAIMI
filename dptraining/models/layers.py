@@ -3,11 +3,13 @@ from typing import Callable, Union, Tuple, Optional
 from objax import Module, nn
 from objax.typing import JaxArray
 from objax.functional import flatten
-from dptraining.models.complex import ComplexGroupNorm2D
+from dptraining.models.complex import (
+    ComplexGroupNormWhitening,
+)
 
 
 def is_groupnorm(instance):
-    return issubclass(instance, (nn.GroupNorm2D, ComplexGroupNorm2D))
+    return issubclass(instance, (nn.GroupNorm2D, ComplexGroupNormWhitening))
 
 
 class Flatten(Module):
