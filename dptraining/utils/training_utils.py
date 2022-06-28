@@ -33,7 +33,11 @@ def create_train_op(  # pylint:disable=too-many-arguments
         return loss
 
     if parallel:
-        train_op = objax.Parallel(train_op, reduce=np.mean, vc=train_vars,)
+        train_op = objax.Parallel(
+            train_op,
+            reduce=np.mean,
+            vc=train_vars,
+        )
     else:
 
         # @objax.Function.with_vars(train_vars)
@@ -77,8 +81,15 @@ def create_loss_gradient(config, model, model_vars, loss_fn, sigma):
     return loss_gv
 
 
-def train(  # pylint:disable=too-many-arguments
-    config, train_loader, train_op, learning_rate, train_vars, parallel
+def train(  # pylint:disable=too-many-arguments,duplicate-code
+    config,
+    train_loader,
+    train_op,
+    learning_rate,
+    train_vars,
+    parallel,
+    model_vars=None,
+    ema=None,
 ):
     ctx_mngr = (train_vars).replicate() if parallel else contextlib.suppress()
     with ctx_mngr:
@@ -95,6 +106,9 @@ def train(  # pylint:disable=too-many-arguments
             leave=False,
         ):
             train_loss = train_op(img, label, np.array(learning_rate))
+            if ema is not None:
+                ema.update()
+                ema.copy_to(model_vars)
             if config["general"][
                 "log_wandb"
             ]:  # pylint:disable=loop-invariant-statement

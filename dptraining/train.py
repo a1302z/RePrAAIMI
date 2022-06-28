@@ -1,14 +1,14 @@
 import os
+import sys
+from pathlib import Path
+from typing import Callable, Iterable, Optional
 
-from typing import Callable, Iterable
 import hydra
-from omegaconf import OmegaConf
+import numpy as np
 import omegaconf
 import wandb
-from pathlib import Path
-import numpy as np
+from omegaconf import OmegaConf
 from tqdm import tqdm
-import sys
 
 sys.path.insert(0, str(Path.cwd()))
 
@@ -22,7 +22,8 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 
 @hydra.main(
-    version_base=None, config_path=Path.cwd() / "configs",
+    version_base=None,
+    config_path=Path.cwd() / "configs",
 )
 def main(
     config,
@@ -35,22 +36,25 @@ def main(
     # This is absolutely disgusting but necessary to disable gpu training
     import objax
     from jax import device_count
+
     from dptraining.datasets import make_loader_from_config
     from dptraining.models import make_model_from_config
+    from dptraining.optim import make_optim_from_config
+    from dptraining.privacy import EpsCalculator
     from dptraining.utils import (
+        ExponentialMovingAverage,
         make_loss_from_config,
         make_scheduler_from_config,
         make_stopper_from_config,
     )
-    from dptraining.optim import make_optim_from_config
     from dptraining.utils.augment import Transformation
-    from dptraining.privacy import EpsCalculator
     from dptraining.utils.training_utils import (
-        create_train_op,
         create_loss_gradient,
-        train,
+        create_train_op,
         test,
+        train,
     )
+
     parallel = "parallel" in config["general"] and config["general"]["parallel"]
     if parallel:
         n_devices = device_count()
@@ -59,7 +63,9 @@ def main(
             and config["hyperparams"]["batch_size"] > n_devices
         ), "Batch size must be larger than number of devices"
         if config["hyperparams"]["batch_size"] % n_devices != 0:
-            config["hyperparams"]["batch_size"] -= config["hyperparams"]["batch_size"] % n_devices 
+            config["hyperparams"]["batch_size"] -= (
+                config["hyperparams"]["batch_size"] % n_devices
+            )
     if config["general"]["log_wandb"]:
         run = wandb.init(
             project=config["project"],
@@ -86,6 +92,15 @@ def main(
                 model(x, training=False)  # pylint:disable=not-callable
             ),
             model_vars,
+        )
+    ema: Optional[ExponentialMovingAverage] = None
+    if "ema" in config and config["ema"]["use_ema"]:
+        ema = ExponentialMovingAverage(
+            model_vars,
+            config["ema"]["decay"],
+            config["ema"]["use_num_updates"]
+            if "use_num_updates" in config["ema"]
+            else True,
         )
 
     sampling_rate: float = config["hyperparams"]["batch_size"] / len(
@@ -143,7 +158,14 @@ def main(
         epoch_iter = range(config["hyperparams"]["epochs"])
     for epoch, learning_rate in zip(epoch_iter, scheduler):
         cur_epoch_time = train(
-            config, train_loader, train_op, learning_rate, train_vars, parallel
+            config,
+            train_loader,
+            train_op,
+            learning_rate,
+            train_vars,
+            parallel,
+            model_vars,
+            ema,
         )
         if config["general"]["log_wandb"]:  # pylint:disable=loop-invariant-statement
             wandb.log({"epoch": epoch, "lr": learning_rate})
