@@ -17,9 +17,9 @@ model:
   name: smoothnet
   in_channels: 3
   num_classes: 10
-  conv: conv
-  activation: cardioid
-  normalization: gn
+  conv: convws
+  activation: conjmish
+  normalization: gnw
   pooling: avgpool
   # scale_norm: True
 optim:
@@ -38,14 +38,14 @@ scheduler:
   normalize_lr: False
   patience: 5
   min_delta: 0.01
-  factor: 0.75
-# earlystopping:
-#   mode: maximize
-#   patience: 10
-#   min_delta: 0.01
+  factor: 0.9
+earlystopping:
+  mode: maximize
+  patience: 100
+  min_delta: 0.01
 DP:
   disable_dp: False
-  epsilon: 7.5
+  epsilon: 8.0
   max_per_sample_grad_norm: 0.5
   delta: 1e-5
   norm_acc: False
