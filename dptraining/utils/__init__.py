@@ -6,6 +6,7 @@ from dptraining.utils.scheduler import (
     ReduceOnPlateau,
 )
 from dptraining.utils.earlystopping import EarlyStopping
+from dptraining.utils.ema import ExponentialMovingAverage
 
 SUPPORTED_SCHEDULES = ("cosine", "const", "reduceonplateau")
 

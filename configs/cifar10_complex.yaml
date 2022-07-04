@@ -1,12 +1,12 @@
 project: cifar-DP-complex
 general:
   log_wandb: False
-  parallel: True
+  parallel: False
 dataset: 
   name: CIFAR10
   root: ./data
 loader: 
-  num_workers: 32
+  num_workers: 16
   prefetch_factor: 16
 augmentations:
   make_complex_both:
@@ -14,22 +14,25 @@ test_augmentations:
   make_complex_both:
 model:
   complex: True
-  name: resnet9
+  name: smoothnet
   in_channels: 3
   num_classes: 10
   conv: convws
   activation: conjmish
   normalization: gnw
   pooling: avgpool
-  scale_norm: True
+  # scale_norm: True
 optim:
   name: nadam
+ema:
+  use_ema: True
+  decay: 0.995
 hyperparams:
-  epochs: 100
-  batch_size: 256
-  batch_size_test: 256
+  epochs: 50
+  batch_size: 512
+  batch_size_test: 512
   lr: 2e-3
-  momentum: 0.9
+  # momentum: 0.9
 scheduler:
   type: reduceonplateau
   normalize_lr: False

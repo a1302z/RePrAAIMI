@@ -80,7 +80,10 @@ class ComplexGroupNormWhitening(Module):
         return x
 
     def __repr__(self):
-        args = f"nin={self.nin}, rank={len(self.gamma.shape)}, groups={self.groups}, eps={self.eps}"
+        args = (
+            f"nin={self.nin}, rank={len(self.gamma_r.shape)}"
+            f", groups={self.groups}, eps={self.eps}"
+        )
         return f"{class_name(self)}({args})"
 
 
