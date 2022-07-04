@@ -22,8 +22,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 
 @hydra.main(
-    version_base=None,
-    config_path=Path.cwd() / "configs",
+    version_base=None, config_path=Path.cwd() / "configs",
 )
 def main(
     config,

@@ -110,7 +110,10 @@ class ExponentialMovingAverage:
             decay = min(decay, (1 + self.num_updates) / (10 + self.num_updates))
         one_minus_decay = 1.0 - decay
         for k in parameters.keys():
-            tmp = self.shadow_params[k] - parameters[k]
+            if len(parameters[k].shape) == len(self.shadow_params[k].shape) + 1:
+                tmp = self.shadow_params[k] - np.mean(parameters[k], axis=0)
+            else:
+                tmp = self.shadow_params[k] - parameters[k]
             # tmp will be a new tensor so we can do in-place
             tmp *= one_minus_decay
             self.shadow_params[k] -= tmp
@@ -128,7 +131,18 @@ class ExponentialMovingAverage:
         parameters = self._get_parameters(parameters)
         for k in parameters.keys():
             # param.data.copy_(s_param.data)
-            parameters[k].assign(jnp.array(self.shadow_params[k]))
+            if len(parameters[k].shape) == len(self.shadow_params[k].shape) + 1:
+                parameters[k].assign(
+                    jnp.array(
+                        np.repeat(
+                            self.shadow_params[k][np.newaxis, :],
+                            parameters[k].shape[0],
+                            axis=0,
+                        )
+                    )
+                )
+            else:
+                parameters[k].assign(jnp.array(self.shadow_params[k]))
 
     def store(self, parameters: Optional[Dict[str, TrainVar]] = None) -> None:
         """

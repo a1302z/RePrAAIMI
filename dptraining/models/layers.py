@@ -3,9 +3,7 @@ from typing import Callable, Union, Tuple, Optional
 from objax import Module, nn
 from objax.typing import JaxArray
 from objax.functional import flatten
-from dptraining.models.complex import (
-    ComplexGroupNormWhitening,
-)
+from dptraining.models.complex import ComplexGroupNormWhitening
 
 
 def is_groupnorm(instance):

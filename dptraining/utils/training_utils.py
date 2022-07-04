@@ -33,11 +33,7 @@ def create_train_op(  # pylint:disable=too-many-arguments
         return loss
 
     if parallel:
-        train_op = objax.Parallel(
-            train_op,
-            reduce=np.mean,
-            vc=train_vars,
-        )
+        train_op = objax.Parallel(train_op, reduce=np.mean, vc=train_vars,)
     else:
 
         # @objax.Function.with_vars(train_vars)
@@ -91,30 +87,28 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
     model_vars=None,
     ema=None,
 ):
-    ctx_mngr = (train_vars).replicate() if parallel else contextlib.suppress()
-    with ctx_mngr:
-        start_time = time.time()
-        max_batches = (
-            config["hyperparams"]["overfit"]
-            if "overfit" in config["hyperparams"]
-            else len(train_loader) + 1
-        )
-        for i, (img, label) in tqdm(
-            enumerate(train_loader),  # pylint:disable=loop-invariant-statement
-            total=len(train_loader),
-            desc="Training",
-            leave=False,
-        ):
+    start_time = time.time()
+    max_batches = (
+        config["hyperparams"]["overfit"]
+        if "overfit" in config["hyperparams"]
+        else len(train_loader) + 1
+    )
+    for i, (img, label) in tqdm(
+        enumerate(train_loader),  # pylint:disable=loop-invariant-statement
+        total=len(train_loader),
+        desc="Training",
+        leave=False,
+    ):
+        with (train_vars).replicate() if parallel else contextlib.suppress():
             train_loss = train_op(img, label, np.array(learning_rate))
-            if ema is not None:
+        if ema is not None:
+            with model_vars.replicate() if parallel else contextlib.suppress():
                 ema.update()
                 ema.copy_to(model_vars)
-            if config["general"][
-                "log_wandb"
-            ]:  # pylint:disable=loop-invariant-statement
-                wandb.log({"train_loss": train_loss[0].item()}, commit=False)
-            if i > max_batches:
-                break
+        if config["general"]["log_wandb"]:  # pylint:disable=loop-invariant-statement
+            wandb.log({"train_loss": train_loss[0].item()}, commit=False)
+        if i > max_batches:
+            break
     return time.time() - start_time
 
 
