@@ -1,0 +1,30 @@
+program: dptraining/train.py
+method: bayes
+metric: 
+  name: val.accuracy
+  goal: maximize
+parameters: 
+  hyperparams.lr: 
+    min: 5e-4
+    max: 5e-3
+    distribution: log_uniform_values
+  hyperparams.epochs:
+    min: 20
+    max: 100
+    distribution: int_uniform
+  DP.max_per_sample_grad_norm:
+    min: 0.5
+    max: 5.0
+    distribution: uniform
+  hyperparams.batch_size:
+    min: 512
+    max: 1800
+    distribution: int_uniform
+command:
+  - ${env}
+  - python
+  - ${program}
+  - -cn 
+  - cifar10_complex.yaml
+  - general.log_wandb=True
+  - ${args_no_hyphens}

@@ -44,8 +44,4 @@ earlystopping:
   patience: 100
   min_delta: 0.01
 DP:
-  disable_dp: False
-  epsilon: 8.0
-  max_per_sample_grad_norm: 0.5
-  delta: 1e-5
-  norm_acc: False
+  disable_dp: True

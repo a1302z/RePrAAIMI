@@ -102,23 +102,26 @@ def main(
             else True,
         )
 
-    sampling_rate: float = config["hyperparams"]["batch_size"] / len(
-        train_loader.dataset
-    )
-    delta = config["DP"]["delta"]
-    eps_calc = EpsCalculator(config, train_loader)
-    sigma = eps_calc.calc_noise_for_eps()
-    final_epsilon = objax.privacy.dpsgd.analyze_dp(
-        q=sampling_rate,
-        noise_multiplier=sigma,
-        steps=len(train_loader) * config["hyperparams"]["epochs"],
-        delta=delta,
-    )
+    if config["DP"]["disable_dp"]:
+        sampling_rate, delta, sigma, final_epsilon = 0,0,0,0
+    else:
+        sampling_rate: float = config["hyperparams"]["batch_size"] / len(
+            train_loader.dataset
+        )
+        delta = config["DP"]["delta"]
+        eps_calc = EpsCalculator(config, train_loader)
+        sigma = eps_calc.calc_noise_for_eps()
+        final_epsilon = objax.privacy.dpsgd.analyze_dp(
+            q=sampling_rate,
+            noise_multiplier=sigma,
+            steps=len(train_loader) * config["hyperparams"]["epochs"],
+            delta=delta,
+        )
 
-    print(
-        f"This training will lead to a final epsilon of {final_epsilon:.2f}"
-        f" at a noise multiplier of {sigma:.2f} and a delta of {delta:2f}"
-    )
+        print(
+            f"This training will lead to a final epsilon of {final_epsilon:.2f}"
+            f" at a noise multiplier of {sigma:.2f} and a delta of {delta:2f}"
+        )
 
     loss_class = make_loss_from_config(config)
     loss_fn = loss_class.create_loss_fn(model_vars, model)

@@ -7,6 +7,8 @@ import numpy as np
 import objax
 import sys
 
+
+from jax import numpy as jn
 from pathlib import Path
 from sklearn import metrics
 from tqdm import tqdm
@@ -30,7 +32,7 @@ def create_train_op(  # pylint:disable=too-many-arguments
             opt(learning_rate, [g.conj() for g in grads])
         else:
             opt(learning_rate, grads)
-        return loss
+        return loss, grads
 
     if parallel:
         train_op = objax.Parallel(train_op, reduce=np.mean, vc=train_vars,)
@@ -100,13 +102,24 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
         leave=False,
     ):
         with (train_vars).replicate() if parallel else contextlib.suppress():
-            train_loss = train_op(img, label, np.array(learning_rate))
+            train_loss, grads = train_op(img, label, np.array(learning_rate))
         if ema is not None:
             with model_vars.replicate() if parallel else contextlib.suppress():
                 ema.update()
                 ema.copy_to(model_vars)
         if config["general"]["log_wandb"]:  # pylint:disable=loop-invariant-statement
-            wandb.log({"train_loss": train_loss[0].item()}, commit=False)
+            wandb.log(
+                {
+                    "train_loss": train_loss[0].item(),
+                    "total_grad_norm": jn.linalg.norm(
+                        [jn.linalg.norm(g) for g in grads]
+                    ).item(),
+                },
+                commit=False,
+            )
+            if ema is not None:
+                wandb.log({k:(jn.abs(v) if jn.iscomplexobj(v) else v) for k, v in ema.shadow_params.items()}, commit=False)
+
         if i > max_batches:
             break
     return time.time() - start_time
