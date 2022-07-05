@@ -35,10 +35,10 @@ def create_train_op(  # pylint:disable=too-many-arguments
         @objax.Function.with_vars(train_vars)
         def calc_grads(image_batch, label_batch):
             image_batch = augment_op(image_batch)
-            batch, stddev, clipped_grad, v = loss_gv.setup_grad_step(
+            batch, stddev, clipped_grad, loss_value = loss_gv.setup_grad_step(
                 image_batch, label_batch
             )
-            loss_gv.accumulate_grad(clipped_grad, batch, v)
+            loss_gv.accumulate_grad(clipped_grad, batch, loss_value)
             return stddev
 
         @objax.Function.with_vars(train_vars)
@@ -67,7 +67,7 @@ def create_train_op(  # pylint:disable=too-many-arguments
             apply_grads = objax.Jit(apply_grads)
 
         # @objax.Function.with_vars(train_vars)
-        def train_op(
+        def train_op(  # pylint:disable=inconsistent-return-statements
             image_batch, label_batch, learning_rate: float, apply_norm_acc: bool
         ):
             stddev = calc_grads(image_batch, label_batch)
@@ -78,7 +78,10 @@ def create_train_op(  # pylint:disable=too-many-arguments
 
         @objax.Function.with_vars(train_vars)
         def train_op(
-            image_batch, label_batch, learning_rate, apply_norm_acc: bool = True
+            image_batch,
+            label_batch,
+            learning_rate,
+            apply_norm_acc: bool = True,  # pylint:disable=unused-argument
         ):
             image_batch = augment_op(image_batch)
             grads, loss = loss_gv(image_batch, label_batch)
@@ -158,7 +161,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
     ):
         with (train_vars).replicate() if parallel else contextlib.suppress():
             with checking_leaks():
-                train_loss, grads = train_op(
+                train_result = train_op(
                     img,
                     label,
                     np.array(learning_rate),
@@ -166,11 +169,15 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                     if isinstance(loss_gv, PrivateGradValuesAccumulation)
                     else True,
                 )
-        if ema is not None:
+                if train_result is not None:
+                    train_loss, grads = train_result
+        if ema is not None and train_result is not None:
             with model_vars.replicate() if parallel else contextlib.suppress():
                 ema.update()
                 ema.copy_to(model_vars)
-        if config["general"]["log_wandb"]:  # pylint:disable=loop-invariant-statement
+        if (
+            config["general"]["log_wandb"] and train_result is not None
+        ):  # pylint:disable=loop-invariant-statement
             wandb.log(
                 {
                     "train_loss": train_loss[0].item(),

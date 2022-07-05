@@ -9,31 +9,11 @@ from objax import random, ModuleList, StateVar
 from objax.variable import VarCollection
 
 
-class GradAccumulatorSimple:
-    """This is just as training with a smaller batch size but with extra steps"""
-
-    def __init__(self, train_vars, update_frequency=1) -> None:
-        self.grad_container = [jnp.zeros_like(tv) for tv in train_vars]
-        self.counter = 0
-        self.update_frequency = update_frequency
-
-    def step(self, opt, grads, args, force_apply=True, **kwargs):
-        assert len(self.grad_container) == len(grads)
-        self.counter += 1
-        for i in range(len(self.grad_container)):
-            self.grad_container[i] += grads[i]
-        if self.counter % self.update_frequency == 0 or force_apply:
-            opt(grads=self.grad_container, *args, **kwargs)
-            self.counter = 0
-            for i in range(len(self.grad_container)):
-                self.grad_container[i] = jnp.zeros_like(self.grad_container[i])
-
-
 class PrivateGradValuesAccumulation(PrivateGradValues):
     def __init__(
         self,
-        f: Callable,
-        vc: VarCollection,
+        loss_fn: Callable,
+        variables: VarCollection,
         noise_multiplier: float,
         l2_norm_clip: float,
         microbatch: int,
@@ -44,8 +24,8 @@ class PrivateGradValuesAccumulation(PrivateGradValues):
         noise_scaling_factor: float = 1.0,
     ):
         super().__init__(
-            f,
-            vc,
+            loss_fn,
+            variables,
             noise_multiplier,
             l2_norm_clip,
             microbatch,
@@ -58,7 +38,9 @@ class PrivateGradValuesAccumulation(PrivateGradValues):
         self.counter = StateVar(jnp.array(0, dtype=jnp.int32))
         self.num_elements = StateVar(jnp.array(0, dtype=jnp.int32))
         self.accumulated_loss = StateVar(jnp.array(0.0))
-        self.accumulated_grads = ModuleList(StateVar(jnp.zeros_like(tv)) for tv in vc)
+        self.accumulated_grads = ModuleList(
+            StateVar(jnp.zeros_like(tv)) for tv in variables
+        )
 
     def _calc_std(self, num_microbatches):
         return (
@@ -78,19 +60,22 @@ class PrivateGradValuesAccumulation(PrivateGradValues):
         assert batch % self.microbatch == 0
         num_microbatches = batch // self.microbatch
         stddev = self._calc_std(num_microbatches)
-        g, v = self.clipped_grad(*[self.reshape_microbatch(x) for x in args])
-        return batch, stddev, g, v
+        clipped_grad, loss_value = self.clipped_grad(
+            *[self.reshape_microbatch(x) for x in args]
+        )
+        return batch, stddev, clipped_grad, loss_value
 
     def no_acc_step(self, clipped_grad, stddev):
         """To be called after setup_grad_step"""
         noised_clipped_grad = self._add_noise(clipped_grad, stddev)
         return noised_clipped_grad
 
-    def accumulate_grad(self, clipped_grad, batch, v):
-        for i in range(len(self.accumulated_grads)):
-            self.accumulated_grads[i].value += clipped_grad[i] * batch
-        assert len(v) == 1, "We assumed only one loss term"
-        self.accumulated_loss.value += v[0]
+    def accumulate_grad(self, clipped_grads, batch, loss_values):
+        assert len(clipped_grads) == len(self.accumulated_grads)
+        for i, clipped_grad in enumerate(clipped_grads):
+            self.accumulated_grads[i].value += clipped_grad * batch
+        assert len(loss_values) == 1, "We assumed only one loss term"
+        self.accumulated_loss.value += loss_values[0]
         self.num_elements.value += batch
 
     def apply_accumulated_grads(self, stddev):
@@ -99,14 +84,17 @@ class PrivateGradValuesAccumulation(PrivateGradValues):
             stddev,
             grad_scale_factor=1.0 / self.num_elements.value,
         )
-        v = [self.accumulated_loss.value]
-        # reset all variables
-        for i in range(len(self.accumulated_grads)):
-            self.accumulated_grads[i].value = jnp.zeros_like(self.accumulated_grads[i])
+        # to be conform with standard function
+        loss_value = (self.accumulated_loss.value,)
+        self._reset_values()
+        return noised_clipped_grad, loss_value
+
+    def _reset_values(self):
+        for i, accumulated_grad in enumerate(self.accumulated_grads):
+            self.accumulated_grads[i].value = jnp.zeros_like(accumulated_grad)
         self.accumulated_loss.value = jnp.array(0.0)
         self.counter.value = jnp.array(0).astype(jnp.int32)
         self.num_elements.value = jnp.array(0).astype(jnp.int32)
-        return noised_clipped_grad, v
 
     def is_gradient_accumulated(self) -> bool:
         return self.counter.value.item() % self.gradient_accumulation_steps == 0
@@ -118,11 +106,11 @@ class PrivateGradValuesAccumulation(PrivateGradValues):
 
         Returns:
             A tuple (gradients, value of f)."""
-        batch, stddev, clipped_grad, v = self.setup_grad_step(*args)
+        batch, stddev, clipped_grad, loss_value = self.setup_grad_step(*args)
         if self.gradient_accumulation_steps == 1:
             noised_clipped_grad = self.no_acc_step(clipped_grad, stddev)
-            return noised_clipped_grad, v
-        self.accumulate_grad(clipped_grad, batch, v)
+            return noised_clipped_grad, loss_value
+        self.accumulate_grad(clipped_grad, batch, loss_value)
         if self.is_gradient_accumulated():
             return self.apply_accumulated_grads(stddev)
         return [jnp.zeros_like(tv) for tv in clipped_grad], 0.0

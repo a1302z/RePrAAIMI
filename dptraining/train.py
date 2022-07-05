@@ -106,8 +106,13 @@ def main(
     if config["DP"]["disable_dp"]:
         sampling_rate, delta, sigma, final_epsilon = 0, 0, 0, 0
     else:
-        sampling_rate: float = config["hyperparams"]["batch_size"] / len(
-            train_loader.dataset
+        grad_acc = (
+            config["DP"]["grad_acc_steps"]
+            if "DP" in config and "grad_acc_steps" in config["DP"]
+            else 1
+        )
+        sampling_rate: float = (
+            grad_acc * config["hyperparams"]["batch_size"] / len(train_loader.dataset)
         )
         delta = config["DP"]["delta"]
         eps_calc = EpsCalculator(config, train_loader)
@@ -115,7 +120,7 @@ def main(
         final_epsilon = objax.privacy.dpsgd.analyze_dp(
             q=sampling_rate,
             noise_multiplier=sigma,
-            steps=len(train_loader) * config["hyperparams"]["epochs"],
+            steps=(len(train_loader) // grad_acc) * config["hyperparams"]["epochs"],
             delta=delta,
         )
 
@@ -134,7 +139,7 @@ def main(
         test_augmenter = Transformation.from_dict_list(config["test_augmentations"])
         test_aug = test_augmenter.create_vectorized_transform()
     else:
-        test_aug = lambda x: x  # pylint: disable=unnecessary-lambda-assignment
+        test_aug = lambda x: x
     scheduler = make_scheduler_from_config(config)
     stopper = make_stopper_from_config(config)
 
@@ -145,9 +150,7 @@ def main(
         opt,
         augment_op,
         # complex_valued="complex" in config["model"] and config["model"]["complex"],
-        grad_accumulation="DP" in config
-        and "grad_acc_steps" in config["DP"]
-        and config["DP"]["grad_acc_steps"] > 1,
+        grad_accumulation=grad_acc > 1,
         parallel=parallel,
     )
 
@@ -185,8 +188,14 @@ def main(
             epsilon = objax.privacy.dpsgd.analyze_dp(
                 q=sampling_rate,
                 noise_multiplier=sigma,
-                steps=len(train_loader)  # pylint:disable=loop-invariant-statement
-                * (epoch + 1),  # pylint:disable=loop-invariant-statement
+                steps=(
+                    (
+                        len(train_loader)
+                        // grad_acc  # pylint:disable=loop-invariant-statement
+                    )
+                    * (epoch + 1)
+                ),
+                # pylint:disable=loop-invariant-statement
                 delta=delta,
             )  # pylint:disable=loop-invariant-statement
             if config["general"][
