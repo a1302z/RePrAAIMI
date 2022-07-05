@@ -8,7 +8,7 @@ import objax
 import sys
 
 
-from jax import numpy as jn, checking_leaks
+from jax import numpy as jn
 from jax.lax import rsqrt
 from pathlib import Path
 from sklearn import metrics
@@ -143,7 +143,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
     learning_rate,
     train_vars,
     parallel,
-    loss_gv: PrivateGradValuesAccumulation,
+    grad_acc: int,
     model_vars=None,
     ema=None,
 ):
@@ -160,17 +160,14 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
         leave=False,
     ):
         with (train_vars).replicate() if parallel else contextlib.suppress():
-            with checking_leaks():
-                train_result = train_op(
-                    img,
-                    label,
-                    np.array(learning_rate),
-                    apply_norm_acc=loss_gv.is_gradient_accumulated()
-                    if isinstance(loss_gv, PrivateGradValuesAccumulation)
-                    else True,
-                )
-                if train_result is not None:
-                    train_loss, grads = train_result
+            train_result = train_op(
+                img,
+                label,
+                np.array(learning_rate),
+                apply_norm_acc=(i + 1) % grad_acc == 0,
+            )
+            if train_result is not None:
+                train_loss, grads = train_result
         if ema is not None and train_result is not None:
             with model_vars.replicate() if parallel else contextlib.suppress():
                 ema.update()

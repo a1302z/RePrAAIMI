@@ -75,7 +75,7 @@ class PrivateGradValuesAccumulation(PrivateGradValues):
         for i, clipped_grad in enumerate(clipped_grads):
             self.accumulated_grads[i].value += clipped_grad * batch
         assert len(loss_values) == 1, "We assumed only one loss term"
-        self.accumulated_loss.value += loss_values[0]
+        self.accumulated_loss.value += loss_values[0] * batch
         self.num_elements.value += batch
 
     def apply_accumulated_grads(self, stddev):
@@ -85,7 +85,7 @@ class PrivateGradValuesAccumulation(PrivateGradValues):
             grad_scale_factor=1.0 / self.num_elements.value,
         )
         # to be conform with standard function
-        loss_value = (self.accumulated_loss.value,)
+        loss_value = (self.accumulated_loss.value / self.num_elements.value,)
         self._reset_values()
         return noised_clipped_grad, loss_value
 

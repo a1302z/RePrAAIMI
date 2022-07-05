@@ -14,8 +14,8 @@ sys.path.insert(0, str(Path.cwd()))
 
 
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-# os.environ["CUDA_VISIBLE_DEVICES"] = ""
-# os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 
 
 # pylint:disable=import-outside-toplevel
@@ -105,6 +105,7 @@ def main(
 
     if config["DP"]["disable_dp"]:
         sampling_rate, delta, sigma, final_epsilon = 0, 0, 0, 0
+        grad_acc = 1
     else:
         grad_acc = (
             config["DP"]["grad_acc_steps"]
@@ -173,7 +174,7 @@ def main(
             learning_rate,
             train_vars,
             parallel,
-            loss_gv,
+            grad_acc,
             model_vars,
             ema,
         )
