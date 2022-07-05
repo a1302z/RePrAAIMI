@@ -25,6 +25,6 @@ command:
   - python
   - ${program}
   - -cn 
-  - cifar10_complex.yaml
+  - cifar10_complex_dp.yaml
   - general.log_wandb=True
   - ${args_no_hyphens}

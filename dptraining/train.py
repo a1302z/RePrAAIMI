@@ -22,7 +22,8 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 
 @hydra.main(
-    version_base=None, config_path=Path.cwd() / "configs",
+    version_base=None,
+    config_path=Path.cwd() / "configs",
 )
 def main(
     config,
@@ -103,7 +104,7 @@ def main(
         )
 
     if config["DP"]["disable_dp"]:
-        sampling_rate, delta, sigma, final_epsilon = 0,0,0,0
+        sampling_rate, delta, sigma, final_epsilon = 0, 0, 0, 0
     else:
         sampling_rate: float = config["hyperparams"]["batch_size"] / len(
             train_loader.dataset
@@ -143,7 +144,10 @@ def main(
         loss_gv,
         opt,
         augment_op,
-        complex_valued="complex" in config["model"] and config["model"]["complex"],
+        # complex_valued="complex" in config["model"] and config["model"]["complex"],
+        grad_accumulation="DP" in config
+        and "grad_acc_steps" in config["DP"]
+        and config["DP"]["grad_acc_steps"] > 1,
         parallel=parallel,
     )
 
@@ -166,6 +170,7 @@ def main(
             learning_rate,
             train_vars,
             parallel,
+            loss_gv,
             model_vars,
             ema,
         )

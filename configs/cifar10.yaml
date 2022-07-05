@@ -1,4 +1,4 @@
-project: cifar-DP-complex
+project: cifar
 general:
   log_wandb: False
   parallel: False

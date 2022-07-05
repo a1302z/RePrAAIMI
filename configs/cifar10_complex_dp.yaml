@@ -1,7 +1,7 @@
 project: cifar-DP-complex
 general:
   log_wandb: False
-  parallel: True
+  parallel: False
 dataset: 
   name: CIFAR10
   root: ./data
@@ -14,14 +14,14 @@ test_augmentations:
   make_complex_both:
 model:
   complex: True
-  name: smoothnet
+  name: resnet9
   in_channels: 3
   num_classes: 10
   conv: convws
   activation: conjmish
   normalization: gnw
   pooling: avgpool
-  # scale_norm: True
+  scale_norm: True
 optim:
   name: nadam
 ema:
@@ -46,6 +46,7 @@ scheduler:
 DP:
   disable_dp: False
   epsilon: 7.5
-  max_per_sample_grad_norm: 0.5
+  max_per_sample_grad_norm: 2.0
   delta: 1e-5
   norm_acc: False
+  grad_acc_steps: 2
