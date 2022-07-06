@@ -22,12 +22,7 @@ from dptraining.privacy import PrivateGradValuesAccumulation
 
 
 def create_train_op(  # pylint:disable=too-many-arguments
-    train_vars,
-    loss_gv,
-    opt,
-    augment_op,
-    grad_accumulation: bool,
-    parallel=False,
+    train_vars, loss_gv, opt, augment_op, grad_accumulation: bool, parallel=False,
 ):
     if grad_accumulation:
         assert isinstance(loss_gv, PrivateGradValuesAccumulation)
@@ -52,15 +47,9 @@ def create_train_op(  # pylint:disable=too-many-arguments
 
         if parallel:
             calc_grads = objax.Parallel(
-                calc_grads,
-                reduce=lambda x: x[0],
-                vc=train_vars,
+                calc_grads, reduce=lambda x: x[0], vc=train_vars,
             )
-            apply_grads = objax.Parallel(
-                apply_grads,
-                reduce=np.mean,
-                vc=train_vars,
-            )
+            apply_grads = objax.Parallel(apply_grads, reduce=np.mean, vc=train_vars,)
         else:
             # pass
             calc_grads = objax.Jit(calc_grads)
@@ -81,7 +70,7 @@ def create_train_op(  # pylint:disable=too-many-arguments
             image_batch,
             label_batch,
             learning_rate,
-            apply_norm_acc: bool = True,  # pylint:disable=unused-argument
+            # apply_norm_acc: bool,  # pylint:disable=unused-argument
         ):
             image_batch = augment_op(image_batch)
             grads, loss = loss_gv(image_batch, label_batch)
@@ -89,16 +78,13 @@ def create_train_op(  # pylint:disable=too-many-arguments
                 grads = objax.functional.parallel.pmean(grads)
                 loss = objax.functional.parallel.pmean(loss)
             opt(learning_rate, grads)
+            # del apply_norm_acc
             return loss, grads
 
         if parallel:
-            train_op = objax.Parallel(
-                train_op,
-                reduce=np.mean,
-                vc=train_vars,
-            )
+            train_op = objax.Parallel(train_op, reduce=np.mean, vc=train_vars)
         else:
-            train_op = objax.Jit(train_op)
+            train_op = objax.Jit(train_op, static_argnums=(3,))
 
     return train_op
 
@@ -160,12 +146,10 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
         leave=False,
     ):
         with (train_vars).replicate() if parallel else contextlib.suppress():
-            train_result = train_op(
-                img,
-                label,
-                np.array(learning_rate),
-                apply_norm_acc=(i + 1) % grad_acc == 0,
-            )
+            add_args = {}
+            if grad_acc > 1:
+                add_args["apply_norm_acc"] = (i + 1) % grad_acc == 0
+            train_result = train_op(img, label, np.array(learning_rate), **add_args)
             if train_result is not None:
                 train_loss, grads = train_result
         if ema is not None and train_result is not None:

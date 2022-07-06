@@ -5,10 +5,7 @@ from scipy.optimize import minimize_scalar
 
 def optimisation_f(sigma, epsilon, sampling_rate, steps, delta):
     calc_eps = analyze_dp(
-        q=sampling_rate,
-        noise_multiplier=sigma,
-        steps=steps,
-        delta=delta,
+        q=sampling_rate, noise_multiplier=sigma, steps=steps, delta=delta,
     )
     return abs(epsilon - calc_eps)
 
