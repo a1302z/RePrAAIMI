@@ -5,8 +5,6 @@ import numpy as np
 from jax import numpy as jnp
 
 from typing import Optional, Dict
-import weakref
-import contextlib
 from objax import TrainVar, Module, StateVar, ModuleList
 
 # import torch
@@ -109,11 +107,11 @@ class ExponentialMovingAverage(Module):
             self.num_updates += 1
             decay = min(decay, (1 + self.num_updates) / (10 + self.num_updates))
         one_minus_decay = 1.0 - decay
-        for i, (p_s, p) in enumerate(zip(self.shadow_params, parameters.values())):
-            if len(p.shape) == len(p_s.shape) + 1:
-                tmp = p_s - np.mean(p, axis=0)
+        for i, (p_s, param) in enumerate(zip(self.shadow_params, parameters.values())):
+            if len(param.shape) == len(p_s.shape) + 1:
+                tmp = p_s - np.mean(param, axis=0)
             else:
-                tmp = p_s - p
+                tmp = p_s - param
             # tmp will be a new tensor so we can do in-place
             tmp *= one_minus_decay
             self.shadow_params[i].value -= tmp
@@ -129,20 +127,24 @@ class ExponentialMovingAverage(Module):
                 initialized will be used.
         """
         # parameters = self._get_parameters(parameters)
-        for (k, p), s_p in zip(parameters.items(), self.shadow_params):
+        for (k, param), s_p in zip(parameters.items(), self.shadow_params):
             # param.data.copy_(s_param.data)
-            if len(p.shape) == len(s_p.shape) + 1:
+            if len(param.shape) == len(s_p.shape) + 1:
                 parameters[k].assign(
                     jnp.array(
                         jnp.repeat(
                             s_p.value[jnp.newaxis, :],
-                            p.shape[0],
+                            param.shape[0],
                             axis=0,
                         )
                     )
                 )
             else:
                 parameters[k].assign(s_p.value)
+
+    def __call__(self, parameters):
+        self.update(parameters)
+        self.copy_to(parameters)
 
     # def store(self, parameters: Optional[Dict[str, TrainVar]] = None) -> None:
     #     """
