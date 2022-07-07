@@ -22,7 +22,12 @@ from dptraining.privacy import PrivateGradValuesAccumulation
 
 
 def create_train_op(  # pylint:disable=too-many-arguments
-    train_vars, loss_gv, opt, augment_op, grad_accumulation: bool, parallel=False,
+    train_vars,
+    loss_gv,
+    opt,
+    augment_op,
+    grad_accumulation: bool,
+    parallel=False,
 ):
     if grad_accumulation:
         assert isinstance(loss_gv, PrivateGradValuesAccumulation)
@@ -47,9 +52,15 @@ def create_train_op(  # pylint:disable=too-many-arguments
 
         if parallel:
             calc_grads = objax.Parallel(
-                calc_grads, reduce=lambda x: x[0], vc=train_vars,
+                calc_grads,
+                reduce=lambda x: x[0],
+                vc=train_vars,
             )
-            apply_grads = objax.Parallel(apply_grads, reduce=np.mean, vc=train_vars,)
+            apply_grads = objax.Parallel(
+                apply_grads,
+                reduce=np.mean,
+                vc=train_vars,
+            )
         else:
             # pass
             calc_grads = objax.Jit(calc_grads)
@@ -133,6 +144,11 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
     model_vars=None,
     ema=None,
 ):
+    @objax.Function.with_vars(model_vars)
+    def ema_update():
+        ema.update(model_vars)
+        ema.copy_to(model_vars)
+
     start_time = time.time()
     max_batches = (
         config["hyperparams"]["overfit"]
@@ -154,8 +170,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                 train_loss, grads = train_result
         if ema is not None and train_result is not None:
             with model_vars.replicate() if parallel else contextlib.suppress():
-                ema.update()
-                ema.copy_to(model_vars)
+                ema_update()
         if (
             config["general"]["log_wandb"] and train_result is not None
         ):  # pylint:disable=loop-invariant-statement
@@ -171,8 +186,8 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
             if ema is not None:
                 wandb.log(
                     {
-                        k: (jn.abs(v) if jn.iscomplexobj(v) else v)
-                        for k, v in ema.shadow_params.items()
+                        k: (jn.abs(v.value) if jn.iscomplexobj(v) else v.value)
+                        for k, v in model_vars.items()
                     },
                     commit=False,
                 )

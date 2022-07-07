@@ -22,7 +22,8 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 
 @hydra.main(
-    version_base=None, config_path=Path.cwd() / "configs",
+    version_base=None,
+    config_path=Path.cwd() / "configs",
 )
 def main(
     config,
@@ -144,6 +145,8 @@ def main(
     stopper = make_stopper_from_config(config)
 
     train_vars = model_vars + loss_gv.vars() + opt.vars()
+    if ema is not None:
+        train_vars += ema.vars()
     train_op = create_train_op(
         train_vars,
         loss_gv,
