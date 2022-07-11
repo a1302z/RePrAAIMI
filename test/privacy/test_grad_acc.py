@@ -6,7 +6,7 @@
 
 import objax
 import numpy as np
-from jax import numpy as jnp, checking_leaks
+from jax import numpy as jnp
 import sys
 from pathlib import Path
 
@@ -73,16 +73,16 @@ def test_grad_acc_step():
     assert jnp.isclose(loss_value[0], 1.0).item(), "Loss averaging incorrect"
 
 
-# This doesn't work but works in training and I have no idea why
-# def test_create_train_loop():
-#     model_vars, grad_values = setup_fake_training()
-#     train_op_acc = create_train_op(
-#         model_vars,
-#         grad_values,
-#         objax.optimizer.SGD(model_vars),
-#         lambda x: x,
-#         grad_accumulation=True,
-#     )
-#     with checking_leaks():
-#         train_op_acc(*setup_fake_data(), 1.0, apply_norm_acc=False)
-#         train_op_acc(*setup_fake_data(), 1.0, apply_norm_acc=True)
+def test_create_train_loop():
+    model_vars, grad_values = setup_fake_training()
+    opt = objax.optimizer.SGD(model_vars)
+    train_vars = model_vars + opt.vars() + grad_values.vars()
+    train_op_acc = create_train_op(
+        train_vars,
+        grad_values,
+        opt,
+        lambda x: x,
+        grad_accumulation=True,
+    )
+    train_op_acc(*setup_fake_data(), 1.0, apply_norm_acc=False)
+    train_op_acc(*setup_fake_data(), 1.0, apply_norm_acc=True)
