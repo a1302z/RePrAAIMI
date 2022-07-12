@@ -144,7 +144,8 @@ def main(
     scheduler = make_scheduler_from_config(config)
     stopper = make_stopper_from_config(config)
 
-    train_vars = model_vars + loss_gv.vars() + opt.vars()
+
+    train_vars = model_vars + loss_gv.vars() + opt.vars() + objax.random.DEFAULT_GENERATOR.vars()
     if ema is not None:
         train_vars += ema.vars()
     train_op = create_train_op(
