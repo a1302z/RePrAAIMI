@@ -8,7 +8,7 @@ import objax
 import sys
 
 
-from jax import numpy as jn
+from jax import numpy as jn, device_count
 from jax.lax import rsqrt
 from pathlib import Path
 from sklearn import metrics
@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path.cwd()))
 
-from dptraining.privacy import PrivateGradValuesAccumulation
+from dptraining.privacy import ClipAndAccumulateGrads
 
 # from dptraining.privacy import ComplexPrivateGradValues
 
@@ -27,40 +27,41 @@ def create_train_op(  # pylint:disable=too-many-arguments
     opt,
     augment_op,
     grad_accumulation: bool,
+    noise: float,
+    effective_batch_size: int,
     parallel=False,
 ):
     if grad_accumulation:
-        assert isinstance(loss_gv, PrivateGradValuesAccumulation)
+        assert isinstance(loss_gv, ClipAndAccumulateGrads)
 
         @objax.Function.with_vars(train_vars)
         def calc_grads(image_batch, label_batch):
             image_batch = augment_op(image_batch)
-            batch, stddev, clipped_grad, loss_value = loss_gv.setup_grad_step(
+            clipped_grad, loss_value = loss_gv.calc_per_sample_grads(
                 image_batch, label_batch
             )
-            loss_gv.accumulate_grad(clipped_grad, batch, loss_value)
-            return stddev
+            loss_gv.accumulate_grad(clipped_grad, loss_value)
+            if parallel:
+                loss_value = objax.functional.parallel.pmean(loss_value)
+            return loss_value
 
         @objax.Function.with_vars(train_vars)
-        def apply_grads(stddev, learning_rate):
-            grads, loss = loss_gv.apply_accumulated_grads(stddev)
+        def apply_grads(learning_rate):
+            grads = loss_gv.get_accumulated_grads()
+            loss_gv.reset_accumulated_grads()
             if parallel:
-                grads = objax.functional.parallel.pmean(grads)
-                loss = objax.functional.parallel.pmean(loss)
+                grads = objax.functional.parallel.psum(grads)
+            if isinstance(loss_gv, ClipAndAccumulateGrads):
+                grads = loss_gv.add_noise(grads, noise , objax.random.DEFAULT_GENERATOR)
+                grads = [gx / effective_batch_size for gx in grads]
             opt(learning_rate, grads)
-            return loss, grads
+            return grads
 
         if parallel:
             calc_grads = objax.Parallel(
-                calc_grads,
-                reduce=lambda x: x[0],
-                vc=train_vars,
+                calc_grads, reduce=lambda x: x[0], vc=train_vars,
             )
-            apply_grads = objax.Parallel(
-                apply_grads,
-                reduce=np.mean,
-                vc=train_vars,
-            )
+            apply_grads = objax.Parallel(apply_grads, reduce = np.sum, vc=train_vars,)
         else:
             # pass
             calc_grads = objax.Jit(calc_grads)
@@ -70,9 +71,12 @@ def create_train_op(  # pylint:disable=too-many-arguments
         def train_op(  # pylint:disable=inconsistent-return-statements
             image_batch, label_batch, learning_rate: float, apply_norm_acc: bool
         ):
-            stddev = calc_grads(image_batch, label_batch)
+            loss_value = calc_grads(image_batch, label_batch)
             if apply_norm_acc:
-                return apply_grads(stddev, learning_rate)
+                return (
+                    loss_value,
+                    apply_grads(learning_rate),
+                )  # theoretically the loss needs to be accumulated too, but who cares
 
     else:
 
@@ -86,8 +90,11 @@ def create_train_op(  # pylint:disable=too-many-arguments
             image_batch = augment_op(image_batch)
             grads, loss = loss_gv(image_batch, label_batch)
             if parallel:
-                grads = objax.functional.parallel.pmean(grads)
+                grads = objax.functional.parallel.psum(grads)
                 loss = objax.functional.parallel.pmean(loss)
+            if isinstance(loss_gv, ClipAndAccumulateGrads):
+                grads = loss_gv.add_noise(grads, noise, objax.random.DEFAULT_GENERATOR)
+                grads = [gx / effective_batch_size for gx in grads]
             opt(learning_rate, grads)
             # del apply_norm_acc
             return loss, grads
@@ -100,34 +107,19 @@ def create_train_op(  # pylint:disable=too-many-arguments
     return train_op
 
 
-def create_loss_gradient(config, model, model_vars, loss_fn, sigma):
+def create_loss_gradient(config, model, model_vars, loss_fn):
     if config["DP"]["disable_dp"]:
         loss_gv = objax.GradValues(loss_fn, model.vars())
-        # elif "complex" in config["model"] and config["model"]["complex"]:
-        # loss_gv = ComplexPrivateGradValues(
-        #     loss_fn,
-        #     model_vars,
-        #     sigma,
-        #     config["DP"]["max_per_sample_grad_norm"],
-        #     microbatch=1,
-        #     batch_axis=(0, 0),
-        #     use_norm_accumulation=config["DP"]["norm_acc"],
-        # )
     else:
-        loss_gv = PrivateGradValuesAccumulation(
+        loss_gv = ClipAndAccumulateGrads(
             loss_fn,
             model_vars,
-            sigma,
             config["DP"]["max_per_sample_grad_norm"],
-            microbatch=1,
             batch_axis=(0, 0),
             use_norm_accumulation=config["DP"]["norm_acc"],
             gradient_accumulation_steps=config["DP"]["grad_acc_steps"]
             if "grad_acc_steps" in config["DP"]
             else 1,
-            noise_scaling_factor=rsqrt(2.0)
-            if "complex" in config["model"] and config["model"]["complex"]
-            else 1.0,
         )
 
     return loss_gv

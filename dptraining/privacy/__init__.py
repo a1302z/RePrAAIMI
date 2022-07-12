@@ -1,2 +1,2 @@
 from dptraining.privacy.calc_noise_for_eps import EpsCalculator
-from dptraining.privacy.grad_acc import PrivateGradValuesAccumulation
+from dptraining.privacy.grad_clipper import ClipAndAccumulateGrads

@@ -47,10 +47,10 @@ class PrivateGradValuesAccumulation(PrivateGradValues):
             self.l2_norm_clip * self.noise_multiplier / num_microbatches
         ) * self.noise_scaling_factor
 
-    def _add_noise(self, grad, stddev, grad_scale_factor=1.0):
+    def add_noise(self, grad, stddev, generator, grad_scale_factor=1.0):
         return [
             gx * grad_scale_factor
-            + random.normal(gx.shape, stddev=stddev, generator=self.keygen)
+            + random.normal(gx.shape, stddev=stddev, generator=generator)
             for gx in grad
         ]
 
@@ -67,7 +67,7 @@ class PrivateGradValuesAccumulation(PrivateGradValues):
 
     def no_acc_step(self, clipped_grad, stddev):
         """To be called after setup_grad_step"""
-        noised_clipped_grad = self._add_noise(clipped_grad, stddev)
+        noised_clipped_grad = self.add_noise(clipped_grad, stddev, self.keygen)
         return noised_clipped_grad
 
     def accumulate_grad(self, clipped_grads, batch, loss_values):
@@ -79,9 +79,10 @@ class PrivateGradValuesAccumulation(PrivateGradValues):
         self.num_elements.value += batch
 
     def apply_accumulated_grads(self, stddev):
-        noised_clipped_grad = self._add_noise(
+        noised_clipped_grad = self.add_noise(
             self.accumulated_grads,
             stddev,
+            self.keygen,
             grad_scale_factor=1.0 / self.num_elements.value,
         )
         # to be conform with standard function

@@ -132,11 +132,7 @@ class ExponentialMovingAverage(Module):
             if len(param.shape) == len(s_p.shape) + 1:
                 parameters[k].assign(
                     jnp.array(
-                        jnp.repeat(
-                            s_p.value[jnp.newaxis, :],
-                            param.shape[0],
-                            axis=0,
-                        )
+                        jnp.repeat(s_p.value[jnp.newaxis, :], param.shape[0], axis=0,)
                     )
                 )
             else:

@@ -22,8 +22,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 
 @hydra.main(
-    version_base=None,
-    config_path=Path.cwd() / "configs",
+    version_base=None, config_path=Path.cwd() / "configs",
 )
 def main(
     config,
@@ -35,7 +34,7 @@ def main(
 
     # This is absolutely disgusting but necessary to disable gpu training
     import objax
-    from jax import device_count
+    from jax import device_count, lax
 
     from dptraining.datasets import make_loader_from_config
     from dptraining.models import make_model_from_config
@@ -105,23 +104,28 @@ def main(
 
     if config["DP"]["disable_dp"]:
         sampling_rate, delta, sigma, final_epsilon = 0, 0, 0, 0
-        grad_acc = 1
+        batch_expansion_factor, grad_acc = 1, 1
+        effective_batch_size = config["hyperparams"]["batch_size"]
     else:
         grad_acc = (
             config["DP"]["grad_acc_steps"]
             if "DP" in config and "grad_acc_steps" in config["DP"]
             else 1
         )
-        sampling_rate: float = (
-            grad_acc * config["hyperparams"]["batch_size"] / len(train_loader.dataset)
-        )
         delta = config["DP"]["delta"]
         eps_calc = EpsCalculator(config, train_loader)
         sigma = eps_calc.calc_noise_for_eps()
+
+        effective_batch_size = EpsCalculator.calc_effective_batch_size(config)
+        batch_expansion_factor = EpsCalculator.calc_artificial_batch_expansion_factor(
+            config
+        )
+        sampling_rate: float = (effective_batch_size / len(train_loader.dataset))
         final_epsilon = objax.privacy.dpsgd.analyze_dp(
             q=sampling_rate,
             noise_multiplier=sigma,
-            steps=(len(train_loader) // grad_acc) * config["hyperparams"]["epochs"],
+            steps=(len(train_loader) / batch_expansion_factor)
+            * config["hyperparams"]["epochs"],
             delta=delta,
         )
 
@@ -132,7 +136,7 @@ def main(
 
     loss_class = make_loss_from_config(config)
     loss_fn = loss_class.create_loss_fn(model_vars, model)
-    loss_gv = create_loss_gradient(config, model, model_vars, loss_fn, sigma)
+    loss_gv = create_loss_gradient(config, model, model_vars, loss_fn)
 
     augmenter = Transformation.from_dict_list(config["augmentations"])
     augment_op = augmenter.create_vectorized_transform()
@@ -144,10 +148,16 @@ def main(
     scheduler = make_scheduler_from_config(config)
     stopper = make_stopper_from_config(config)
 
-
-    train_vars = model_vars + loss_gv.vars() + opt.vars() + objax.random.DEFAULT_GENERATOR.vars()
+    train_vars = (
+        model_vars + loss_gv.vars() + opt.vars() + objax.random.DEFAULT_GENERATOR.vars()
+    )
     if ema is not None:
         train_vars += ema.vars()
+    complex_correction_factor = (
+        lax.rsqrt(2.0)
+        if "complex" in config["model"] and config["model"]["complex"]
+        else 1.0
+    )
     train_op = create_train_op(
         train_vars,
         loss_gv,
@@ -155,6 +165,8 @@ def main(
         augment_op,
         # complex_valued="complex" in config["model"] and config["model"]["complex"],
         grad_accumulation=grad_acc > 1,
+        noise=sigma * complex_correction_factor * config["DP"]["max_per_sample_grad_norm"],
+        effective_batch_size=effective_batch_size,
         parallel=parallel,
     )
 
@@ -181,7 +193,7 @@ def main(
             model_vars,
             ema,
         )
-        if config["general"]["log_wandb"]:  # pylint:disable=loop-invariant-statement
+        if config["general"]["log_wandb"]:
             wandb.log({"epoch": epoch, "lr": learning_rate})
         else:
             print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
@@ -192,26 +204,13 @@ def main(
             epsilon = objax.privacy.dpsgd.analyze_dp(
                 q=sampling_rate,
                 noise_multiplier=sigma,
-                steps=(
-                    (
-                        len(train_loader)
-                        // grad_acc  # pylint:disable=loop-invariant-statement
-                    )
-                    * (epoch + 1)
-                ),
-                # pylint:disable=loop-invariant-statement
+                steps=((len(train_loader) / batch_expansion_factor) * (epoch + 1)),
                 delta=delta,
-            )  # pylint:disable=loop-invariant-statement
-            if config["general"][
-                "log_wandb"
-            ]:  # pylint:disable=loop-invariant-statement
-                wandb.log(
-                    {"epsilon": epsilon}
-                )  # pylint:disable=loop-invariant-statement
+            )
+            if config["general"]["log_wandb"]:
+                wandb.log({"epsilon": epsilon})
             else:
-                print(
-                    f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})"  # pylint:disable=loop-invariant-statement
-                )
+                print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})")
         if stopper(metric):
             print("Early Stopping was activated -> Stopping Training")
             break
