@@ -8,8 +8,6 @@ import objax
 import sys
 
 
-from jax import numpy as jn, device_count
-from jax.lax import rsqrt
 from pathlib import Path
 from sklearn import metrics
 from tqdm import tqdm
@@ -42,7 +40,8 @@ def create_train_op(  # pylint:disable=too-many-arguments
             )
             loss_gv.accumulate_grad(clipped_grad, loss_value)
             if parallel:
-                loss_value = objax.functional.parallel.pmean(loss_value)
+                loss_value = objax.functional.parallel.psum(loss_value)
+            loss_value = loss_value[0] / image_batch.shape[0]
             return loss_value
 
         @objax.Function.with_vars(train_vars)
@@ -51,9 +50,9 @@ def create_train_op(  # pylint:disable=too-many-arguments
             loss_gv.reset_accumulated_grads()
             if parallel:
                 grads = objax.functional.parallel.psum(grads)
-            if isinstance(loss_gv, ClipAndAccumulateGrads):
-                grads = loss_gv.add_noise(grads, noise , objax.random.DEFAULT_GENERATOR)
-                grads = [gx / effective_batch_size for gx in grads]
+            # if isinstance(loss_gv, ClipAndAccumulateGrads):
+            grads = loss_gv.add_noise(grads, noise, objax.random.DEFAULT_GENERATOR)
+            grads = [gx / effective_batch_size for gx in grads]
             opt(learning_rate, grads)
             return grads
 
@@ -61,7 +60,7 @@ def create_train_op(  # pylint:disable=too-many-arguments
             calc_grads = objax.Parallel(
                 calc_grads, reduce=lambda x: x[0], vc=train_vars,
             )
-            apply_grads = objax.Parallel(apply_grads, reduce = np.sum, vc=train_vars,)
+            apply_grads = objax.Parallel(apply_grads, reduce=np.sum, vc=train_vars,)
         else:
             # pass
             calc_grads = objax.Jit(calc_grads)
@@ -82,21 +81,25 @@ def create_train_op(  # pylint:disable=too-many-arguments
 
         @objax.Function.with_vars(train_vars)
         def train_op(
-            image_batch,
-            label_batch,
-            learning_rate,
-            # apply_norm_acc: bool,  # pylint:disable=unused-argument
+            image_batch, label_batch, learning_rate,
         ):
+            assert image_batch.shape[0] == effective_batch_size
             image_batch = augment_op(image_batch)
             grads, loss = loss_gv(image_batch, label_batch)
             if parallel:
-                grads = objax.functional.parallel.psum(grads)
-                loss = objax.functional.parallel.pmean(loss)
+                if isinstance(loss_gv, ClipAndAccumulateGrads):
+                    grads = objax.functional.parallel.psum(grads)
+                    loss = objax.functional.parallel.psum(loss)
+                else:
+                    grads = objax.functional.parallel.pmean(grads)
+                    loss = objax.functional.parallel.pmean(loss)
             if isinstance(loss_gv, ClipAndAccumulateGrads):
+                loss = loss[0] / image_batch.shape[0]
                 grads = loss_gv.add_noise(grads, noise, objax.random.DEFAULT_GENERATOR)
                 grads = [gx / effective_batch_size for gx in grads]
+            else:
+                loss = loss[0]
             opt(learning_rate, grads)
-            # del apply_norm_acc
             return loss, grads
 
         if parallel:
@@ -148,10 +151,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
         else len(train_loader) + 1
     )
     for i, (img, label) in tqdm(
-        enumerate(train_loader),  # pylint:disable=loop-invariant-statement
-        total=len(train_loader),
-        desc="Training",
-        leave=False,
+        enumerate(train_loader), total=len(train_loader), desc="Training", leave=False,
     ):
         with (train_vars).replicate() if parallel else contextlib.suppress():
             add_args = {}
@@ -163,12 +163,10 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
         if ema is not None and train_result is not None:
             with model_vars.replicate() if parallel else contextlib.suppress():
                 ema_update()
-        if (
-            config["general"]["log_wandb"] and train_result is not None
-        ):  # pylint:disable=loop-invariant-statement
+        if config["general"]["log_wandb"] and train_result is not None:
             wandb.log(
                 {
-                    "train_loss": train_loss[0].item(),
+                    "train_loss": train_loss.item(),
                     "total_grad_norm": jn.linalg.norm(
                         [jn.linalg.norm(g) for g in grads]
                     ).item(),
@@ -207,10 +205,7 @@ def test(  # pylint:disable=too-many-arguments
             else len(test_loader) + 1
         )
         for i, (image, label) in tqdm(
-            enumerate(test_loader),  # pylint:disable=loop-invariant-statement
-            total=len(test_loader),
-            desc="Testing",
-            leave=False,
+            enumerate(test_loader), total=len(test_loader), desc="Testing", leave=False,
         ):
             image = test_aug(image)
             y_pred = predict_op(image)

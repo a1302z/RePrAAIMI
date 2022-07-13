@@ -1,18 +1,13 @@
-from typing import Optional, Callable, Tuple
-
-
+import functools
 import jax
 from jax import numpy as jnp
 
+from typing import Optional, Callable, Tuple
 from objax.gradient import GradValues
 from objax.module import Function, Vectorize
 from objax import random, ModuleList, StateVar
 from objax.variable import VarCollection
 from objax.privacy.dpsgd import PrivateGradValues
-
-
-import functools
-from typing import Optional, Callable, Tuple
 
 
 class ClipAndAccumulateGrads(PrivateGradValues):
@@ -77,8 +72,7 @@ class ClipAndAccumulateGrads(PrivateGradValues):
     @staticmethod
     def add_noise(grad, stddev, generator):
         return [
-            gx 
-            + random.normal(gx.shape, stddev=stddev, generator=generator)
+            gx + random.normal(gx.shape, stddev=stddev, generator=generator)
             for gx in grad
         ]
 
@@ -97,9 +91,11 @@ class ClipAndAccumulateGrads(PrivateGradValues):
         )
 
         def clipped_grad(*args):
-            g, v = clipped_grad_vectorized(*args)
-            g, v = jax.tree_map(functools.partial(jnp.sum, axis=0), (g, v))
-            return g, v
+            grads, loss = clipped_grad_vectorized(*args)
+            grads, loss = jax.tree_map(
+                functools.partial(jnp.sum, axis=0), (grads, loss)
+            )
+            return grads, loss
 
         return clipped_grad
 

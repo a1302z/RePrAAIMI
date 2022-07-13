@@ -103,7 +103,7 @@ def main(
         )
 
     if config["DP"]["disable_dp"]:
-        sampling_rate, delta, sigma, final_epsilon = 0, 0, 0, 0
+        sampling_rate, delta, sigma, final_epsilon, total_noise = 0, 0, 0, 0, 0
         batch_expansion_factor, grad_acc = 1, 1
         effective_batch_size = config["hyperparams"]["batch_size"]
     else:
@@ -115,6 +115,15 @@ def main(
         delta = config["DP"]["delta"]
         eps_calc = EpsCalculator(config, train_loader)
         sigma = eps_calc.calc_noise_for_eps()
+
+        complex_correction_factor = (
+            lax.rsqrt(2.0)
+            if "complex" in config["model"] and config["model"]["complex"]
+            else 1.0
+        )
+        total_noise = (
+            sigma * complex_correction_factor * config["DP"]["max_per_sample_grad_norm"]
+        )
 
         effective_batch_size = EpsCalculator.calc_effective_batch_size(config)
         batch_expansion_factor = EpsCalculator.calc_artificial_batch_expansion_factor(
@@ -153,11 +162,6 @@ def main(
     )
     if ema is not None:
         train_vars += ema.vars()
-    complex_correction_factor = (
-        lax.rsqrt(2.0)
-        if "complex" in config["model"] and config["model"]["complex"]
-        else 1.0
-    )
     train_op = create_train_op(
         train_vars,
         loss_gv,
@@ -165,7 +169,7 @@ def main(
         augment_op,
         # complex_valued="complex" in config["model"] and config["model"]["complex"],
         grad_accumulation=grad_acc > 1,
-        noise=sigma * complex_correction_factor * config["DP"]["max_per_sample_grad_norm"],
+        noise=total_noise,
         effective_batch_size=effective_batch_size,
         parallel=parallel,
     )
