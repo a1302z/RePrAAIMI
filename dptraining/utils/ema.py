@@ -5,9 +5,7 @@ import numpy as np
 from jax import numpy as jnp
 
 from typing import Optional, Dict
-import weakref
-import contextlib
-from objax import TrainVar
+from objax import TrainVar, Module, StateVar, ModuleList
 
 # import torch
 
@@ -16,7 +14,7 @@ from objax import TrainVar
 # https://github.com/tensorflow/tensorflow/blob/r1.13/tensorflow/python/training/moving_averages.py
 # Objax version based on:
 # https://github.com/fadel/pytorch_ema/blob/master/torch_ema/ema.py
-class ExponentialMovingAverage:
+class ExponentialMovingAverage(Module):
     """
     Maintains (exponential) moving average of a set of parameters.
 
@@ -52,43 +50,43 @@ class ExponentialMovingAverage:
     ):
         if decay < 0.0 or decay > 1.0:
             raise ValueError("Decay must be between 0 and 1")
-        self.decay = decay
+        self.decay = StateVar(jnp.array(decay))
         self.num_updates = 0 if use_num_updates else None
-        self.shadow_params = {
-            k: np.array(p.value.copy()) for k, p in model_vars.items()
-        }
+        self.shadow_params = ModuleList(
+            StateVar(jnp.array(p.value.copy())) for p in model_vars.values()
+        )
         self.collected_params = None
         # By maintaining only a weakref to each parameter,
         # we maintain the old GC behaviour of ExponentialMovingAverage:
         # if the model goes out of scope but the ExponentialMovingAverage
         # is kept, no references to the model or its parameters will be
         # maintained, and the model will be cleaned up.
-        self._params_refs = {k: weakref.ref(p) for k, p in model_vars.items()}
+        # self._params_refs = {k: weakref.ref(p) for k, p in model_vars.items()}
 
-    def _get_parameters(
-        self, model_vars: Optional[Dict[str, TrainVar]]
-    ) -> Dict[str, TrainVar]:
-        if model_vars is None:
-            model_vars = {k: p() for k, p in self._params_refs.items()}
-            if any(p is None for p in model_vars.values()):
-                raise ValueError(
-                    "(One of) the parameters with which this "
-                    "ExponentialMovingAverage "
-                    "was initialized no longer exists (was garbage collected);"
-                    " please either provide `parameters` explicitly or keep "
-                    "the model to which they belong from being garbage "
-                    "collected."
-                )
-            return model_vars
-        else:
-            model_vars = dict(model_vars)
-            if len(model_vars) != len(self.shadow_params):
-                raise ValueError(
-                    "Number of parameters passed as argument is different "
-                    "from number of shadow parameters maintained by this "
-                    "ExponentialMovingAverage"
-                )
-            return model_vars
+    # def _get_parameters(
+    #     self, model_vars: Optional[Dict[str, TrainVar]]
+    # ) -> Dict[str, TrainVar]:
+    #     if model_vars is None:
+    #         model_vars = {k: p() for k, p in self._params_refs.items()}
+    #         if any(p is None for p in model_vars.values()):
+    #             raise ValueError(
+    #                 "(One of) the parameters with which this "
+    #                 "ExponentialMovingAverage "
+    #                 "was initialized no longer exists (was garbage collected);"
+    #                 " please either provide `parameters` explicitly or keep "
+    #                 "the model to which they belong from being garbage "
+    #                 "collected."
+    #             )
+    #         return model_vars
+    #     else:
+    #         model_vars = dict(model_vars)
+    #         if len(model_vars) != len(self.shadow_params):
+    #             raise ValueError(
+    #                 "Number of parameters passed as argument is different "
+    #                 "from number of shadow parameters maintained by this "
+    #                 "ExponentialMovingAverage"
+    #             )
+    #         return model_vars
 
     def update(self, parameters: Optional[Dict[str, TrainVar]] = None) -> None:
         """
@@ -103,20 +101,20 @@ class ExponentialMovingAverage:
                 parameters with which this `ExponentialMovingAverage` was
                 initialized will be used.
         """
-        parameters = self._get_parameters(parameters)
+        # parameters = self._get_parameters(parameters)
         decay = self.decay
         if self.num_updates is not None:
             self.num_updates += 1
             decay = min(decay, (1 + self.num_updates) / (10 + self.num_updates))
         one_minus_decay = 1.0 - decay
-        for k in parameters.keys():
-            if len(parameters[k].shape) == len(self.shadow_params[k].shape) + 1:
-                tmp = self.shadow_params[k] - np.mean(parameters[k], axis=0)
+        for i, (p_s, param) in enumerate(zip(self.shadow_params, parameters.values())):
+            if len(param.shape) == len(p_s.shape) + 1:
+                tmp = p_s - np.mean(param, axis=0)
             else:
-                tmp = self.shadow_params[k] - parameters[k]
+                tmp = p_s - param
             # tmp will be a new tensor so we can do in-place
             tmp *= one_minus_decay
-            self.shadow_params[k] -= tmp
+            self.shadow_params[i].value -= tmp
 
     def copy_to(self, parameters: Optional[Dict[str, TrainVar]] = None) -> None:
         """
@@ -128,87 +126,87 @@ class ExponentialMovingAverage:
                 parameters with which this `ExponentialMovingAverage` was
                 initialized will be used.
         """
-        parameters = self._get_parameters(parameters)
-        for k in parameters.keys():
+        # parameters = self._get_parameters(parameters)
+        for (k, param), s_p in zip(parameters.items(), self.shadow_params):
             # param.data.copy_(s_param.data)
-            if len(parameters[k].shape) == len(self.shadow_params[k].shape) + 1:
+            if len(param.shape) == len(s_p.shape) + 1:
                 parameters[k].assign(
                     jnp.array(
-                        np.repeat(
-                            self.shadow_params[k][np.newaxis, :],
-                            parameters[k].shape[0],
-                            axis=0,
-                        )
+                        jnp.repeat(s_p.value[jnp.newaxis, :], param.shape[0], axis=0,)
                     )
                 )
             else:
-                parameters[k].assign(jnp.array(self.shadow_params[k]))
+                parameters[k].assign(s_p.value)
 
-    def store(self, parameters: Optional[Dict[str, TrainVar]] = None) -> None:
-        """
-        Save the current parameters for restoring later.
-
-        Args:
-            parameters: Iterable of `torch.nn.Parameter`; the parameters to be
-                temporarily stored. If `None`, the parameters of with which this
-                `ExponentialMovingAverage` was initialized will be used.
-        """
-        parameters = self._get_parameters(parameters)
-        self.collected_params = {
-            k: param.value.copy() for k, param in parameters.items()
-        }
-
-    def restore(self, parameters: Optional[Dict[str, TrainVar]] = None) -> None:
-        """
-        Restore the parameters stored with the `store` method.
-        Useful to validate the model with EMA parameters without affecting the
-        original optimization process. Store the parameters before the
-        `copy_to` method. After validation (or model saving), use this to
-        restore the former parameters.
-
-        Args:
-            parameters: Iterable of `torch.nn.Parameter`; the parameters to be
-                updated with the stored parameters. If `None`, the
-                parameters with which this `ExponentialMovingAverage` was
-                initialized will be used.
-        """
-        if self.collected_params is None:
-            raise RuntimeError(
-                "This ExponentialMovingAverage has no `store()`ed weights "
-                "to `restore()`"
-            )
-        parameters = self._get_parameters(parameters)
-        for k in parameters.keys():
-            # param.data.copy_(c_param.data)
-            parameters[k].assign(self.collected_params[k])
-
-    @contextlib.contextmanager
-    def average_parameters(self, parameters: Optional[Dict[str, TrainVar]] = None):
-        r"""
-        Context manager for validation/inference with averaged parameters.
-
-        Equivalent to:
-
-            ema.store()
-            ema.copy_to()
-            try:
-                ...
-            finally:
-                ema.restore()
-
-        Args:
-            parameters: Iterable of `torch.nn.Parameter`; the parameters to be
-                updated with the stored parameters. If `None`, the
-                parameters with which this `ExponentialMovingAverage` was
-                initialized will be used.
-        """
-        parameters = self._get_parameters(parameters)
-        self.store(parameters)
+    def __call__(self, parameters):
+        self.update(parameters)
         self.copy_to(parameters)
-        try:
-            yield
-        finally:
-            self.restore(parameters)
+
+    # def store(self, parameters: Optional[Dict[str, TrainVar]] = None) -> None:
+    #     """
+    #     Save the current parameters for restoring later.
+
+    #     Args:
+    #         parameters: Iterable of `torch.nn.Parameter`; the parameters to be
+    #             temporarily stored. If `None`, the parameters of with which this
+    #             `ExponentialMovingAverage` was initialized will be used.
+    #     """
+    #     parameters = self._get_parameters(parameters)
+    #     self.collected_params = {
+    #         k: param.value.copy() for k, param in parameters.items()
+    #     }
+
+    # def restore(self, parameters: Optional[Dict[str, TrainVar]] = None) -> None:
+    #     """
+    #     Restore the parameters stored with the `store` method.
+    #     Useful to validate the model with EMA parameters without affecting the
+    #     original optimization process. Store the parameters before the
+    #     `copy_to` method. After validation (or model saving), use this to
+    #     restore the former parameters.
+
+    #     Args:
+    #         parameters: Iterable of `torch.nn.Parameter`; the parameters to be
+    #             updated with the stored parameters. If `None`, the
+    #             parameters with which this `ExponentialMovingAverage` was
+    #             initialized will be used.
+    #     """
+    #     if self.collected_params is None:
+    #         raise RuntimeError(
+    #             "This ExponentialMovingAverage has no `store()`ed weights "
+    #             "to `restore()`"
+    #         )
+    #     parameters = self._get_parameters(parameters)
+    #     for k in parameters.keys():
+    #         # param.data.copy_(c_param.data)
+    #         parameters[k].assign(self.collected_params[k])
+
+    # @contextlib.contextmanager
+    # def average_parameters(self, parameters: Optional[Dict[str, TrainVar]] = None):
+    #     r"""
+    #     Context manager for validation/inference with averaged parameters.
+
+    #     Equivalent to:
+
+    #         ema.store()
+    #         ema.copy_to()
+    #         try:
+    #             ...
+    #         finally:
+    #             ema.restore()
+
+    #     Args:
+    #         parameters: Iterable of `torch.nn.Parameter`; the parameters to be
+    #             updated with the stored parameters. If `None`, the
+    #             parameters with which this `ExponentialMovingAverage` was
+    #             initialized will be used.
+    #     """
+    #     parameters = self._get_parameters(parameters)
+    #     self.store(parameters)
+    #     self.copy_to(parameters)
+    #     try:
+    #         yield
+    #     finally:
+    #         self.restore(parameters)
 
     # def to(self, device=None, dtype=None) -> None:
     #     r"""Move internal buffers of the ExponentialMovingAverage to `device`.
@@ -232,17 +230,17 @@ class ExponentialMovingAverage:
     #         ]
     #     return
 
-    def state_dict(self) -> dict:
-        r"""Returns the state of the ExponentialMovingAverage as a dict."""
-        # Following PyTorch conventions, references to tensors are returned:
-        # "returns a reference to the state and not its copy!" -
-        # https://pytorch.org/tutorials/beginner/saving_loading_models.html#what-is-a-state-dict
-        return {
-            "decay": self.decay,
-            "num_updates": self.num_updates,
-            "shadow_params": self.shadow_params,
-            "collected_params": self.collected_params,
-        }
+    # def state_dict(self) -> dict:
+    #     r"""Returns the state of the ExponentialMovingAverage as a dict."""
+    #     # Following PyTorch conventions, references to tensors are returned:
+    #     # "returns a reference to the state and not its copy!" -
+    #     # https://pytorch.org/tutorials/beginner/saving_loading_models.html#what-is-a-state-dict
+    #     return {
+    #         "decay": self.decay,
+    #         "num_updates": self.num_updates,
+    #         "shadow_params": self.shadow_params,
+    #         "collected_params": self.collected_params,
+    #     }
 
     # def load_state_dict(self, state_dict: dict) -> None:
     #     r"""Loads the ExponentialMovingAverage state.

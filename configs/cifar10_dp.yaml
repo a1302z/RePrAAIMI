@@ -23,12 +23,13 @@ model:
   num_classes: 10
   activation: mish
   normalization: gn
+  pooling: avgpool
   scale_norm: True
 optim:
   name: nadam
 hyperparams:
   epochs: 50
-  batch_size: 32
+  batch_size: 1024
   batch_size_test: 200
   lr: 2e-3
   momentum: 0.9
@@ -41,3 +42,4 @@ DP:
   max_per_sample_grad_norm: 3.0
   delta: 1e-5
   norm_acc: False
+  grad_acc_steps: 4
