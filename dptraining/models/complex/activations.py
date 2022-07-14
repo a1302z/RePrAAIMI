@@ -11,7 +11,7 @@ class IGaussian(Module):
 
     def __call__(self, x: JaxArray) -> JaxArray:
         norm_sq = x * jn.conj(x)
-        grad = 1 - jn.exp(-norm_sq / (2 * self.sigma**2))
+        grad = 1 - jn.exp(-norm_sq / (2 * self.sigma ** 2))
         arg = jn.angle(x)
         norm = jn.exp(1j * arg)
         return grad.real * norm

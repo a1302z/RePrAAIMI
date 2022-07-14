@@ -1,13 +1,16 @@
-from objax.nn import Conv2D, Linear
-from objax import Module
-from objax.typing import JaxArray, ConvPaddingInt
-from objax.constants import ConvPadding
-from objax.nn.init import kaiming_normal, xavier_normal
+from functools import partial
 from typing import Callable
+from warnings import warn
+
 from jax import numpy as np
 from jax import vmap
-from functools import partial
 from jax.lax import conv_general_dilated
+from objax import Module
+from objax.constants import ConvPadding
+from objax.nn import Conv2D, Linear
+from objax.nn.init import kaiming_normal, xavier_normal
+from objax.typing import ConvPaddingInt, JaxArray
+from objax.util import class_name
 
 
 # Helper
@@ -32,7 +35,8 @@ class ComplexConv2D(Module):
     ) -> None:
         super().__init__()
         if use_bias:
-            raise ValueError("Bias is not supported.")
+            warn("Bias is not supported.")
+            use_bias = False
         self.convr = Conv2D(
             nin=nin,
             nout=nout,
@@ -58,6 +62,20 @@ class ComplexConv2D(Module):
 
     def __call__(self, x: JaxArray) -> JaxArray:
         return conjugate_apply(self.convr, self.convi, x)
+
+    def __repr__(self):
+        args = dict(
+            nin=self.convr.w.value.shape[2] * self.convr.groups,
+            nout=self.convr.w.value.shape[3],
+            k=self.convr.w.value.shape[:2],
+            strides=self.convr.strides,
+            dilations=self.convr.dilations,
+            groups=self.convr.groups,
+            padding=self.convr.padding,
+            use_bias=self.convr.b is not None,
+        )
+        args = ", ".join(f"{k}={repr(v)}" for k, v in args.items())
+        return f"{class_name(self)}({args})"
 
 
 def complex_ws(w_real: JaxArray, w_imag: JaxArray) -> tuple[JaxArray, ...]:
@@ -85,8 +103,9 @@ def complex_ws(w_real: JaxArray, w_imag: JaxArray) -> tuple[JaxArray, ...]:
     whitened = vmap(whitening_matrix)(centered)
     res_r, res_i = whitened[:, 0, :], whitened[:, 1, :]
     # reshape back to original shape
-    return res_r.transpose(1, 0).reshape(w_real.shape), res_i.transpose(1, 0).reshape(
-        w_imag.shape
+    return (
+        res_r.transpose(1, 0).reshape(w_real.shape),
+        res_i.transpose(1, 0).reshape(w_imag.shape),
     )
 
 

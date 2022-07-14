@@ -2,7 +2,6 @@ from typing import Callable
 import warnings
 from functools import partial
 from jax import numpy as jnp
-from objax.zoo import resnet_v2
 from objax import nn, functional
 from dptraining.models.cifar10models import Cifar10ConvNet
 from dptraining.models.resnet9 import ResNet9
@@ -24,6 +23,7 @@ from dptraining.models.complex.layers import (
     ComplexLinear,
 )
 from dptraining.models.complex.pooling import ConjugateMaxPool2D, SeparableMaxPool2D
+from dptraining.models import resnet_v2
 
 
 SUPPORTED_MODELS = ("cifar10model", "resnet18", "resnet9", "smoothnet")
