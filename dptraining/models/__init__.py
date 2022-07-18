@@ -24,6 +24,7 @@ from dptraining.models.complex.layers import (
 )
 from dptraining.models.complex.pooling import ConjugateMaxPool2D, SeparableMaxPool2D
 from dptraining.models import resnet_v2
+from dptraining.models.complex.converter import ComplexModelConverter
 
 
 SUPPORTED_MODELS = ("cifar10model", "resnet18", "resnet9", "smoothnet")
@@ -223,7 +224,12 @@ def make_complex_model_from_config(config: dict) -> Callable:
 
 def make_model_from_config(config: dict) -> Callable:
     if "complex" in config["model"] and config["model"]["complex"]:
-        model = make_complex_model_from_config(config)
+        if config["model"]["name"] in SUPPORTED_COMPLEX_MODELS:
+            model = make_complex_model_from_config(config)
+        elif config["model"]["name"] in SUPPORTED_MODELS:
+            model = make_normal_model_from_config(config)
+            converter = ComplexModelConverter()
+            model = nn.Sequential([converter(model), jnp.abs])
     else:
         model = make_normal_model_from_config(config)
     return model

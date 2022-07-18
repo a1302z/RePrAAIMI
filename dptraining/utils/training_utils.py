@@ -7,7 +7,7 @@ import numpy as np
 import objax
 import sys
 
-from jax import numpy as jn
+from jax import numpy as jn, profiler
 from pathlib import Path
 from sklearn import metrics
 from tqdm import tqdm
@@ -81,7 +81,7 @@ def create_train_op(  # pylint:disable=too-many-arguments
         def train_op(
             image_batch, label_batch, learning_rate,
         ):
-            assert image_batch.shape[0] == effective_batch_size
+            # assert image_batch.shape[0] == effective_batch_size
             image_batch = augment_op(image_batch)
             grads, loss = grad_calc(image_batch, label_batch)
             if parallel:
@@ -102,10 +102,10 @@ def create_train_op(  # pylint:disable=too-many-arguments
             opt(learning_rate, grads)
             return loss, grads
 
-        if parallel:
-            train_op = objax.Parallel(train_op, reduce=np.mean, vc=train_vars)
-        else:
-            train_op = objax.Jit(train_op, static_argnums=(3,))
+        # if parallel:
+        #     train_op = objax.Parallel(train_op, reduce=np.mean, vc=train_vars)
+        # else:
+        #     train_op = objax.Jit(train_op, static_argnums=(3,))
 
     return train_op
 
@@ -151,7 +151,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
         else len(train_loader) + 1
     )
     for i, (img, label) in tqdm(
-        enumerate(train_loader), total=len(train_loader), desc="Training", leave=False,
+        enumerate(train_loader), total=max_batches, desc="Training", leave=False,
     ):
         with (train_vars).replicate() if parallel else contextlib.suppress():
             add_args = {}
@@ -160,29 +160,28 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
             train_result = train_op(img, label, np.array(learning_rate), **add_args)
             if train_result is not None:
                 train_loss, grads = train_result
-        if ema is not None and train_result is not None:
-            with model_vars.replicate() if parallel else contextlib.suppress():
+            if ema is not None and train_result is not None:
+                # with model_vars.replicate() if parallel else contextlib.suppress():
                 ema_update()
         if config["general"]["log_wandb"] and train_result is not None:
-            wandb.log(
-                {
-                    "train_loss": train_loss.item(),
-                    "total_grad_norm": jn.linalg.norm(
-                        [jn.linalg.norm(g) for g in grads]
-                    ).item(),
-                },
-                commit=False,
-            )
+            log_dict = {
+                "train_loss": train_loss.item(),
+                "total_grad_norm": jn.linalg.norm(
+                    [jn.linalg.norm(g) for g in grads]
+                ).item(),
+            }
             if ema is not None:
-                wandb.log(
+                log_dict.update(
                     {
                         k: (jn.abs(v.value) if jn.iscomplexobj(v) else v.value)
                         for k, v in model_vars.items()
-                    },
-                    commit=False,
+                    }
                 )
+            wandb.log(
+                log_dict, commit=i % 10 == 0,
+            )
 
-        if i > max_batches:
+        if i + 1 >= max_batches:
             break
     return time.time() - start_time
 
@@ -205,13 +204,13 @@ def test(  # pylint:disable=too-many-arguments
             else len(test_loader) + 1
         )
         for i, (image, label) in tqdm(
-            enumerate(test_loader), total=len(test_loader), desc="Testing", leave=False,
+            enumerate(test_loader), total=max_batches, desc="Testing", leave=False,
         ):
             image = test_aug(image)
             y_pred = predict_op(image)
             correct.append(label)
             predicted.append(y_pred)
-            if i > max_batches:
+            if i + 1 >= max_batches:
                 break
     correct = np.concatenate(correct)
     predicted = np.concatenate(predicted).argmax(axis=1)

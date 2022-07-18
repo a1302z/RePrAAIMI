@@ -31,7 +31,7 @@ def make_loader_from_config(config):
     )
     test_tf = (
         Transformation.from_dict_list(config["test_transforms"])
-        if "train_transforms" in config
+        if "test_transforms" in config
         else None
     )
     make_collate_fn(config)
@@ -81,7 +81,11 @@ def make_loader_from_config(config):
                 **config["loader"],
             },
             (),
-            {"batch_size": config["hyperparams"]["batch_size_test"], "shuffle": False},
+            {
+                "batch_size": config["hyperparams"]["batch_size_test"],
+                "shuffle": False,
+                **config["loader"],
+            },
         )
     else:
         raise ValueError(
