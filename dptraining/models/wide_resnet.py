@@ -60,6 +60,7 @@ class WRNBlock(objax.Module):
         bn: Callable = functools.partial(
             objax.nn.BatchNorm2D, momentum=BN_MOM, eps=BN_EPS
         ),
+        scale_norm: bool = False,
     ):
         """Creates WRNBlock instance.
 
@@ -83,6 +84,7 @@ class WRNBlock(objax.Module):
         self.norm_2 = bn(nout)
         self.conv_2 = objax.nn.Conv2D(nout, nout, 3, strides=1, **conv_args(3, nout))
         self.activation = objax.functional.relu
+        self.scale_norm = bn(nout) if scale_norm else lambda x: x
 
     def __call__(self, x: JaxArray, training: bool) -> JaxArray:
         o1 = self.norm_1(x, training)
@@ -91,7 +93,7 @@ class WRNBlock(objax.Module):
         o2 = self.norm_2(y, training)
         o2 = self.activation(o2)
         z = self.conv_2(o2)
-        return z + self.proj_conv(o1) if self.proj_conv else z + x
+        return self.scale_norm(z + self.proj_conv(o1) if self.proj_conv else z + x)
 
 
 class WideResNetGeneral(objax.nn.Sequential):
@@ -110,6 +112,7 @@ class WideResNetGeneral(objax.nn.Sequential):
         bn: Callable = functools.partial(
             objax.nn.BatchNorm2D, momentum=BN_MOM, eps=BN_EPS
         ),
+        scale_norm: bool = False,
     ):
         """Creates WideResNetGeneral instance.
 
@@ -129,9 +132,9 @@ class WideResNetGeneral(objax.nn.Sequential):
         ops = [objax.nn.Conv2D(nin, n, 3, **conv_args(3, n))]
         for i, (block, width) in enumerate(zip(blocks_per_group, widths)):
             stride = 2 if i > 0 else 1
-            ops.append(WRNBlock(n, width, stride, bn))
+            ops.append(WRNBlock(n, width, stride, bn, scale_norm=scale_norm))
             for b in range(1, block):
-                ops.append(WRNBlock(width, width, 1, bn))
+                ops.append(WRNBlock(width, width, 1, bn, scale_norm=scale_norm))
             n = width
         ops += [
             bn(n),
@@ -159,6 +162,7 @@ class WideResNet(WideResNetGeneral):
         bn: Callable = functools.partial(
             objax.nn.BatchNorm2D, momentum=BN_MOM, eps=BN_EPS
         ),
+        scale_norm: bool = False,
     ):
         """Creates WideResNet instance.
 
@@ -172,4 +176,6 @@ class WideResNet(WideResNetGeneral):
         assert (depth - 4) % 6 == 0, "depth should be 6n+4"
         n = (depth - 4) // 6
         blocks_per_group = [n] * 3
-        super().__init__(nin, nclass, blocks_per_group, width, bn)
+        super().__init__(
+            nin, nclass, blocks_per_group, width, bn, scale_norm=scale_norm
+        )

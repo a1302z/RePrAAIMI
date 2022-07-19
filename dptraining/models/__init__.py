@@ -155,6 +155,9 @@ def make_complex_pooling_from_config(
 
 
 def make_normal_model_from_config(config: dict) -> Callable:
+    scale_norm = (
+        config["model"]["scale_norm"] if "scale_norm" in config["model"] else False
+    )
     match config["model"]["name"]:
         case "cifar10model":
             if "activation" in config["model"]:
@@ -168,12 +171,14 @@ def make_normal_model_from_config(config: dict) -> Callable:
                 config["model"]["num_classes"],
                 normalization_fn=make_normalization_from_config(config),
                 activation_fn=make_activation_from_config(config),
+                scale_norm=scale_norm,
             )
         case "wide_resnet":
             return wide_resnet.WideResNet(
                 config["model"]["in_channels"],
                 config["model"]["num_classes"],
                 bn=make_normalization_from_config(config),
+                scale_norm=scale_norm,
             )
         case "resnet9":
             return ResNet9(
@@ -182,9 +187,7 @@ def make_normal_model_from_config(config: dict) -> Callable:
                 norm_cls=make_normalization_from_config(config),
                 act_func=make_activation_from_config(config),
                 pool_func=partial(make_pooling_from_config(config), size=2),
-                scale_norm=config["model"]["scale_norm"]
-                if "scale_norm" in config["model"]
-                else False,
+                scale_norm=scale_norm,
             )
         case "smoothnet":
             return get_smoothnet(

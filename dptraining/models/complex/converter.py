@@ -100,6 +100,15 @@ def _is_function(class_in_question):
 
 
 class ComplexModelConverter:
+    """This Module replaces modules and attributes of networks to new
+    classes or functions. In particular we use this to convert normal
+    networks to complex networks.
+
+    Remark: this only works if all ops are attributes of the class or
+    function. If an operation is hardcoded in the __call__ method
+    this will not be changed. Looking at you objax.zoo.resnet_v2
+    """
+
     def __init__(
         self,
         new_conv_class: Union[Module, Callable] = ComplexWSConv2D,

@@ -86,6 +86,7 @@ class ResNetV2Block(objax.Module):
         bottleneck: bool,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
+        scale_norm: bool = False,
     ):
         """Creates ResNetV2Block instance.
 
@@ -140,6 +141,10 @@ class ResNetV2Block(objax.Module):
             )
         else:
             self.shortcut = lambda x: x
+        if scale_norm:
+            self.scale_norm = normalization_fn(nout)
+        else:
+            self.scale_norm = lambda x: x
 
     def __call__(self, x: JaxArray, training: bool) -> JaxArray:
         shortcut = self.shortcut(x)
@@ -150,7 +155,7 @@ class ResNetV2Block(objax.Module):
                 shortcut = self.proj_conv(x)
             x = conv_i(x)
 
-        return x + shortcut
+        return self.scale_norm(x + shortcut)
 
     def __repr__(self) -> str:
         repr_str = "ResBlock:"
@@ -172,6 +177,7 @@ class ResNetV2BlockGroup(objax.nn.Sequential):
         bottleneck: bool,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
+        scale_norm: bool = False,
     ):
         """Creates ResNetV2BlockGroup instance.
 
@@ -196,6 +202,7 @@ class ResNetV2BlockGroup(objax.nn.Sequential):
                     bottleneck=bottleneck,
                     normalization_fn=normalization_fn,
                     activation_fn=activation_fn,
+                    scale_norm=scale_norm,
                 )
             )
         super().__init__(blocks)
@@ -215,6 +222,7 @@ class ResNetV2(objax.nn.Sequential):
         group_use_projection: Sequence[bool] = (True, True, True, True),
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
+        scale_norm: bool = False,
     ):
         """Creates ResNetV2 instance.
 
@@ -256,6 +264,7 @@ class ResNetV2(objax.nn.Sequential):
                     use_projection=group_use_projection[i],
                     normalization_fn=normalization_fn,
                     activation_fn=activation_fn,
+                    scale_norm=scale_norm,
                 )
             )
 
@@ -279,6 +288,7 @@ class ResNet18(ResNetV2):
         num_classes: int,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
+        scale_norm: bool = False,
     ):
         """Creates ResNet18 instance.
 
@@ -297,6 +307,7 @@ class ResNet18(ResNetV2):
             group_use_projection=(False, True, True, True),
             normalization_fn=normalization_fn,
             activation_fn=activation_fn,
+            scale_norm=scale_norm,
         )
 
 
@@ -309,6 +320,7 @@ class ResNet34(ResNetV2):
         num_classes: int,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
+        scale_norm: bool = False,
     ):
         """Creates ResNet34 instance.
 
@@ -327,6 +339,7 @@ class ResNet34(ResNetV2):
             group_use_projection=(False, True, True, True),
             normalization_fn=normalization_fn,
             activation_fn=activation_fn,
+            scale_norm=scale_norm,
         )
 
 
@@ -339,6 +352,7 @@ class ResNet50(ResNetV2):
         num_classes: int,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
+        scale_norm: bool = False,
     ):
         """Creates ResNet50 instance.
 
@@ -356,6 +370,7 @@ class ResNet50(ResNetV2):
             bottleneck=True,
             normalization_fn=normalization_fn,
             activation_fn=activation_fn,
+            scale_norm=scale_norm,
         )
 
 
@@ -368,6 +383,7 @@ class ResNet101(ResNetV2):
         num_classes: int,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
+        scale_norm: bool = False,
     ):
         """Creates ResNet101 instance.
 
@@ -385,6 +401,7 @@ class ResNet101(ResNetV2):
             bottleneck=True,
             normalization_fn=normalization_fn,
             activation_fn=activation_fn,
+            scale_norm=scale_norm,
         )
 
 
@@ -397,6 +414,7 @@ class ResNet152(ResNetV2):
         num_classes: int,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
+        scale_norm: bool = False,
     ):
         """Creates ResNet152 instance.
 
@@ -414,6 +432,7 @@ class ResNet152(ResNetV2):
             bottleneck=True,
             normalization_fn=normalization_fn,
             activation_fn=activation_fn,
+            scale_norm=scale_norm,
         )
 
 
@@ -426,6 +445,7 @@ class ResNet200(ResNetV2):
         num_classes: int,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
+        scale_norm: bool = False,
     ):
         """Creates ResNet200 instance.
 
@@ -443,6 +463,7 @@ class ResNet200(ResNetV2):
             bottleneck=True,
             normalization_fn=normalization_fn,
             activation_fn=activation_fn,
+            scale_norm=scale_norm,
         )
 
 
