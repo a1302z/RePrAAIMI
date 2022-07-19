@@ -21,7 +21,7 @@ test_transforms:
   numpy_img_to_chw:
 loader:
   collate_fn: numpy
-  num_workers: 32
+  num_workers: 16
   prefetch_factor: 32
   pin_memory: True
 augmentations:

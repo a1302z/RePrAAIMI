@@ -22,7 +22,8 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 
 @hydra.main(
-    version_base=None, config_path=Path.cwd() / "configs",
+    version_base=None,
+    config_path=Path.cwd() / "configs",
 )
 def main(
     config,
@@ -73,6 +74,10 @@ def main(
             reinit=True,
         )
     train_loader, test_loader = make_loader_from_config(config)
+    if "overfit" in config["hyperparams"] and isinstance(
+        config["hyperparams"]["overfit"], int
+    ):
+        test_loader = train_loader
     model: Callable = make_model_from_config(config)
     model_vars = model.vars()
 
@@ -129,7 +134,7 @@ def main(
         batch_expansion_factor = EpsCalculator.calc_artificial_batch_expansion_factor(
             config
         )
-        sampling_rate: float = (effective_batch_size / len(train_loader.dataset))
+        sampling_rate: float = effective_batch_size / len(train_loader.dataset)
         final_epsilon = objax.privacy.dpsgd.analyze_dp(
             q=sampling_rate,
             noise_multiplier=sigma,
@@ -153,7 +158,7 @@ def main(
         test_augmenter = Transformation.from_dict_list(config["test_augmentations"])
         test_aug = test_augmenter.create_vectorized_transform()
     else:
-        test_aug = lambda x: x  # pylint:disable=unnecessary-lambda-assignment
+        test_aug = lambda x: x
     scheduler = make_scheduler_from_config(config)
     stopper = make_stopper_from_config(config)
 

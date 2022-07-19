@@ -27,9 +27,9 @@ sys.path.insert(0, str(Path.cwd()))
 
 from dptraining.models.complex import (
     ComplexWSConv2D,
-    ComplexMish,
     ComplexGroupNorm2DWhitening,
     ComplexLinear,
+    ConjugateMish,
 )
 
 
@@ -92,6 +92,13 @@ def find_linear_args(original_layer):
     )
 
 
+def _is_function(class_in_question):
+    return isinstance(
+        class_in_question,
+        (types.FunctionType, types.BuiltinFunctionType, CompiledFunction),
+    )
+
+
 class ComplexModelConverter:
     def __init__(
         self,
@@ -102,59 +109,61 @@ class ComplexModelConverter:
                 for norm_class in DEFAULT_NORM_CLASSES
             },
             **{linear_class: ComplexLinear for linear_class in DEFAULT_LINEAR_CLASSES},
-            **{activation: ComplexMish for activation in DEFAULT_ACTIVATIONS},
+            **{activation: ConjugateMish for activation in DEFAULT_ACTIVATIONS},
             **{pooling: average_pool_2d for pooling in DEFAULT_POOLING},
         },
     ) -> None:
         self.conversion_dict = conversion_dict
 
-    def convert_module_list(self, model):
-        for i, layer in enumerate(model):
-            if isinstance(layer, Iterable):
-                if isinstance(layer, tuple):
-                    model[i] = layer = list(layer)
-                model[i] = self.convert_module_list(layer)
-                continue
-            if isinstance(layer, Module) and not any(
-                (
-                    isinstance(layer, replacement_class)
-                    for replacement_class in self.conversion_dict.keys()
-                    if not (
-                        self.is_function(replacement_class)
-                        or isinstance(replacement_class, partial)
-                    )
+    def convert(self, model):
+        if isinstance(model, Iterable):
+            if isinstance(model, tuple):
+                model = list(model)
+            return self._convert_module_list(model)
+        if isinstance(model, Module) and not any(
+            (
+                isinstance(model, replacement_class)
+                for replacement_class in self.conversion_dict.keys()
+                if not (
+                    _is_function(replacement_class)
+                    or isinstance(replacement_class, partial)
                 )
-            ):
-                for attr_name, attr_value in layer.__dict__.items():
-                    new_layer = None
-                    if isinstance(attr_value, Module) or callable(attr_value):
-                        new_layer = self._replace_layer(attr_value)
-                    elif isinstance(attr_value, Iterable):
-                        if isinstance(attr_value, tuple):
-                            attr_value = list(attr_value)
-                        new_layer = self.convert_module_list(attr_value)
-                    if new_layer is not None:
-                        setattr(layer, attr_name, new_layer)
-                continue
-            new_layer = self._replace_layer(layer)
+            )
+        ):
+            for attr_name, attr_value in model.__dict__.items():
+                new_layer = None
+                if isinstance(attr_value, Module):
+                    new_layer = self.convert(attr_value)
+                elif isinstance(attr_value, Iterable):
+                    if isinstance(attr_value, tuple):
+                        attr_value = list(attr_value)
+                    new_layer = self.convert(attr_value)
+                elif callable(attr_value):
+                    new_layer = self._replace_layer(attr_value)
+                if new_layer is not None:
+                    setattr(model, attr_name, new_layer)
+            return model
+        new_layer = self._replace_layer(model)
+        if new_layer is None:
+            return model
+        return new_layer
+
+    def _convert_module_list(self, model):
+        for i, layer in enumerate(model):
+            new_layer = self.convert(layer)
+            # new_layer = self._replace_layer(layer)
             if new_layer is not None:
                 model[i] = new_layer
         return model
 
-    def is_function(self, class_in_question):
-        return isinstance(
-            class_in_question,
-            (types.FunctionType, types.BuiltinFunctionType, CompiledFunction),
-        )
-
     def _replace_layer(self, layer):
         for old_layer, new_layer in self.conversion_dict.items():
-            if (callable(layer) or self.is_function(layer)) and layer == old_layer:
-                if issubclass(new_layer, Module):
+            if (callable(layer) or _is_function(layer)) and layer == old_layer:
+                if not _is_function(new_layer) and issubclass(new_layer, Module):
                     new_layer = new_layer()
                 return new_layer
             elif (
-                # not self.is_function(new_layer) and
+                # not is_function(new_layer) and
                 isinstance(layer, partial)
                 and layer.func == old_layer
             ):
@@ -168,24 +177,31 @@ class ComplexModelConverter:
                     return new_layer
                 return (
                     new_layer(*layer.args, **kwargs)
-                    if not self.is_function(new_layer) and issubclass(new_layer, Module)
+                    if not _is_function(new_layer) and issubclass(new_layer, Module)
                     else partial(new_layer, *layer.args, **kwargs)
                 )
-            elif not self.is_function(old_layer) and isinstance(layer, old_layer):
+            elif not _is_function(old_layer) and isinstance(layer, old_layer):
                 args = find_args(layer)
                 signature_attrs = signature(new_layer).parameters.keys()
-                args = {k: v for k, v in args.items() if k in signature_attrs}
+                args = {
+                    k: v
+                    for k, v in args.items()
+                    if k in signature_attrs
+                    if not k in ["w_init"]
+                }
                 return new_layer(**args)
         warn(f"No replacement for {layer}")
         return None
 
     def __call__(self, model) -> Module:
-        return self.convert_module_list(model)
+        return self.convert(model)
 
 
 # if __name__ == "__main__":
 #     import numpy as np
 #     from dptraining.models import resnet_v2
+#     from objax.nn import Sequential
+#     from jax import numpy as jnp
 
 #     m = resnet_v2.ResNet18(3, 2)
 #     # m = vgg.VGG19(pretrained=False)
@@ -194,3 +210,7 @@ class ComplexModelConverter:
 #     print(m2)
 #     data = np.random.randn(10, 3, 224, 224) + 1j * np.random.randn(10, 3, 224, 224)
 #     m2(data, training=False)
+
+#     m3 = Sequential([m2, jnp.abs])
+#     out = m3(data, training=False)
+#     assert jnp.all(jnp.isreal(out))

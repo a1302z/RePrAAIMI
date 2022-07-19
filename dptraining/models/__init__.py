@@ -21,13 +21,14 @@ from dptraining.models.complex.layers import (
     ComplexConv2D,
     ComplexWSConv2D,
     ComplexLinear,
+    ComplexToReal,
 )
 from dptraining.models.complex.pooling import ConjugateMaxPool2D, SeparableMaxPool2D
-from dptraining.models import resnet_v2
+from dptraining.models import resnet_v2, wide_resnet
 from dptraining.models.complex.converter import ComplexModelConverter
 
 
-SUPPORTED_MODELS = ("cifar10model", "resnet18", "resnet9", "smoothnet")
+SUPPORTED_MODELS = ("cifar10model", "resnet18", "resnet9", "smoothnet", "wide_resnet")
 SUPPORTED_NORMALIZATION = ("bn", "gn")
 SUPPORTED_ACTIVATION = ("relu", "selu", "leakyrelu", "mish")
 SUPPORTED_POOLING = ("maxpool", "avgpool")
@@ -154,6 +155,12 @@ def make_normal_model_from_config(config: dict) -> Callable:
                 normalization_fn=make_normalization_from_config(config),
                 activation_fn=make_activation_from_config(config),
             )
+        case "wide_resnet":
+            return wide_resnet.WideResNet(
+                config["model"]["in_channels"],
+                config["model"]["num_classes"],
+                bn=make_normalization_from_config(config),
+            )
         case "resnet9":
             return ResNet9(
                 config["model"]["in_channels"],
@@ -195,7 +202,7 @@ def make_complex_model_from_config(config: dict) -> Callable:
                     size=2,
                 ),
                 linear_cls=ComplexLinear,
-                out_func=jnp.abs,
+                out_func=ComplexToReal(),
                 scale_norm=config["model"]["scale_norm"]
                 if "scale_norm" in config["model"]
                 else False,
@@ -214,7 +221,7 @@ def make_complex_model_from_config(config: dict) -> Callable:
                     padding=1,
                 ),
                 linear_cls=ComplexLinear,
-                out_func=jnp.abs,
+                out_func=ComplexToReal(),
             )
         case _ as fail:
             raise ValueError(
@@ -229,7 +236,9 @@ def make_model_from_config(config: dict) -> Callable:
         elif config["model"]["name"] in SUPPORTED_MODELS:
             model = make_normal_model_from_config(config)
             converter = ComplexModelConverter()
-            model = nn.Sequential([converter(model), jnp.abs])
+            model = nn.Sequential([converter(model), ComplexToReal()])
+        else:
+            raise ValueError(f"{config['model']['name']} unknown")
     else:
         model = make_normal_model_from_config(config)
     return model

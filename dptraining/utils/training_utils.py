@@ -7,7 +7,7 @@ import numpy as np
 import objax
 import sys
 
-from jax import numpy as jn, profiler
+from jax import numpy as jn
 from pathlib import Path
 from sklearn import metrics
 from tqdm import tqdm
@@ -56,9 +56,15 @@ def create_train_op(  # pylint:disable=too-many-arguments
 
         if parallel:
             calc_grads = objax.Parallel(
-                calc_grads, reduce=lambda x: x[0], vc=train_vars,
+                calc_grads,
+                reduce=lambda x: x[0],
+                vc=train_vars,
             )
-            apply_grads = objax.Parallel(apply_grads, reduce=np.sum, vc=train_vars,)
+            apply_grads = objax.Parallel(
+                apply_grads,
+                reduce=np.sum,
+                vc=train_vars,
+            )
         else:
             # pass
             calc_grads = objax.Jit(calc_grads)
@@ -79,7 +85,9 @@ def create_train_op(  # pylint:disable=too-many-arguments
 
         @objax.Function.with_vars(train_vars)
         def train_op(
-            image_batch, label_batch, learning_rate,
+            image_batch,
+            label_batch,
+            learning_rate,
         ):
             # assert image_batch.shape[0] == effective_batch_size
             image_batch = augment_op(image_batch)
@@ -102,10 +110,10 @@ def create_train_op(  # pylint:disable=too-many-arguments
             opt(learning_rate, grads)
             return loss, grads
 
-        # if parallel:
-        #     train_op = objax.Parallel(train_op, reduce=np.mean, vc=train_vars)
-        # else:
-        #     train_op = objax.Jit(train_op, static_argnums=(3,))
+        if parallel:
+            train_op = objax.Parallel(train_op, reduce=np.mean, vc=train_vars)
+        else:
+            train_op = objax.Jit(train_op, static_argnums=(3,))
 
     return train_op
 
@@ -150,39 +158,46 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
         if "overfit" in config["hyperparams"]
         else len(train_loader) + 1
     )
-    for i, (img, label) in tqdm(
-        enumerate(train_loader), total=max_batches, desc="Training", leave=False,
-    ):
-        with (train_vars).replicate() if parallel else contextlib.suppress():
+    pbar = tqdm(
+        enumerate(train_loader),
+        total=max_batches,
+        desc="Training",
+        leave=False,
+    )
+    with (train_vars).replicate() if parallel else contextlib.suppress():
+        for i, (img, label) in pbar:
             add_args = {}
             if grad_acc > 1:
                 add_args["apply_norm_acc"] = (i + 1) % grad_acc == 0
             train_result = train_op(img, label, np.array(learning_rate), **add_args)
             if train_result is not None:
                 train_loss, grads = train_result
+                train_loss = train_loss.item()
+                pbar.set_description(f"Train_loss: {train_loss:.2f}")
             if ema is not None and train_result is not None:
                 # with model_vars.replicate() if parallel else contextlib.suppress():
                 ema_update()
-        if config["general"]["log_wandb"] and train_result is not None:
-            log_dict = {
-                "train_loss": train_loss.item(),
-                "total_grad_norm": jn.linalg.norm(
-                    [jn.linalg.norm(g) for g in grads]
-                ).item(),
-            }
-            if ema is not None:
-                log_dict.update(
-                    {
-                        k: (jn.abs(v.value) if jn.iscomplexobj(v) else v.value)
-                        for k, v in model_vars.items()
-                    }
+            if config["general"]["log_wandb"] and train_result is not None:
+                log_dict = {
+                    "train_loss": train_loss.item(),
+                    "total_grad_norm": jn.linalg.norm(
+                        [jn.linalg.norm(g) for g in grads]
+                    ).item(),
+                }
+                if ema is not None:
+                    log_dict.update(
+                        {
+                            k: (jn.abs(v.value) if jn.iscomplexobj(v) else v.value)
+                            for k, v in model_vars.items()
+                        }
+                    )
+                wandb.log(
+                    log_dict,
+                    commit=i % 10 == 0,
                 )
-            wandb.log(
-                log_dict, commit=i % 10 == 0,
-            )
 
-        if i + 1 >= max_batches:
-            break
+            if i + 1 >= max_batches:
+                break
     return time.time() - start_time
 
 
@@ -204,7 +219,10 @@ def test(  # pylint:disable=too-many-arguments
             else len(test_loader) + 1
         )
         for i, (image, label) in tqdm(
-            enumerate(test_loader), total=max_batches, desc="Testing", leave=False,
+            enumerate(test_loader),
+            total=max_batches,
+            desc="Testing",
+            leave=False,
         ):
             image = test_aug(image)
             y_pred = predict_op(image)
