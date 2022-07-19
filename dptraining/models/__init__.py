@@ -1,7 +1,7 @@
 from typing import Callable
 import warnings
+from copy import deepcopy
 from functools import partial
-from jax import numpy as jnp
 from objax import nn, functional
 from dptraining.models.cifar10models import Cifar10ConvNet
 from dptraining.models.resnet9 import ResNet9
@@ -20,6 +20,7 @@ from dptraining.models.complex.normalization import (
 from dptraining.models.complex.layers import (
     ComplexConv2D,
     ComplexWSConv2D,
+    ComplexWSConv2DNative,
     ComplexLinear,
     ComplexToReal,
 )
@@ -34,7 +35,7 @@ SUPPORTED_ACTIVATION = ("relu", "selu", "leakyrelu", "mish")
 SUPPORTED_POOLING = ("maxpool", "avgpool")
 
 SUPPORTED_COMPLEX_MODELS = ("resnet9", "smoothnet")
-SUPPORTED_COMPLEX_CONV = ("conv", "convws")
+SUPPORTED_COMPLEX_CONV = ("conv", "convws", "convwsjax")
 SUPPORTED_COMPLEX_NORMALIZATION = ("gnw",)
 SUPPORTED_COMPLEX_ACTIVATION = ("mish", "sepmish", "conjmish", "igaussian", "cardioid")
 SUPPORTED_COMPLEX_POOLING = ("conjmaxpool", "sepmaxpool", "avgpool")
@@ -70,6 +71,8 @@ def make_complex_conv_from_config(config: dict) -> Callable:
             return ComplexConv2D
         case "convws":
             return ComplexWSConv2D
+        case "convwsjax":
+            return ComplexWSConv2DNative
         case _ as fail:
             raise ValueError(
                 f"Unsupported convolutional layer '{fail}'. "
@@ -93,23 +96,26 @@ def make_activation_from_config(config: dict) -> Callable:
             )
 
 
-def make_complex_activation_from_config(config: dict) -> Callable:
+def make_complex_activation_from_config(config: dict, init_layers: bool) -> Callable:
     match config["model"]["activation"]:
         case "mish":
-            return ComplexMish()
+            act = ComplexMish
         case "sepmish":
-            return SeparableMish()
+            act = SeparableMish
         case "conjmish":
-            return ConjugateMish()
+            act = ConjugateMish
         case "igaussian":
-            return IGaussian()
+            act = IGaussian
         case "cardioid":
-            return Cardioid()
+            act = Cardioid
         case _ as fail:
             raise ValueError(
                 f"Unsupported activation layer '{fail}'. "
                 f"Legal options are: {SUPPORTED_COMPLEX_NORMALIZATION}"
             )
+    if init_layers:
+        return act()
+    return act
 
 
 def make_pooling_from_config(config: dict) -> Callable:
@@ -125,19 +131,27 @@ def make_pooling_from_config(config: dict) -> Callable:
             )
 
 
-def make_complex_pooling_from_config(config: dict, size, **kwargs) -> Callable:
+def make_complex_pooling_from_config(
+    config: dict, init_layers: bool, **kwargs
+) -> Callable:
     match config["model"]["pooling"]:
         case "conjmaxpool":
-            return ConjugateMaxPool2D(size=size, **kwargs)
+            layer = ConjugateMaxPool2D
         case "sepmaxpool":
-            return SeparableMaxPool2D(size=size, **kwargs)
+            layer = SeparableMaxPool2D
         case "avgpool":
-            return partial(functional.average_pool_2d, size=size, **kwargs)
+            if len(kwargs) == 0:
+                return functional.average_pool_2d
+            return partial(functional.average_pool_2d, **kwargs)
         case _ as fail:
             raise ValueError(
                 f"Unsupported pooling layer '{fail}'. "
                 f"Legal options are: {SUPPORTED_COMPLEX_POOLING}"
             )
+    if init_layers:
+        return layer(**kwargs)
+    else:
+        return layer
 
 
 def make_normal_model_from_config(config: dict) -> Callable:
@@ -196,9 +210,10 @@ def make_complex_model_from_config(config: dict) -> Callable:
                 config["model"]["num_classes"],
                 conv_cls=make_complex_conv_from_config(config),
                 norm_cls=make_complex_normalization_from_config(config),
-                act_func=make_complex_activation_from_config(config),
+                act_func=make_complex_activation_from_config(config, init_layers=True),
                 pool_func=make_complex_pooling_from_config(
                     config,
+                    init_layers=True,
                     size=2,
                 ),
                 linear_cls=ComplexLinear,
@@ -213,9 +228,10 @@ def make_complex_model_from_config(config: dict) -> Callable:
                 num_classes=config["model"]["num_classes"],
                 conv_cls=make_complex_conv_from_config(config),
                 norm_cls=make_complex_normalization_from_config(config),
-                act_func=make_complex_activation_from_config(config),
+                act_func=make_complex_activation_from_config(config, init_layers=True),
                 pool_func=make_complex_pooling_from_config(
                     config,
+                    init_layers=True,
                     size=3,
                     strides=1,
                     padding=1,
@@ -234,8 +250,25 @@ def make_model_from_config(config: dict) -> Callable:
         if config["model"]["name"] in SUPPORTED_COMPLEX_MODELS:
             model = make_complex_model_from_config(config)
         elif config["model"]["name"] in SUPPORTED_MODELS:
-            model = make_normal_model_from_config(config)
-            converter = ComplexModelConverter()
+            fake_config = deepcopy(config)
+            fake_config["model"].update(
+                {
+                    "conv": "conv",
+                    "normalization": "gn",
+                    "activation": "relu",
+                    "pooling": "avgpool",
+                }
+            )
+            model = make_normal_model_from_config(fake_config)
+            converter = ComplexModelConverter(
+                new_conv_class=make_complex_conv_from_config(config),
+                new_norm_class=make_complex_normalization_from_config(config),
+                new_linear_class=ComplexLinear,
+                new_activation=make_complex_activation_from_config(
+                    config, init_layers=False
+                ),
+                new_pooling=make_complex_pooling_from_config(config, init_layers=False),
+            )
             model = nn.Sequential([converter(model), ComplexToReal()])
         else:
             raise ValueError(f"{config['model']['name']} unknown")

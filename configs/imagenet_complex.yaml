@@ -51,19 +51,19 @@ model:
   name: resnet18
   in_channels: 3
   num_classes: 1000
-  conv: conv
-  activation: relu
-  normalization: gn
+  conv: convws
+  activation: conjmish
+  normalization: gnw
   pooling: avgpool
   scale_norm: True
 optim:
-  name: adam
+  name: nadam
 ema:
   use_ema: False
   decay: 0.999
 hyperparams:
   epochs: 10
-  batch_size: 64
+  batch_size: 512
   batch_size_test: 128
   lr: 2e-3
   # momentum: 0.9

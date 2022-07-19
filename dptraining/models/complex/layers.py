@@ -135,6 +135,21 @@ class ComplexWSConv2D(ComplexConv2D):
         )
 
 
+class ComplexWSConv2DNative(ComplexConv2D):
+    def __call__(self, x):
+        weight_r, weight_i = complex_ws(self.convr.w.value, self.convi.w.value)
+        weight = weight_r + 1j * weight_i
+        return conv_general_dilated(
+            lhs=x,
+            rhs=weight,
+            window_strides=self.convr.strides,
+            padding=self.convr.padding,
+            rhs_dilation=self.convr.dilations,
+            feature_group_count=self.convr.groups,
+            dimension_numbers=("NCHW", "HWIO", "NCHW"),
+        )
+
+
 class ComplexLinear(Module):
     def __init__(
         self,

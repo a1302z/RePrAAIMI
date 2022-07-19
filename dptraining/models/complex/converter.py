@@ -1,6 +1,6 @@
 import types
 from inspect import signature
-from typing import Union, Callable
+from typing import Tuple, Union, Callable
 from functools import partial
 from collections.abc import Iterable
 from jaxlib.xla_extension import CompiledFunction  # pylint:disable=no-name-in-module
@@ -102,18 +102,29 @@ def _is_function(class_in_question):
 class ComplexModelConverter:
     def __init__(
         self,
-        conversion_dict: dict[list[Union[Callable, Module]], Module] = {
-            **{conv_class: ComplexWSConv2D for conv_class in DEFAULT_CONV_CLASSES},
-            **{
-                norm_class: ComplexGroupNorm2DWhitening
-                for norm_class in DEFAULT_NORM_CLASSES
-            },
-            **{linear_class: ComplexLinear for linear_class in DEFAULT_LINEAR_CLASSES},
-            **{activation: ConjugateMish for activation in DEFAULT_ACTIVATIONS},
-            **{pooling: average_pool_2d for pooling in DEFAULT_POOLING},
-        },
+        new_conv_class: Union[Module, Callable] = ComplexWSConv2D,
+        new_norm_class: Union[Module, Callable] = ComplexGroupNorm2DWhitening,
+        new_linear_class: Union[Module, Callable] = ComplexLinear,
+        new_activation: Union[Module, Callable] = ConjugateMish,
+        new_pooling: Union[Module, Callable] = average_pool_2d,
+        conv_classes_to_replace: Tuple[Union[Module, Callable]] = DEFAULT_CONV_CLASSES,
+        norm_classes_to_replace: Tuple[Union[Module, Callable]] = DEFAULT_NORM_CLASSES,
+        linear_classes_to_replace: Tuple[
+            Union[Module, Callable]
+        ] = DEFAULT_LINEAR_CLASSES,
+        activations_to_replace: Tuple[Union[Module, Callable]] = DEFAULT_ACTIVATIONS,
+        poolings_to_replace: Tuple[Union[Module, Callable]] = DEFAULT_POOLING,
     ) -> None:
-        self.conversion_dict = conversion_dict
+        self.conversion_dict: dict[list[Union[Callable, Module]], Module] = {
+            **{conv_class: new_conv_class for conv_class in conv_classes_to_replace},
+            **{norm_class: new_norm_class for norm_class in norm_classes_to_replace},
+            **{
+                linear_class: new_linear_class
+                for linear_class in linear_classes_to_replace
+            },
+            **{activation: new_activation for activation in activations_to_replace},
+            **{pooling: new_pooling for pooling in poolings_to_replace},
+        }
 
     def convert(self, model):
         if isinstance(model, Iterable):

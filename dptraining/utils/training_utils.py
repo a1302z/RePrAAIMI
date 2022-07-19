@@ -179,7 +179,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                 ema_update()
             if config["general"]["log_wandb"] and train_result is not None:
                 log_dict = {
-                    "train_loss": train_loss.item(),
+                    "train_loss": train_loss,
                     "total_grad_norm": jn.linalg.norm(
                         [jn.linalg.norm(g) for g in grads]
                     ).item(),

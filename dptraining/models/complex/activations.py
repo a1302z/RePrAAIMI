@@ -2,6 +2,7 @@ from objax.typing import JaxArray
 from objax import Module
 from jax import numpy as jn
 from dptraining.models.activations import mish
+from warnings import warn
 
 
 class IGaussian(Module):
@@ -11,7 +12,7 @@ class IGaussian(Module):
 
     def __call__(self, x: JaxArray) -> JaxArray:
         norm_sq = x * jn.conj(x)
-        grad = 1 - jn.exp(-norm_sq / (2 * self.sigma ** 2))
+        grad = 1 - jn.exp(-norm_sq / (2 * self.sigma**2))
         arg = jn.angle(x)
         norm = jn.exp(1j * arg)
         return grad.real * norm
@@ -19,6 +20,12 @@ class IGaussian(Module):
 
 class ComplexMish(Module):
     """Apply Mish directly to the complex number. Not kind to phase."""
+
+    def __init__(self) -> None:
+        warn(
+            "Be careful when using mish for complex networks as it "
+            "often leads to NaN. Consider using ConjugateMish."
+        )
 
     def __call__(self, x: JaxArray) -> JaxArray:
         return mish(x)
