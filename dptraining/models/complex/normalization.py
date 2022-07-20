@@ -59,8 +59,8 @@ class ComplexGroupNormWhitening(Module):
         self.gamma_r = TrainVar(jn.full(var_shape, functional.rsqrt(2.0)))
         self.gamma_i = TrainVar(jn.full(var_shape, functional.rsqrt(2.0)))
         # The beta is initialised as zero
-        self.beta_r = TrainVar(jn.zeros(var_shape) + 1j * jn.zeros(var_shape))
-        self.beta_i = TrainVar(jn.zeros(var_shape) + 1j * jn.zeros(var_shape))
+        self.beta_r = TrainVar(jn.zeros(var_shape))
+        self.beta_i = TrainVar(jn.zeros(var_shape))
 
     def __call__(self, x: JaxArray, training: bool = True) -> JaxArray:
         """Returns the results of applying group normalization to input x."""
@@ -129,7 +129,7 @@ class ComplexBatchNorm2D(Module):
         self.running_mean = StateVar(jn.zeros((2, 1, self.nin, 1, 1)))
         self.running_var = StateVar(jn.ones((3, self.nin)))
 
-        self.gamma = TrainVar(jn.ones((2, 1, self.nin, 1, 1)))
+        self.gamma = TrainVar(jn.full((2, 1, self.nin, 1, 1), functional.rsqrt(2.0)))
         self.beta = TrainVar(jn.zeros((2, 1, self.nin, 1, 1)))
 
     def __call__(self, x: JaxArray, training: bool) -> JaxArray:
