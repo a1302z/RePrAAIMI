@@ -27,7 +27,7 @@ def _whiten_one(vec: JaxArray):
     return (result[0] + result[1] * 1j).reshape(vec.shape)
 
 
-# Since in the GroupNorm function the ijnut will be (N,G,C,H,W), we vmap once over G
+# Since in the GroupNorm function the input will be (N,G,C,H,W), we vmap once over G
 # and once over N since we want to compute the whitening over every group and every
 # sample individually
 _whiten_batch = vmap(vmap(_whiten_one))
@@ -39,8 +39,8 @@ class ComplexGroupNormWhitening(Module):
     def __init__(self, nin: int, rank: int, groups: int = 32, eps: float = 1e-5):
         """Creates a GroupNorm module instance.
         Args:
-            nin: number of ijnut channels.
-            rank: rank of the ijnut tensor.
+            nin: number of input channels.
+            rank: rank of the input tensor.
             groups: number of normalization groups.
             eps: small value which is used for numerical stability.
         """
@@ -63,7 +63,7 @@ class ComplexGroupNormWhitening(Module):
         self.beta_i = TrainVar(jn.zeros(var_shape) + 1j * jn.zeros(var_shape))
 
     def __call__(self, x: JaxArray, training: bool = True) -> JaxArray:
-        """Returns the results of applying group normalization to ijnut x."""
+        """Returns the results of applying group normalization to input x."""
         del training
         group_shape = (-1, self.groups, self.nin // self.groups) + x.shape[2:]
         x = x.reshape(group_shape)
@@ -89,12 +89,12 @@ class ComplexGroupNormWhitening(Module):
 
 
 class ComplexGroupNorm2DWhitening(ComplexGroupNormWhitening):
-    """Applies a 2D group normalization on a ijnut batch of shape (N,C,H,W)."""
+    """Applies a 2D group normalization on a input batch of shape (N,C,H,W)."""
 
     def __init__(self, nin: int, groups: int = 32, eps: float = 1e-5):
         """Creates a GroupNorm2D module instance.
         Args:
-            nin: number of ijnut channels.
+            nin: number of input channels.
             groups: number of normalization groups.
             eps: small value which is used for numerical stability.
         """
