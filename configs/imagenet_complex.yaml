@@ -1,4 +1,4 @@
-project: imagenet-dp
+project: imagenet-complex
 general:
   log_wandb: False
   parallel: False
@@ -22,7 +22,7 @@ test_transforms:
 loader:
   collate_fn: numpy
   num_workers: 16
-  prefetch_factor: 8
+  prefetch_factor: 32
   pin_memory: True
 augmentations:
   normalize_np_img:
@@ -34,10 +34,7 @@ augmentations:
         - 0.229
         - 0.224
         - 0.225 
-  random_vertical_flips:
-      flip_prob: 0.5
-  random_horizontal_flips:
-      flip_prob: 0.5
+  make_complex_both:
 test_augmentations:
   normalize_np_img:
       mean:
@@ -48,27 +45,37 @@ test_augmentations:
         - 0.229
         - 0.224
         - 0.225 
-optim:
-  name: nadam
+  make_complex_both:
 model:
+  complex: True
   name: resnet18
   in_channels: 3
   num_classes: 1000
-  normalization: gn
-  activation: selu
+  conv: convws
+  activation: conjmish
+  normalization: gnw
+  pooling: avgpool
+  scale_norm: True
+optim:
+  name: nadam
+ema:
+  use_ema: False
+  decay: 0.999
 hyperparams:
-  epochs: 3
+  epochs: 10
   batch_size: 512
-  batch_size_test: 256
-  optim: Adam
-  lr: 1e-3
-  momentum: 0.9
+  batch_size_test: 128
+  lr: 2e-3
+  # momentum: 0.9
 scheduler:
-  type: cosine
-  normalize_lr: True
+  type: reduceonplateau
+  normalize_lr: False
+  patience: 20
+  min_delta: 0.01
+  factor: 0.5
+# earlystopping:
+#   mode: maximize
+#   patience: 100
+#   min_delta: 0.01
 DP:
-  disable_dp: False
-  epsilon: 10
-  max_per_sample_grad_norm: 1.0
-  delta: 1e-5
-  norm_acc: False
+  disable_dp: True

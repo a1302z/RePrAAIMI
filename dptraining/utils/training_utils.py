@@ -56,9 +56,15 @@ def create_train_op(  # pylint:disable=too-many-arguments
 
         if parallel:
             calc_grads = objax.Parallel(
-                calc_grads, reduce=lambda x: x[0], vc=train_vars,
+                calc_grads,
+                reduce=lambda x: x[0],
+                vc=train_vars,
             )
-            apply_grads = objax.Parallel(apply_grads, reduce=np.sum, vc=train_vars,)
+            apply_grads = objax.Parallel(
+                apply_grads,
+                reduce=np.sum,
+                vc=train_vars,
+            )
         else:
             # pass
             calc_grads = objax.Jit(calc_grads)
@@ -79,9 +85,11 @@ def create_train_op(  # pylint:disable=too-many-arguments
 
         @objax.Function.with_vars(train_vars)
         def train_op(
-            image_batch, label_batch, learning_rate,
+            image_batch,
+            label_batch,
+            learning_rate,
         ):
-            assert image_batch.shape[0] == effective_batch_size
+            # assert image_batch.shape[0] == effective_batch_size
             image_batch = augment_op(image_batch)
             grads, loss = grad_calc(image_batch, label_batch)
             if parallel:
@@ -150,40 +158,46 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
         if "overfit" in config["hyperparams"]
         else len(train_loader) + 1
     )
-    for i, (img, label) in tqdm(
-        enumerate(train_loader), total=len(train_loader), desc="Training", leave=False,
-    ):
-        with (train_vars).replicate() if parallel else contextlib.suppress():
+    pbar = tqdm(
+        enumerate(train_loader),
+        total=max_batches,
+        desc="Training",
+        leave=False,
+    )
+    with (train_vars).replicate() if parallel else contextlib.suppress():
+        for i, (img, label) in pbar:
             add_args = {}
             if grad_acc > 1:
                 add_args["apply_norm_acc"] = (i + 1) % grad_acc == 0
             train_result = train_op(img, label, np.array(learning_rate), **add_args)
             if train_result is not None:
                 train_loss, grads = train_result
-        if ema is not None and train_result is not None:
-            with model_vars.replicate() if parallel else contextlib.suppress():
+                train_loss = train_loss.item()
+                pbar.set_description(f"Train_loss: {train_loss:.2f}")
+            if ema is not None and train_result is not None:
+                # with model_vars.replicate() if parallel else contextlib.suppress():
                 ema_update()
-        if config["general"]["log_wandb"] and train_result is not None:
-            wandb.log(
-                {
-                    "train_loss": train_loss.item(),
+            if config["general"]["log_wandb"] and train_result is not None:
+                log_dict = {
+                    "train_loss": train_loss,
                     "total_grad_norm": jn.linalg.norm(
                         [jn.linalg.norm(g) for g in grads]
                     ).item(),
-                },
-                commit=False,
-            )
-            if ema is not None:
+                }
+                if ema is not None:
+                    log_dict.update(
+                        {
+                            k: (jn.abs(v.value) if jn.iscomplexobj(v) else v.value)
+                            for k, v in model_vars.items()
+                        }
+                    )
                 wandb.log(
-                    {
-                        k: (jn.abs(v.value) if jn.iscomplexobj(v) else v.value)
-                        for k, v in model_vars.items()
-                    },
-                    commit=False,
+                    log_dict,
+                    commit=i % 10 == 0,
                 )
 
-        if i > max_batches:
-            break
+            if i + 1 >= max_batches:
+                break
     return time.time() - start_time
 
 
@@ -205,13 +219,16 @@ def test(  # pylint:disable=too-many-arguments
             else len(test_loader) + 1
         )
         for i, (image, label) in tqdm(
-            enumerate(test_loader), total=len(test_loader), desc="Testing", leave=False,
+            enumerate(test_loader),
+            total=max_batches,
+            desc="Testing",
+            leave=False,
         ):
             image = test_aug(image)
             y_pred = predict_op(image)
             correct.append(label)
             predicted.append(y_pred)
-            if i > max_batches:
+            if i + 1 >= max_batches:
                 break
     correct = np.concatenate(correct)
     predicted = np.concatenate(predicted).argmax(axis=1)

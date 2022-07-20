@@ -15,8 +15,7 @@ dependencies:
   - pylint
   - pip
   - pip: 
-    - hydra-core
+    - hydra-core==1.2.0
     - tqdm 
     - perflint
     - pytest-profiling
-    - objax
