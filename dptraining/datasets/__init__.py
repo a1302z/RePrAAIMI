@@ -72,8 +72,8 @@ def make_loader_from_config(config):
         train_loader_kwargs = deepcopy(loader_kwargs)
         test_loader_kwargs = deepcopy(loader_kwargs)
     if config["DP"]["disable_dp"]:
-        train_loader_kwargs["batch_size"]: config["hyperparams"]["batch_size"]
-        train_loader_kwargs["shuffle"]: not (
+        train_loader_kwargs["batch_size"] = config["hyperparams"]["batch_size"]
+        train_loader_kwargs["shuffle"] = not (
             "overfit" in config["hyperparams"]
             and isinstance(config["hyperparams"]["overfit"], int)
         )
