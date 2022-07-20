@@ -36,6 +36,7 @@ def test_cifar10_from_config():
             "hyperparams": {"batch_size": 4, "batch_size_test": 1},
             "dataset": {"name": "cifar10", "root": "./data"},
             "loader": {},
+            "DP": {"disable_dp": False},
         }
     )
     access_dataloader(train_dl, test_dl)
@@ -58,6 +59,7 @@ def test_imagenet_from_config():
             },
             "augmentations": {"random_vertical_flips": {"flip_prob": 0.5}},
             "loader": {},
+            "DP": {"disable_dp": False},
         }
     )
     access_dataloader(train_dl, test_dl)

@@ -8,6 +8,7 @@ dataset:
 loader: 
   num_workers: 16
   prefetch_factor: 16
+  collate_fn: numpy
 augmentations:
   # make_complex_both:
 test_augmentations:

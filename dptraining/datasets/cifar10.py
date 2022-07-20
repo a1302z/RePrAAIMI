@@ -4,7 +4,6 @@ from torchvision.datasets import CIFAR10
 from torch.utils.data import Dataset, DataLoader
 
 from dptraining.datasets.base_creator import DataLoaderCreator
-from dptraining.datasets.utils import collate_np_arrays
 
 
 class NumpyCIFAR10(CIFAR10):
@@ -70,13 +69,7 @@ class CIFAR10Creator(DataLoaderCreator):
         train_kwargs,
         test_args,
         test_kwargs,
-        numpy_collate=True,
     ) -> Tuple[DataLoader, DataLoader]:
-        if numpy_collate:
-            if not "collate_fn" in train_kwargs:
-                train_kwargs["collate_fn"] = collate_np_arrays
-            if not "collate_fn" in test_kwargs:
-                test_kwargs["collate_fn"] = collate_np_arrays
         train_dl = DataLoader(train_ds, *train_args, **train_kwargs)
         test_dl = DataLoader(test_ds, *test_args, **test_kwargs)
         return train_dl, test_dl

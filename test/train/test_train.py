@@ -13,7 +13,7 @@ def test_train_cifar_one_batch():
     config = {
         "project": "test",
         "general": {"log_wandb": False, "cpu": True},
-        "loader": {"num_workers": 2},
+        "loader": {"num_workers": 2, "collate_fn": "numpy"},
         "model": {"name": "cifar10model", "num_classes": 10},
         "augmentations": {
             "random_vertical_flips": None,
