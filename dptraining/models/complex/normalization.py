@@ -188,7 +188,11 @@ from objax.variable import TrainVar, StateVar
 #         return f"{class_name(self)}(nin={self.beta.value.shape[1]}, momentum={self.momentum}, eps={self.eps})"
 
 
-class ComplexGroupNorm2DWhitening(Module):
+class ComplexGroupNormWhitening:
+    pass
+
+
+class ComplexGroupNorm2DWhitening(Module, ComplexGroupNormWhitening):
     def __init__(self, nin: int, groups: int, eps: float = 1e-5) -> None:
         assert nin % groups == 0, "in_channels must be divisible by groups"
         self.in_channels = nin
