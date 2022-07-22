@@ -67,7 +67,13 @@ class ComplexGroupNormWhitening(Module):
         group_shape = (-1, self.groups, self.nin // self.groups) + x.shape[2:]
         x = x.reshape(group_shape)
         x = _whiten_batch(x)
-        x = x.reshape((-1, self.nin,) + group_shape[3:])
+        x = x.reshape(
+            (
+                -1,
+                self.nin,
+            )
+            + group_shape[3:]
+        )
         gamma = self.gamma_r.value + 1j * self.gamma_i.value
         beta = self.beta_r.value + 1j * self.beta_i.value
         x = x * gamma + beta

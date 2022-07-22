@@ -73,10 +73,11 @@ def main(
             settings=wandb.Settings(start_method="thread"),
             reinit=True,
         )
-    train_loader, test_loader = make_loader_from_config(config)
+    train_loader, val_loader, test_loader = make_loader_from_config(config)
     if "overfit" in config["hyperparams"] and isinstance(
         config["hyperparams"]["overfit"], int
     ):
+        val_loader = train_loader
         test_loader = train_loader
     model: Callable = make_model_from_config(config)
     model_vars = model.vars()
@@ -145,6 +146,7 @@ def main(
 
         print(
             f"This training will lead to a final epsilon of {final_epsilon:.2f}"
+            f" for {config['hyperparams']['epochs']} epochs"
             f" at a noise multiplier of {sigma:.2f} and a delta of {delta:2f}"
         )
 
@@ -207,7 +209,9 @@ def main(
         else:
             print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
         epoch_time.append(cur_epoch_time)
-        metric = test(config, test_loader, predict_op, test_aug, model_vars, parallel)
+        metric = test(
+            config, val_loader, predict_op, test_aug, model_vars, parallel, "val"
+        )
         scheduler.update_score(metric)
         if not config["DP"]["disable_dp"]:
             epsilon = objax.privacy.dpsgd.analyze_dp(
@@ -224,6 +228,9 @@ def main(
             print("Early Stopping was activated -> Stopping Training")
             break
 
+    metric = test(
+        config, test_loader, predict_op, test_aug, model_vars, parallel, "test"
+    )
     if config["general"]["log_wandb"]:
         run.finish()
     else:

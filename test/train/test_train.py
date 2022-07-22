@@ -20,7 +20,7 @@ def test_train_cifar_one_batch():
             "random_horizontal_flips": None,
             "random_img_shift": {"img_shape": (3, 32, 32)},
         },
-        "dataset": {"name": "CIFAR10", "root": "./data"},
+        "dataset": {"name": "CIFAR10", "root": "./data", "train_val_split": 0.9},
         "optim": {"name": "momentum", "momentum": 0.5},
         "hyperparams": {
             "epochs": 1,
