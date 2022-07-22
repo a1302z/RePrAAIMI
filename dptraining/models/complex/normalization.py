@@ -78,15 +78,84 @@ class ComplexGroupNorm2DWhitening(ComplexGroupNormWhitening):
 # Batch Norm
 
 
-def compute_whitening_matrix_single(
-    sigma: JaxArray,
-) -> JaxArray:
-    u_mat, lmbda, _ = jn.linalg.svd(sigma, full_matrices=False)
-    w_mat = jn.dot(u_mat, jn.dot(jn.diag(1.0 / jn.sqrt(lmbda + 1e-5)), u_mat.T))
-    return w_mat
+def _whiten2x2(
+    tensor,
+    training=True,
+    running_mean=None,
+    running_cov=None,
+    momentum=0.1,
+):
+    tail = 1, tensor.shape[2], *([1] * (tensor.ndim - 3))
+    axes = 1, *range(3, tensor.ndim)
+    if training:
+        mean = tensor.mean(axis=axes)
+        if running_mean is not None:
+            running_mean += momentum * (mean - running_mean)
+    else:
+        mean = running_mean
+    tensor = tensor - mean.reshape(2, *tail)
+    if training:
+        var = tensor.var(axis=axes) + 1e-5
+        cov_uu, cov_vv = var[0], var[1]
+        cov_vu = cov_uv = (tensor[0] * tensor[1]).mean([a - 1 for a in axes])
+        if running_cov is not None:
+            cov = jn.stack(
+                [
+                    cov_uu,
+                    cov_uv,
+                    cov_vu,
+                    cov_vv,
+                ],
+                axis=0,
+            ).reshape(2, 2, -1)
+            running_cov += momentum * (cov - running_cov)
+    else:
+        cov_uu, cov_uv = running_cov[0, 0], running_cov[0, 1]
+        cov_vu, cov_vv = running_cov[1, 0], running_cov[1, 1]
+    sqrdet = jn.sqrt(cov_uu * cov_vv - cov_uv * cov_vu)
+    denom = sqrdet * jn.sqrt(cov_uu + 2 * sqrdet + cov_vv)
+    p, q = (cov_vv + sqrdet) / denom, -cov_uv / denom
+    r, s = -cov_vu / denom, (cov_uu + sqrdet) / denom
+    out = jn.stack(
+        [
+            tensor[0] * p.reshape(tail) + tensor[1] * r.reshape(tail),
+            tensor[0] * q.reshape(tail) + tensor[1] * s.reshape(tail),
+        ],
+        axis=0,
+    )
+    return out
 
 
-compute_whitening_matrix = vmap(compute_whitening_matrix_single)
+def batch_norm(
+    input,
+    running_mean,
+    running_var,
+    weight=None,
+    bias=None,
+    training=False,
+    momentum=0.1,
+):
+    x = jn.stack([input.real, input.imag], axis=0)
+    z = _whiten2x2(
+        x,
+        training=training,
+        running_mean=running_mean,
+        running_cov=running_var,
+        momentum=momentum,
+    )
+
+    if weight is not None and bias is not None:
+        shape = 1, x.shape[2], *([1] * (x.ndim - 3))
+        weight = weight.reshape(2, 2, *shape)
+        z = jn.stack(
+            [
+                z[0] * weight[0, 0] + z[1] * weight[0, 1],
+                z[0] * weight[1, 0] + z[1] * weight[1, 1],
+            ],
+            axis=0,
+        ) + bias.reshape(2, *shape)
+
+    return z[0] + 1j * z[1]
 
 
 class ComplexBatchNorm2D(Module):
@@ -97,7 +166,7 @@ class ComplexBatchNorm2D(Module):
     https://github.com/ivannz/cplxmodule/blob/master/cplxmodule/nn/modules/batchnorm.py
     """
 
-    def __init__(self, nin: int, momentum: float = 0.999, eps: float = 1e-6):
+    def __init__(self, nin: int, momentum: float = 0.1, eps: float = 1e-6):
         """Creates a BatchNorm2D module instance.
         Args:
             nin: number of channels in the input example.
@@ -109,10 +178,8 @@ class ComplexBatchNorm2D(Module):
         self.nin = nin
         self.momentum = momentum
 
-        self.running_mean = StateVar(jn.zeros((nin, 2)))  # (n_channels, 2)
-        self.running_var = StateVar(
-            jn.tile(jn.eye(2), (nin, 1, 1))
-        )  # (n_channels, 2, 2)
+        self.running_mean = StateVar(jn.zeros((2, nin)))
+        self.running_var = StateVar(jn.tile(jn.eye(2), (nin, 1, 1)).reshape(2, 2, nin))
 
         self.bias = TrainVar(jn.zeros((nin, 2, 1)))  # (n_channels, 2, 1)
         gamma_rr = gamma_ii = functional.rsqrt(2.0)
@@ -122,29 +189,26 @@ class ComplexBatchNorm2D(Module):
         self.weight = TrainVar(weight)  # (n_channels, 2, 2)
 
     def __call__(self, x: JaxArray, training: bool | None = True) -> JaxArray:
-        N, C, H, W = x.shape
-        x = jn.swapaxes(x, 0, 1)  # channels first
-        split = jn.stack((x.real, x.imag)).reshape(C, 2, -1)
         if training:
-            mean = split.mean(axis=-1)  # C, 2
-            sigma = (split @ split.transpose(0, 2, 1)) * (1 / (N * H * W))  # C, 2, 2
-            w_mat = compute_whitening_matrix(sigma)  # C, 2, 2
-
-            self.running_mean.value += (1 - self.momentum) * (
-                mean - self.running_mean.value
-            )
-            self.running_var.value += (1 - self.momentum) * (
-                sigma - self.running_var.value
+            return batch_norm(
+                x,
+                running_mean=self.running_mean.value,
+                running_var=self.running_var.value,
+                weight=self.weight.value,
+                bias=self.bias.value,
+                training=True,
+                momentum=self.momentum,
             )
         else:
-            mean, sigma = self.running_mean.value, self.running_var.value
-            w_mat = compute_whitening_matrix(sigma)
-
-        centered = split - mean.reshape(C, 2, 1)
-        y = jn.matmul(w_mat, centered)
-        y = self.weight.value @ y + self.bias.value
-        out = (y[:, 0, :] + 1j * y[:, 1, :]).reshape(N, C, H, W)
-        return out
+            return batch_norm(
+                x,
+                running_mean=self.running_mean.value,
+                running_var=self.running_var.value,
+                weight=self.weight.value,
+                bias=self.bias.value,
+                training=True,
+                momentum=self.momentum,
+            )
 
     def __repr__(self) -> str:
         return f"{class_name(self)}(nin={self.nin}, momentum={self.momentum})"
