@@ -80,8 +80,6 @@ class ComplexGroupNorm2DWhitening(ComplexGroupNormWhitening):
 
 def bn_single(
     vec: JaxArray,
-    weight: JaxArray,
-    bias: JaxArray,
     mean: JaxArray | None = None,
     sigma: JaxArray | None = None,
 ) -> tuple[JaxArray, JaxArray, JaxArray]:
@@ -89,9 +87,7 @@ def bn_single(
     1. computes the mean if it's not provided
     2. computes the covariance matrix if it's not provided
     3. centers and whitens the vector
-    4. applies the affine parameters weight and bias which are
-    assumed to be (2,2) and (2,) matrices, respectively
-    5. returns the mean and covariance matrix
+    4. returns the normalized vector and the running statistics
 
     This method is optimised for batch norm where it is supposed to
     be vmapped over the channel dimensions. For this, first move the
@@ -108,8 +104,8 @@ def bn_single(
         sigma = jn.cov(split[0], split[1])
     u_mat, lmbda, _ = jn.linalg.svd(sigma, full_matrices=False)
     w_mat = jn.dot(u_mat, jn.dot(jn.diag(1.0 / jn.sqrt(lmbda + 1e-5)), u_mat.T))
-    result = (weight @ w_mat) @ centered + bias.reshape(2, 1)
-    return (result[0] + 1j * result[1]).reshape(vec.shape), mean, sigma
+    result = w_mat @ centered
+    return result, mean, sigma
 
 
 batch_normalize = vmap(bn_single)
@@ -140,7 +136,7 @@ class ComplexBatchNorm2D(Module):
             jn.tile(jn.eye(2), (nin, 1, 1))
         )  # (n_channels, 2, 2)
 
-        self.bias = TrainVar(jn.zeros((nin, 2)))  # (n_channels, 2)
+        self.bias = TrainVar(jn.zeros((nin, 2, 1)))  # (n_channels, 2, 1)
         gamma_rr = gamma_ii = functional.rsqrt(2.0)
         gamma_ri = 0.0
         weight = jn.array([[gamma_rr, gamma_ri], [gamma_ri, gamma_ii]])
@@ -148,23 +144,23 @@ class ComplexBatchNorm2D(Module):
         self.weight = TrainVar(weight)  # (n_channels, 2, 2)
 
     def __call__(self, x: JaxArray, training: bool | None = True) -> JaxArray:
+        in_shape = x.shape
         x = jn.swapaxes(x, 0, 1)  # channels first
         if training:
-            y, mean, sigma = batch_normalize(
-                x, weight=self.weight, bias=self.bias, mean=None, sigma=None
-            )
+            y, mean, sigma = batch_normalize(x)
             self.running_mean.value += (1 - self.momentum) * (
                 mean - self.running_mean.value
             )
             self.running_var.value += (1 - self.momentum) * (
                 sigma - self.running_var.value
             )
+
         else:
             mean, sigma = self.running_mean.value, self.running_var.value
-            y, *_ = batch_normalize(
-                x, weight=self.weight, bias=self.bias, mean=mean, sigma=sigma
-            )
-        return jn.swapaxes(y, 1, 0)
+            y, *_ = batch_normalize(x, mean, sigma)
+        y = self.weight @ y + self.bias
+        out = (y[:, 0, :] + 1j * y[:, 1, :]).reshape(in_shape)
+        return out
 
     def __repr__(self) -> str:
         return f"{class_name(self)}(nin={self.nin}, momentum={self.momentum})"
