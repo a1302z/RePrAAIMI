@@ -11,7 +11,7 @@ from objax.nn import Conv2D, Linear
 from objax.nn.init import kaiming_normal, xavier_normal
 from objax.typing import ConvPaddingInt, JaxArray
 from objax.util import class_name
-
+from objax.functional import rsqrt
 
 # Helper
 def conjugate_apply(f_real, f_imag, inp):
@@ -97,6 +97,9 @@ def complex_ws(w_real: JaxArray, w_imag: JaxArray) -> tuple[JaxArray, ...]:
         w_mat = jnp.matmul(
             u_mat, jnp.matmul(jnp.diag(1.0 / jnp.sqrt(lmbda + 1e-5)), u_mat.T)
         )
+        # adjust whitening matrix so that outputs have unit variance
+        inv_sqrt = rsqrt(2.0) * jnp.eye(2)
+        w_mat = w_mat @ inv_sqrt
         # multiply centered weights with whitening matrix
         return jnp.matmul(w_mat, centered)
 
