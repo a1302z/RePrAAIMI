@@ -77,8 +77,6 @@ class ComplexGroupNorm2DWhitening(ComplexGroupNormWhitening):
 
 
 # Batch Norm
-
-
 class ComplexBatchNorm2D(Module):
     """Applies a batch normalization on different ranks of an input tensor.
     The module follows the operation described in Algorithm 1 of
@@ -101,8 +99,7 @@ class ComplexBatchNorm2D(Module):
 
         self.running_mean = StateVar(jn.zeros((2, nin)))
         running_var = onp.zeros((2, 2, nin))
-        running_var[0, 0] = 1.0
-        running_var[1, 1] = 1.0
+        running_var[0, 0] = running_var[1, 1] = functional.rsqrt(2.0)
         self.running_var = StateVar(jn.array(running_var))
 
         self.bias = TrainVar(jn.zeros((nin, 2, 1)))  # (n_channels, 2, 1)
