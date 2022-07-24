@@ -78,38 +78,59 @@ class ComplexConv2D(Module):
         return f"{class_name(self)}({args})"
 
 
-def complex_ws(w_real: JaxArray, w_imag: JaxArray) -> tuple[JaxArray, ...]:
-    # each weight has shape H,W,I,O
-    # permute to O,I,H,W, then stack to O,2,I,H,W
-    stacked = jnp.stack(
-        [w_real.transpose(3, 2, 0, 1), w_imag.transpose(3, 2, 0, 1)], axis=1
-    )
-    # subtract mean for I,H,W axes
-    centered = stacked - stacked.mean(axis=(2, 3, 4), keepdims=True)
-    centered = centered.reshape(centered.shape[0], 2, -1)
-    # vmap the following computations over the O axis:
-    def whitening_matrix(centered):
-        # calculate covariance between real and imag
-        sigma = jnp.cov(centered)
-        # Compute inverse square root of covariance matrix
-        u_mat, lmbda, _ = jnp.linalg.svd(sigma, full_matrices=False)
-        # compute whitening matrix
-        w_mat = jnp.matmul(
-            u_mat, jnp.matmul(jnp.diag(1.0 / jnp.sqrt(lmbda + 1e-5)), u_mat.T)
-        )
-        # adjust whitening matrix so that outputs have unit variance
-        inv_sqrt = rsqrt(2.0) * jnp.eye(2)
-        w_mat = w_mat @ inv_sqrt
-        # multiply centered weights with whitening matrix
-        return jnp.matmul(w_mat, centered)
+# def complex_ws(w_real: JaxArray, w_imag: JaxArray) -> tuple[JaxArray, ...]:
+#     # each weight has shape H,W,I,O
+#     # permute to O,I,H,W, then stack to O,2,I,H,W
+#     stacked = jnp.stack(
+#         [w_real.transpose(3, 2, 0, 1), w_imag.transpose(3, 2, 0, 1)], axis=1
+#     )
+#     # subtract mean for I,H,W axes
+#     centered = stacked - stacked.mean(axis=(2, 3, 4), keepdims=True)
+#     centered = centered.reshape(centered.shape[0], 2, -1)
+#     # vmap the following computations over the O axis:
+#     def whitening_matrix(centered):
+#         # calculate covariance between real and imag
+#         sigma = jnp.cov(centered)
+#         # Compute inverse square root of covariance matrix
+#         u_mat, lmbda, _ = jnp.linalg.svd(sigma, full_matrices=False)
+#         # compute whitening matrix
+#         w_mat = jnp.matmul(
+#             u_mat, jnp.matmul(jnp.diag(1.0 / jnp.sqrt(lmbda + 1e-5)), u_mat.T)
+#         )
+#         # adjust whitening matrix so that outputs have unit variance
+#         inv_sqrt = rsqrt(2.0) * jnp.eye(2)
+#         w_mat = w_mat @ inv_sqrt
+#         # multiply centered weights with whitening matrix
+#         return jnp.matmul(w_mat, centered)
 
-    whitened = vmap(whitening_matrix)(centered)
-    res_r, res_i = whitened[:, 0, :], whitened[:, 1, :]
-    # reshape back to original shape
-    return (
-        res_r.transpose(1, 0).reshape(w_real.shape),
-        res_i.transpose(1, 0).reshape(w_imag.shape),
-    )
+#     whitened = vmap(whitening_matrix)(centered)
+#     res_r, res_i = whitened[:, 0, :], whitened[:, 1, :]
+#     # reshape back to original shape
+#     return (
+#         res_r.transpose(1, 0).reshape(w_real.shape),
+#         res_i.transpose(1, 0).reshape(w_imag.shape),
+#     )
+
+
+rsqrt2 = rsqrt(2.0)  # define to avoid two function evaluations later
+
+
+def complex_ws(w_real: JaxArray, w_imag: JaxArray) -> tuple[JaxArray]:
+    O = w_real.shape[-1]
+    x = jnp.stack((w_real, w_imag))  # 2, H, W, I, O
+    mean = x.mean(axis=(1, 2, 3), keepdims=True)  # 2, 1, 1, 1, O
+    x = x - mean  # 2, H, W, I, O
+    var = x.var(axis=(1, 2, 3)) + 1e-5  # 2, O
+    cov_uu, cov_vv = var[0], var[1]  # O,
+    cov_vu = cov_uv = (x[0] * x[1]).mean(axis=(0, 1, 2))  # O
+    sqrdet = jnp.sqrt(cov_uu * cov_vv - cov_uv * cov_vu)
+    denom = sqrdet * jnp.sqrt(cov_uu + 2 * sqrdet + cov_vv)
+    p, q = (cov_vv + sqrdet) / denom, -cov_uv / denom  # O
+    r, s = -cov_vu / denom, (cov_uu + sqrdet) / denom  # O
+    tail = 1, 1, 1, O
+    ret_r = x[0] * p.reshape(tail) + x[1] * r.reshape(tail)
+    ret_i = x[0] * q.reshape(tail) + x[1] * s.reshape(tail)
+    return ret_r * rsqrt2, ret_i * rsqrt2
 
 
 class ComplexWSConv2D(ComplexConv2D):
@@ -176,3 +197,14 @@ class ComplexToReal(Module):
     def __call__(self, x):
         return jnp.abs(x)
         # return jnp.sqrt(jnp.square(x.real) + jnp.square(x.imag))
+
+
+# fast implementations
+# def fast_conv(inp, weight_r, weight_i, stride=(1,1), padding="same", dilation=(1,1)):
+#     n_out = weight_r.shape[-1]
+#     ww = jnp.concatenate((weight_r, weight_i), axis=-1)
+#     wr = conv_general_dilated(inp.real, ww, window_strides=stride, padding=padding, rhs_dilation=dilation, dimension_numbers=("NCHW", "HWIO", "NCHW"))
+#     wi = conv_general_dilated(inp.imag, ww, window_strides=stride, padding=padding, rhs_dilation=dilation, dimension_numbers=("NCHW", "HWIO", "NCHW"))
+#     rwr, iwr = wr[:, :n_out], wr[:, n_out:]
+#     rwi, iwi = wi[:, :n_out], wi[:, n_out:]
+#     return (rwr-iwi) + 1j* (iwr+rwi)
