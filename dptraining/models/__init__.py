@@ -16,13 +16,14 @@ from dptraining.models.complex.activations import (
 )
 from dptraining.models.complex.normalization import (
     ComplexGroupNorm2DWhitening,
+    ComplexBatchNorm2D,
 )  # pylint:disable=duplicate-code
 from dptraining.models.complex.layers import (
     ComplexConv2D,
     ComplexWSConv2D,
-    ComplexWSConv2DNative,
     ComplexLinear,
     ComplexToReal,
+    ComplexWSConv2DNoWhiten,
 )
 from dptraining.models.complex.pooling import ConjugateMaxPool2D, SeparableMaxPool2D
 from dptraining.models import resnet_v2, wide_resnet
@@ -35,8 +36,8 @@ SUPPORTED_ACTIVATION = ("relu", "selu", "leakyrelu", "mish")
 SUPPORTED_POOLING = ("maxpool", "avgpool")
 
 SUPPORTED_COMPLEX_MODELS = ("resnet9", "smoothnet")
-SUPPORTED_COMPLEX_CONV = ("conv", "convws", "convwsjax")
-SUPPORTED_COMPLEX_NORMALIZATION = ("gnw",)
+SUPPORTED_COMPLEX_CONV = ("conv", "convws", "convws_nw")
+SUPPORTED_COMPLEX_NORMALIZATION = ("gnw", "bn")
 SUPPORTED_COMPLEX_ACTIVATION = ("mish", "sepmish", "conjmish", "igaussian", "cardioid")
 SUPPORTED_COMPLEX_POOLING = ("conjmaxpool", "sepmaxpool", "avgpool")
 
@@ -58,6 +59,8 @@ def make_complex_normalization_from_config(config: dict) -> Callable:
     match config["model"]["normalization"]:
         case "gnw":
             return ComplexGroupNorm2DWhitening
+        case "bn":
+            return ComplexBatchNorm2D
         case _ as fail:
             raise ValueError(
                 f"Unsupported normalization layer '{fail}'. "
@@ -71,8 +74,8 @@ def make_complex_conv_from_config(config: dict) -> Callable:
             return ComplexConv2D
         case "convws":
             return ComplexWSConv2D
-        case "convwsjax":
-            return ComplexWSConv2DNative
+        case "convws_nw":
+            return ComplexWSConv2DNoWhiten
         case _ as fail:
             raise ValueError(
                 f"Unsupported convolutional layer '{fail}'. "
