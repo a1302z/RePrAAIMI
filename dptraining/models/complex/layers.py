@@ -4,9 +4,9 @@ from warnings import warn
 
 from jax import numpy as jnp
 from jax.lax import conv_general_dilated
-from objax import Module
+from objax import Module, TrainVar
 from objax.constants import ConvPadding
-from objax.nn import Conv2D, Linear
+from objax.nn import Conv2D
 from objax.nn.init import kaiming_normal, xavier_normal
 from objax.typing import ConvPaddingInt, JaxArray
 from objax.util import class_name
@@ -133,27 +133,35 @@ class ComplexWSConv2D(ComplexConv2D):
 class ComplexWSConv2DNoWhiten(ComplexConv2D):
     def __call__(self, x: JaxArray) -> JaxArray:
         weight_r, weight_i = complex_ws_nowhiten(self.convr.w.value, self.convi.w.value)
-        return conjugate_apply(
-            partial(
-                conv_general_dilated,
-                rhs=weight_r,
-                window_strides=self.convr.strides,
-                padding=self.convr.padding,
-                rhs_dilation=self.convr.dilations,
-                feature_group_count=self.convr.groups,
-                dimension_numbers=("NCHW", "HWIO", "NCHW"),
-            ),
-            partial(
-                conv_general_dilated,
-                rhs=weight_i,
-                window_strides=self.convi.strides,
-                padding=self.convi.padding,
-                rhs_dilation=self.convi.dilations,
-                feature_group_count=self.convi.groups,
-                dimension_numbers=("NCHW", "HWIO", "NCHW"),
-            ),
+        return fast_conv(
             x,
+            weight_r,
+            weight_i,
+            stride=self.convr.strides,
+            padding=self.convr.padding,
+            dilation=self.convr.dilations,
         )
+        # return conjugate_apply(
+        #     partial(
+        #         conv_general_dilated,
+        #         rhs=weight_r,
+        #         window_strides=self.convr.strides,
+        #         padding=self.convr.padding,
+        #         rhs_dilation=self.convr.dilations,
+        #         feature_group_count=self.convr.groups,
+        #         dimension_numbers=("NCHW", "HWIO", "NCHW"),
+        #     ),
+        #     partial(
+        #         conv_general_dilated,
+        #         rhs=weight_i,
+        #         window_strides=self.convi.strides,
+        #         padding=self.convi.padding,
+        #         rhs_dilation=self.convi.dilations,
+        #         feature_group_count=self.convi.groups,
+        #         dimension_numbers=("NCHW", "HWIO", "NCHW"),
+        #     ),
+        #     x,
+        # )
 
 
 class ComplexLinear(Module):
@@ -165,11 +173,15 @@ class ComplexLinear(Module):
         w_init: Callable = xavier_normal,
     ) -> None:
         super().__init__()
-        self.linr = Linear(nin=nin, nout=nout, use_bias=use_bias, w_init=w_init)
-        self.lini = Linear(nin=nin, nout=nout, use_bias=use_bias, w_init=w_init)
+        del use_bias
+        # self.linr = Linear(nin=nin, nout=nout, use_bias=use_bias, w_init=w_init)
+        # self.lini = Linear(nin=nin, nout=nout, use_bias=use_bias, w_init=w_init)
+        self.linr = TrainVar(w_init((nin, nout)))
+        self.lini = TrainVar(w_init((nin, nout)))
 
     def __call__(self, x: JaxArray) -> JaxArray:
-        return conjugate_apply(self.linr, self.lini, x)
+        return linear_3m(x, self.linr, self.lini)
+        # return conjugate_apply(self.linr, self.lini, x)
 
 
 class ComplexToReal(Module):
