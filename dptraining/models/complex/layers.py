@@ -78,44 +78,10 @@ class ComplexConv2D(Module):
         return f"{class_name(self)}({args})"
 
 
-# def complex_ws(w_real: JaxArray, w_imag: JaxArray) -> tuple[JaxArray, ...]:
-#     # each weight has shape H,W,I,O
-#     # permute to O,I,H,W, then stack to O,2,I,H,W
-#     stacked = jnp.stack(
-#         [w_real.transpose(3, 2, 0, 1), w_imag.transpose(3, 2, 0, 1)], axis=1
-#     )
-#     # subtract mean for I,H,W axes
-#     centered = stacked - stacked.mean(axis=(2, 3, 4), keepdims=True)
-#     centered = centered.reshape(centered.shape[0], 2, -1)
-#     # vmap the following computations over the O axis:
-#     def whitening_matrix(centered):
-#         # calculate covariance between real and imag
-#         sigma = jnp.cov(centered)
-#         # Compute inverse square root of covariance matrix
-#         u_mat, lmbda, _ = jnp.linalg.svd(sigma, full_matrices=False)
-#         # compute whitening matrix
-#         w_mat = jnp.matmul(
-#             u_mat, jnp.matmul(jnp.diag(1.0 / jnp.sqrt(lmbda + 1e-5)), u_mat.T)
-#         )
-#         # adjust whitening matrix so that outputs have unit variance
-#         inv_sqrt = rsqrt(2.0) * jnp.eye(2)
-#         w_mat = w_mat @ inv_sqrt
-#         # multiply centered weights with whitening matrix
-#         return jnp.matmul(w_mat, centered)
-
-#     whitened = vmap(whitening_matrix)(centered)
-#     res_r, res_i = whitened[:, 0, :], whitened[:, 1, :]
-#     # reshape back to original shape
-#     return (
-#         res_r.transpose(1, 0).reshape(w_real.shape),
-#         res_i.transpose(1, 0).reshape(w_imag.shape),
-#     )
-
-
 rsqrt2 = rsqrt(2.0)  # define to avoid two function evaluations later
 
 
-def complex_ws(w_real: JaxArray, w_imag: JaxArray) -> tuple[JaxArray]:
+def complex_ws_whiten(w_real: JaxArray, w_imag: JaxArray) -> tuple[JaxArray]:
     O = w_real.shape[-1]
     x = jnp.stack((w_real, w_imag))  # 2, H, W, I, O
     mean = x.mean(axis=(1, 2, 3), keepdims=True)  # 2, 1, 1, 1, O
@@ -133,9 +99,15 @@ def complex_ws(w_real: JaxArray, w_imag: JaxArray) -> tuple[JaxArray]:
     return ret_r * rsqrt2, ret_i * rsqrt2
 
 
+def complex_ws_nowhiten(w_real, w_imag):
+    w_real_n = w_real - w_real.mean(axis=(0, 1, 2), keepdims=True)
+    w_imag_n = w_imag - w_imag.mean(axis=(0, 1, 2), keepdims=True)
+    return w_real_n, w_imag_n
+
+
 class ComplexWSConv2D(ComplexConv2D):
     def __call__(self, x: JaxArray) -> JaxArray:
-        weight_r, weight_i = complex_ws(self.convr.w.value, self.convi.w.value)
+        weight_r, weight_i = complex_ws_whiten(self.convr.w.value, self.convi.w.value)
         return conjugate_apply(
             partial(
                 conv_general_dilated,
@@ -159,18 +131,29 @@ class ComplexWSConv2D(ComplexConv2D):
         )
 
 
-class ComplexWSConv2DNative(ComplexConv2D):
-    def __call__(self, x):
-        weight_r, weight_i = complex_ws(self.convr.w.value, self.convi.w.value)
-        weight = weight_r + 1j * weight_i
-        return conv_general_dilated(
-            lhs=x,
-            rhs=weight,
-            window_strides=self.convr.strides,
-            padding=self.convr.padding,
-            rhs_dilation=self.convr.dilations,
-            feature_group_count=self.convr.groups,
-            dimension_numbers=("NCHW", "HWIO", "NCHW"),
+class ComplexWSConv2DNoWhiten(ComplexConv2D):
+    def __call__(self, x: JaxArray) -> JaxArray:
+        weight_r, weight_i = complex_ws_nowhiten(self.convr.w.value, self.convi.w.value)
+        return conjugate_apply(
+            partial(
+                conv_general_dilated,
+                rhs=weight_r,
+                window_strides=self.convr.strides,
+                padding=self.convr.padding,
+                rhs_dilation=self.convr.dilations,
+                feature_group_count=self.convr.groups,
+                dimension_numbers=("NCHW", "HWIO", "NCHW"),
+            ),
+            partial(
+                conv_general_dilated,
+                rhs=weight_i,
+                window_strides=self.convi.strides,
+                padding=self.convi.padding,
+                rhs_dilation=self.convi.dilations,
+                feature_group_count=self.convi.groups,
+                dimension_numbers=("NCHW", "HWIO", "NCHW"),
+            ),
+            x,
         )
 
 
@@ -208,3 +191,12 @@ class ComplexToReal(Module):
 #     rwr, iwr = wr[:, :n_out], wr[:, n_out:]
 #     rwi, iwi = wi[:, :n_out], wi[:, n_out:]
 #     return (rwr-iwi) + 1j* (iwr+rwi)
+
+# def linear_3m(inp, w_real, w_imag, bias=None):
+#   K1 = (inp.real + inp.imag) @ w_real
+#   K2 = inp.real @ (w_imag - w_real)
+#   K3 = inp.imag @ (w_real + w_imag)
+#   out = (K1-K3) + 1j * (K1 + K2)
+#   if bias is not None:
+#     out += bias
+#   return out
