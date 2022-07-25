@@ -3,7 +3,6 @@ from typing import Callable
 from warnings import warn
 
 from jax import numpy as jnp
-from jax import vmap
 from jax.lax import conv_general_dilated
 from objax import Module
 from objax.constants import ConvPadding
