@@ -36,7 +36,7 @@ class ComplexGroupNorm2DWhitening(ComplexGroupNormWhitening):
         weight = onp.zeros((2, 2, 1, nin, 1, 1))  # (2, 2, 1, C, 1, 1)
         weight[0, 0] = weight[1, 1] = functional.rsqrt(2.0)
         weight[1, 0] = weight[0, 1] = 0.0
-        self.weight = TrainVar(weight)
+        self.weight = TrainVar(jn.array(weight))
 
     def __call__(self, x: JaxArray, training: Any) -> JaxArray:
         del training
