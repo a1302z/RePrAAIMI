@@ -1,4 +1,5 @@
-from jax import numpy as jn, vmap
+from abc import abstractmethod
+from jax import numpy as jn
 from objax import functional
 from objax.module import Module
 from objax.typing import JaxArray
@@ -11,7 +12,9 @@ from typing import Any
 class ComplexGroupNormWhitening(Module):
     """This exists for backwards compatibility reasons"""
 
-    pass
+    @abstractmethod
+    def __call__(self, *args, **kwargs):
+        pass
 
 
 class ComplexGroupNorm2DWhitening(ComplexGroupNormWhitening):
@@ -40,9 +43,9 @@ class ComplexGroupNorm2DWhitening(ComplexGroupNormWhitening):
 
     def __call__(self, x: JaxArray, training: Any = None) -> JaxArray:
         del training
-        N, C, H, W = x.shape
-        G = self.groups
-        x = x.reshape(N, G, C // G, H, W)  # N, G, C', H, W
+        N, C, H, W = x.shape  # pylint:disable=invalid-name
+        groups = self.groups
+        x = x.reshape(N, groups, C // groups, H, W)  # N, G, C', H, W
         x = jn.stack((x.real, x.imag), axis=0)  # 2, N, G, C', H, W
         mean = x.mean(axis=(3, 4, 5), keepdims=True)  # 2, N, G, 1, 1, 1
         x = x - mean  # 2, N, G, C', H, W
@@ -51,29 +54,29 @@ class ComplexGroupNorm2DWhitening(ComplexGroupNormWhitening):
         cov_vu = cov_uv = (x[0] * x[1]).mean(axis=(2, 3, 4))  # N,G
         sqrdet = jn.sqrt(cov_uu * cov_vv - cov_uv * cov_vu)
         denom = sqrdet * jn.sqrt(cov_uu + 2 * sqrdet + cov_vv)
-        p, q = (cov_vv + sqrdet) / denom, -cov_uv / denom
-        r, s = -cov_vu / denom, (cov_uu + sqrdet) / denom
-        tail = N, G, 1, 1, 1
-        z = jn.stack(
+        p, q = (cov_vv + sqrdet) / denom, -cov_uv / denom  # pylint:disable=invalid-name
+        r, s = -cov_vu / denom, (cov_uu + sqrdet) / denom  # pylint:disable=invalid-name
+        tail = N, groups, 1, 1, 1
+        output_array = jn.stack(
             [
                 x[0] * p.reshape(tail) + x[1] * r.reshape(tail),
                 x[0] * q.reshape(tail) + x[1] * s.reshape(tail),
             ],
             axis=0,
         )  # 2, N, G, C', H, W
-        z = z.reshape(2, N, C, H, W)  # 2, N, C, H, W
+        output_array = output_array.reshape(2, N, C, H, W)  # 2, N, C, H, W
         weight = self.weight.value  # 2, 2, 1, C, 1, 1
-        z = (
+        output_array = (
             jn.stack(
                 [
-                    z[0] * weight[0, 0] + z[1] * weight[0, 1],
-                    z[0] * weight[1, 0] + z[1] * weight[1, 1],
+                    output_array[0] * weight[0, 0] + output_array[1] * weight[0, 1],
+                    output_array[0] * weight[1, 0] + output_array[1] * weight[1, 1],
                 ],
                 axis=0,
             )
             + self.bias.value
         )  # 2, 1, C, 1, 1
-        return z[0] + 1j * z[1]
+        return output_array[0] + 1j * output_array[1]
 
     def __repr__(self) -> str:
         return f"{class_name(self)}(nin={self.nin}, groups={self.groups})"
@@ -111,22 +114,24 @@ class ComplexBatchNorm2D(Module):
         weight = jn.tile(weight, (self.nin, 1, 1))
         self.weight = TrainVar(weight)  # (n_channels, 2, 2)
 
-    def whiten2x2(self, x: JaxArray, training: bool | None) -> JaxArray:
-        tail = 1, x.shape[2], *([1] * (x.ndim - 3))
-        axes = 1, *range(3, x.ndim)
+    def whiten2x2(self, inpt_array: JaxArray, training: bool | None) -> JaxArray:
+        tail = 1, inpt_array.shape[2], *([1] * (inpt_array.ndim - 3))
+        axes = 1, *range(3, inpt_array.ndim)
         if training:
-            mean = x.mean(axis=axes)
+            mean = inpt_array.mean(axis=axes)
             self.running_mean.value = (self.momentum * mean) + (
                 1 - self.momentum
             ) * self.running_mean.value
 
         else:
             mean = self.running_mean.value
-        x = x - mean.reshape(2, *tail)
+        inpt_array = inpt_array - mean.reshape(2, *tail)
         if training:
-            var = x.var(axis=axes) + 1e-5
+            var = inpt_array.var(axis=axes) + 1e-5
             cov_uu, cov_vv = var[0], var[1]
-            cov_vu = cov_uv = (x[0] * x[1]).mean([a - 1 for a in axes])
+            cov_vu = cov_uv = (inpt_array[0] * inpt_array[1]).mean(
+                [a - 1 for a in axes]
+            )
             cov = jn.stack(
                 [
                     cov_uu,
@@ -146,30 +151,30 @@ class ComplexBatchNorm2D(Module):
             cov_uu * cov_vv - cov_uv * cov_vu
         )  # no need to check for negativity since covariance matrix is PSD
         denom = sqrdet * jn.sqrt(cov_uu + 2 * sqrdet + cov_vv)
-        p, q = (cov_vv + sqrdet) / denom, -cov_uv / denom
-        r, s = -cov_vu / denom, (cov_uu + sqrdet) / denom
+        p, q = (cov_vv + sqrdet) / denom, -cov_uv / denom  # pylint:disable=invalid-name
+        r, s = -cov_vu / denom, (cov_uu + sqrdet) / denom  # pylint:disable=invalid-name
         out = jn.stack(
             [
-                x[0] * p.reshape(tail) + x[1] * r.reshape(tail),
-                x[0] * q.reshape(tail) + x[1] * s.reshape(tail),
+                inpt_array[0] * p.reshape(tail) + inpt_array[1] * r.reshape(tail),
+                inpt_array[0] * q.reshape(tail) + inpt_array[1] * s.reshape(tail),
             ],
             axis=0,
         )
         return out
 
-    def batch_norm(self, x: JaxArray, training: bool | None) -> JaxArray:
-        x = jn.stack([x.real, x.imag], axis=0)
-        z = self.whiten2x2(x=x, training=training)
-        shape = 1, x.shape[2], *([1] * (x.ndim - 3))
+    def batch_norm(self, inpt_array: JaxArray, training: bool | None) -> JaxArray:
+        inpt_array = jn.stack([inpt_array.real, inpt_array.imag], axis=0)
+        output_array = self.whiten2x2(inpt_array=inpt_array, training=training)
+        shape = 1, inpt_array.shape[2], *([1] * (inpt_array.ndim - 3))
         weight = self.weight.value.reshape(2, 2, *shape)
-        z = jn.stack(
+        output_array = jn.stack(
             [
-                z[0] * weight[0, 0] + z[1] * weight[0, 1],
-                z[0] * weight[1, 0] + z[1] * weight[1, 1],
+                output_array[0] * weight[0, 0] + output_array[1] * weight[0, 1],
+                output_array[0] * weight[1, 0] + output_array[1] * weight[1, 1],
             ],
             axis=0,
         ) + self.bias.value.reshape(2, *shape)
-        return z[0] + 1j * z[1]
+        return output_array[0] + 1j * output_array[1]
 
     def __call__(self, x: JaxArray, training: bool | None = True) -> JaxArray:
         return self.batch_norm(x, training=training)

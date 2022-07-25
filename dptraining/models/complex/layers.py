@@ -81,20 +81,20 @@ rsqrt2 = rsqrt(2.0)  # define to avoid two function evaluations later
 
 
 def complex_ws_whiten(w_real: JaxArray, w_imag: JaxArray) -> tuple[JaxArray]:
-    O = w_real.shape[-1]
-    x = jnp.stack((w_real, w_imag))  # 2, H, W, I, O
-    mean = x.mean(axis=(1, 2, 3), keepdims=True)  # 2, 1, 1, 1, O
-    x = x - mean  # 2, H, W, I, O
-    var = x.var(axis=(1, 2, 3)) + 1e-5  # 2, O
+    out_shape = w_real.shape[-1]
+    stacked_weight = jnp.stack((w_real, w_imag))  # 2, H, W, I, O
+    mean = stacked_weight.mean(axis=(1, 2, 3), keepdims=True)  # 2, 1, 1, 1, O
+    stacked_weight = stacked_weight - mean  # 2, H, W, I, O
+    var = stacked_weight.var(axis=(1, 2, 3)) + 1e-5  # 2, O
     cov_uu, cov_vv = var[0], var[1]  # O,
-    cov_vu = cov_uv = (x[0] * x[1]).mean(axis=(0, 1, 2))  # O
+    cov_vu = cov_uv = (stacked_weight[0] * stacked_weight[1]).mean(axis=(0, 1, 2))  # O
     sqrdet = jnp.sqrt(cov_uu * cov_vv - cov_uv * cov_vu)
     denom = sqrdet * jnp.sqrt(cov_uu + 2 * sqrdet + cov_vv)
-    p, q = (cov_vv + sqrdet) / denom, -cov_uv / denom  # O
-    r, s = -cov_vu / denom, (cov_uu + sqrdet) / denom  # O
-    tail = 1, 1, 1, O
-    ret_r = x[0] * p.reshape(tail) + x[1] * r.reshape(tail)
-    ret_i = x[0] * q.reshape(tail) + x[1] * s.reshape(tail)
+    p, q = (cov_vv + sqrdet) / denom, -cov_uv / denom  # O # pylint:disable=invalid-name
+    r, s = -cov_vu / denom, (cov_uu + sqrdet) / denom  # O # pylint:disable=invalid-name
+    tail = 1, 1, 1, out_shape
+    ret_r = stacked_weight[0] * p.reshape(tail) + stacked_weight[1] * r.reshape(tail)
+    ret_i = stacked_weight[0] * q.reshape(tail) + stacked_weight[1] * s.reshape(tail)
     return ret_r * rsqrt2, ret_i * rsqrt2
 
 
@@ -182,20 +182,35 @@ class ComplexToReal(Module):
 
 
 # fast implementations
-# def fast_conv(inp, weight_r, weight_i, stride=(1,1), padding="same", dilation=(1,1)):
-#     n_out = weight_r.shape[-1]
-#     ww = jnp.concatenate((weight_r, weight_i), axis=-1)
-#     wr = conv_general_dilated(inp.real, ww, window_strides=stride, padding=padding, rhs_dilation=dilation, dimension_numbers=("NCHW", "HWIO", "NCHW"))
-#     wi = conv_general_dilated(inp.imag, ww, window_strides=stride, padding=padding, rhs_dilation=dilation, dimension_numbers=("NCHW", "HWIO", "NCHW"))
-#     rwr, iwr = wr[:, :n_out], wr[:, n_out:]
-#     rwi, iwi = wi[:, :n_out], wi[:, n_out:]
-#     return (rwr-iwi) + 1j* (iwr+rwi)
+def fast_conv(inp, weight_r, weight_i, stride=(1, 1), padding="same", dilation=(1, 1)):
+    n_out = weight_r.shape[-1]
+    concat_weights = jnp.concatenate((weight_r, weight_i), axis=-1)
+    weight_real = conv_general_dilated(
+        inp.real,
+        concat_weights,
+        window_strides=stride,
+        padding=padding,
+        rhs_dilation=dilation,
+        dimension_numbers=("NCHW", "HWIO", "NCHW"),
+    )
+    weight_imag = conv_general_dilated(
+        inp.imag,
+        concat_weights,
+        window_strides=stride,
+        padding=padding,
+        rhs_dilation=dilation,
+        dimension_numbers=("NCHW", "HWIO", "NCHW"),
+    )
+    rwr, iwr = weight_real[:, :n_out], weight_real[:, n_out:]
+    rwi, iwi = weight_imag[:, :n_out], weight_imag[:, n_out:]
+    return (rwr - iwi) + 1j * (iwr + rwi)
 
-# def linear_3m(inp, w_real, w_imag, bias=None):
-#   K1 = (inp.real + inp.imag) @ w_real
-#   K2 = inp.real @ (w_imag - w_real)
-#   K3 = inp.imag @ (w_real + w_imag)
-#   out = (K1-K3) + 1j * (K1 + K2)
-#   if bias is not None:
-#     out += bias
-#   return out
+
+def linear_3m(inp, w_real, w_imag, bias=None):
+    out1 = (inp.real + inp.imag) @ w_real
+    out2 = inp.real @ (w_imag - w_real)
+    out3 = inp.imag @ (w_real + w_imag)
+    out = (out1 - out3) + 1j * (out1 + out2)
+    if bias is not None:
+        out += bias
+    return out
