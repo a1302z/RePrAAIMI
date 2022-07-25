@@ -208,6 +208,7 @@ def test(  # pylint:disable=too-many-arguments
     test_aug,
     model_vars,
     parallel,
+    dataset_split: str,
     score_fn=metrics.accuracy_score,
 ):
     ctx_mngr = (model_vars).replicate() if parallel else contextlib.suppress()
@@ -236,12 +237,13 @@ def test(  # pylint:disable=too-many-arguments
     if config["general"]["log_wandb"]:
         wandb.log(
             {
-                "val": metrics.classification_report(
+                dataset_split: metrics.classification_report(
                     correct, predicted, output_dict=True, zero_division=0
                 )
             }
         )
     else:
+        print(f"{dataset_split} evaluation:")
         print(
             metrics.classification_report(
                 correct, predicted, output_dict=False, zero_division=0

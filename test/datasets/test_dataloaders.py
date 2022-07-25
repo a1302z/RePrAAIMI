@@ -9,43 +9,53 @@ sys.path.insert(0, str(Path.cwd()))
 from dptraining.datasets import CIFAR10Creator, make_loader_from_config
 
 
-def access_dataloader(train_dl, test_dl):
-    next(iter(train_dl))
-    next(iter(test_dl))
+def access_dataloader(*args):
+    for dl in args:
+        next(iter(dl))
 
 
 def test_cifar10():
-    train_ds, test_ds = CIFAR10Creator.make_datasets(
-        (),
-        {"root": "./data", "download": True},
-        (),
-        {"root": "./data", "download": True},
+    train_ds, val_ds, test_ds = CIFAR10Creator.make_datasets(
+        {"dataset": {"root": "./data", "download": True, "train_val_split": 0.9}},
+        (None, None, None),
     )
-    train_dl, test_dl = CIFAR10Creator.make_dataloader(
-        train_ds, test_ds, (), {"batch_size": 2}, (), {"batch_size": 1}
+    train_dl, val_dl, test_dl = CIFAR10Creator.make_dataloader(
+        train_ds,
+        val_ds,
+        test_ds,
+        {"batch_size": 2},
+        {"batch_size": 1},
+        {"batch_size": 1},
     )
     for _, _ in train_dl:
+        pass
+    for _, _ in val_dl:
         pass
     for _, _ in test_dl:
         pass
 
 
 def test_cifar10_from_config():
-    train_dl, test_dl = make_loader_from_config(
+    train_dl, val_dl, test_dl = make_loader_from_config(
         {
             "hyperparams": {"batch_size": 4, "batch_size_test": 1},
-            "dataset": {"name": "cifar10", "root": "./data"},
+            "dataset": {"name": "cifar10", "root": "./data", "train_val_split": 0.9},
             "loader": {},
+            "DP": {"disable_dp": False},
         }
     )
-    access_dataloader(train_dl, test_dl)
+    access_dataloader(train_dl, val_dl, test_dl)
 
 
 def test_imagenet_from_config():
-    train_dl, test_dl = make_loader_from_config(
+    train_dl, val_dl, test_dl = make_loader_from_config(
         {
             "hyperparams": {"batch_size": 4, "batch_size_test": 1},
-            "dataset": {"name": "imagenet", "root": "./data/ILSVRC2012"},
+            "dataset": {
+                "name": "imagenet",
+                "root": "./data/ILSVRC2012",
+                "train_val_split": 0.9,
+            },
             "train_transforms": {
                 "Resize": {"size": 224},
                 "RandomCrop": {"size": 224},
@@ -58,6 +68,7 @@ def test_imagenet_from_config():
             },
             "augmentations": {"random_vertical_flips": {"flip_prob": 0.5}},
             "loader": {},
+            "DP": {"disable_dp": False},
         }
     )
-    access_dataloader(train_dl, test_dl)
+    access_dataloader(train_dl, val_dl, test_dl)

@@ -2,12 +2,15 @@ project: cifar-DP-complex
 general:
   log_wandb: False
   parallel: False
+  eval_train: True
 dataset: 
   name: CIFAR10
   root: ./data
+  train_val_split: 0.9
 loader: 
   num_workers: 16
   prefetch_factor: 16
+  collate_fn: numpy
 augmentations:
   make_complex_both:
 test_augmentations:
@@ -17,7 +20,7 @@ model:
   name: resnet9
   in_channels: 3
   num_classes: 10
-  conv: convws
+  conv: convws_nw
   activation: conjmish
   normalization: gnw
   pooling: avgpool

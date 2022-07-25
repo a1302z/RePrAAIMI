@@ -2,9 +2,9 @@ import numpy as np
 from typing import Tuple, Any
 from torchvision.datasets import CIFAR10
 from torch.utils.data import Dataset, DataLoader
+from sklearn.model_selection import train_test_split
 
 from dptraining.datasets.base_creator import DataLoaderCreator
-from dptraining.datasets.utils import collate_np_arrays
 
 
 class NumpyCIFAR10(CIFAR10):
@@ -40,43 +40,66 @@ class CIFAR10Creator(DataLoaderCreator):
 
     @staticmethod
     def make_datasets(  # pylint:disable=too-many-arguments
-        train_args,
-        train_kwargs,
-        test_args,
-        test_kwargs,
+        config,
+        transforms: Tuple,
         numpy_optimisation=True,
         normalize_by_default=True,
     ) -> Tuple[Dataset, Dataset]:
+        train_tf, val_tf, test_tf = transforms
+        train_kwargs = {
+            "root": config["dataset"]["root"],
+            "download": True,
+            "transform": train_tf,
+            "train": True,
+        }
+        val_kwargs = {
+            "root": config["dataset"]["root"],
+            "download": True,
+            "transform": val_tf,
+            "train": True,
+        }
+        test_kwargs = {
+            "root": config["dataset"]["root"],
+            "download": True,
+            "transform": test_tf,
+            "train": False,
+        }
         if normalize_by_default and not numpy_optimisation:
             raise ValueError(
                 "CIFAR10 Creator can only normalize by default if numpy optimisation is activated"
             )
         if numpy_optimisation:
-            train_ds = NumpyCIFAR10(*train_args, **train_kwargs)
-            test_ds = NumpyCIFAR10(*test_args, **test_kwargs)
+            train_ds = NumpyCIFAR10(**train_kwargs)
+            val_ds = NumpyCIFAR10(**val_kwargs)
+            test_ds = NumpyCIFAR10(**test_kwargs)
         else:
-            train_ds = CIFAR10(*train_args, **train_kwargs)
-            test_ds = CIFAR10(*test_args, **test_kwargs)
+            train_ds = CIFAR10(**train_kwargs)
+            val_ds = CIFAR10(**val_kwargs)
+            test_ds = CIFAR10(**test_kwargs)
         if normalize_by_default:
             train_ds.data = CIFAR10Creator.normalize_images(train_ds.data)
+            val_ds.data = CIFAR10Creator.normalize_images(val_ds.data)
             test_ds.data = CIFAR10Creator.normalize_images(test_ds.data)
-        return train_ds, test_ds
+        train_val_split = config["dataset"]["train_val_split"]
+        train_data, val_data, train_targets, val_targets = train_test_split(
+            train_ds.data, train_ds.targets, train_size=train_val_split
+        )
+        train_ds.data = train_data
+        train_ds.targets = train_targets
+        val_ds.data = val_data
+        val_ds.targets = val_targets
+        return train_ds, val_ds, test_ds
 
     @staticmethod
     def make_dataloader(  # pylint:disable=too-many-arguments,duplicate-code
         train_ds: Dataset,
+        val_ds: Dataset,
         test_ds: Dataset,
-        train_args,
         train_kwargs,
-        test_args,
+        val_kwargs,
         test_kwargs,
-        numpy_collate=True,
     ) -> Tuple[DataLoader, DataLoader]:
-        if numpy_collate:
-            if not "collate_fn" in train_kwargs:
-                train_kwargs["collate_fn"] = collate_np_arrays
-            if not "collate_fn" in test_kwargs:
-                test_kwargs["collate_fn"] = collate_np_arrays
-        train_dl = DataLoader(train_ds, *train_args, **train_kwargs)
-        test_dl = DataLoader(test_ds, *test_args, **test_kwargs)
-        return train_dl, test_dl
+        train_dl = DataLoader(train_ds, **train_kwargs)
+        val_dl = DataLoader(val_ds, **val_kwargs)
+        test_dl = DataLoader(test_ds, **test_kwargs)
+        return train_dl, val_dl, test_dl

@@ -2,9 +2,11 @@ project: imagenet-complex
 general:
   log_wandb: False
   parallel: False
+  eval_train: False
 dataset: 
   name: imagenet
   root: ./data/ILSVRC2012
+  train_val_split: 0.9
 train_transforms:
   Resize: 
       size: 224
