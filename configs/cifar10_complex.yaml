@@ -2,6 +2,7 @@ project: cifar-complex
 general:
   log_wandb: False
   parallel: False
+  eval_train: True
 dataset: 
   name: CIFAR10
   root: ./data
@@ -19,9 +20,9 @@ model:
   name: resnet9
   in_channels: 3
   num_classes: 10
-  conv: convws
+  conv: convws_nw
   activation: conjmish
-  normalization: gnw
+  normalization: bn
   pooling: avgpool
   scale_norm: True
 optim:

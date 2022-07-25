@@ -2,6 +2,7 @@ project: imagenet-dp
 general:
   log_wandb: False
   parallel: False
+  eval_train: False
 dataset: 
   name: imagenet
   root: ./data/ILSVRC2012

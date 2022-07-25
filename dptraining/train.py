@@ -209,6 +209,16 @@ def main(
         else:
             print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
         epoch_time.append(cur_epoch_time)
+        if "eval_train" in config["general"] and config["general"]["eval_train"]:
+            test(
+                config,
+                train_loader,
+                predict_op,
+                test_aug,
+                model_vars,
+                parallel,
+                "train",
+            )
         metric = test(
             config, val_loader, predict_op, test_aug, model_vars, parallel, "val"
         )
