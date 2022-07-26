@@ -139,7 +139,7 @@ def main(
         final_epsilon = objax.privacy.dpsgd.analyze_dp(
             q=sampling_rate,
             noise_multiplier=sigma,
-            steps=(len(train_loader) / batch_expansion_factor)
+            steps=(len(train_loader) // batch_expansion_factor)
             * config["hyperparams"]["epochs"],
             delta=delta,
         )
@@ -149,6 +149,23 @@ def main(
             f" for {config['hyperparams']['epochs']} epochs"
             f" at a noise multiplier of {sigma:.2f} and a delta of {delta:2f}"
         )
+        max_batches = (
+            config["hyperparams"]["overfit"]
+            if "overfit" in config["hyperparams"]
+            else len(train_loader)
+        )
+        if max_batches % grad_acc != 0:
+            reduced_max_batches = max_batches - (max_batches % grad_acc)
+            assert reduced_max_batches > 0, (
+                f"The number of batches ({max_batches}) cannot be smaller "
+                f"than the number of gradient accumulation steps ({grad_acc})"
+            )
+            print(
+                f"The number of batches per epoch will be reduced to "
+                f"{reduced_max_batches} as it's the highest number of "
+                f"batches ({max_batches}) which is evenly divisble by "
+                f"the number of gradient accumulation steps ({grad_acc})"
+            )
 
     loss_class = make_loss_from_config(config)
     loss_fn = loss_class.create_loss_fn(model_vars, model)
@@ -227,7 +244,7 @@ def main(
             epsilon = objax.privacy.dpsgd.analyze_dp(
                 q=sampling_rate,
                 noise_multiplier=sigma,
-                steps=((len(train_loader) / batch_expansion_factor) * (epoch + 1)),
+                steps=((len(train_loader) // batch_expansion_factor) * (epoch + 1)),
                 delta=delta,
             )
             if config["general"]["log_wandb"]:

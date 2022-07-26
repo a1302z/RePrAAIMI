@@ -156,8 +156,18 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
     max_batches = (
         config["hyperparams"]["overfit"]
         if "overfit" in config["hyperparams"]
-        else len(train_loader) + 1
+        else len(train_loader)
     )
+    if not config["DP"]["disable_dp"] and max_batches % grad_acc != 0:
+        # here we ensure that if a train loader is not evenly divisible
+        # by the number of gradient accumulation steps we stop after
+        # the maximum amount of batches that can be accmulated
+        # otherwise the assertion fails
+        assert max_batches // grad_acc > 0, (
+            "The number of batches cannot be smaller than the number "
+            "of gradient accumulation steps"
+        )
+        max_batches = max_batches - (max_batches % grad_acc)
     pbar = tqdm(
         enumerate(train_loader),
         total=max_batches,
@@ -217,7 +227,7 @@ def test(  # pylint:disable=too-many-arguments
         max_batches = (
             config["hyperparams"]["overfit"]
             if "overfit" in config["hyperparams"]
-            else len(test_loader) + 1
+            else len(test_loader)
         )
         for i, (image, label) in tqdm(
             enumerate(test_loader),
