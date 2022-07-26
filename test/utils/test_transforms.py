@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path.cwd()))
-from dptraining.utils.augment import Transformation
+from dptraining.utils.augment import Transformation, ComplexAugmentations
 from dptraining.utils.transform import (
     RandomHorizontalFlipsJax,
     RandomVerticalFlipsJax,
@@ -116,3 +116,51 @@ def test_transpose_to_hwc_batch():
     data = np.random.randn(10, 224, 224, 3)
     out = tf(data)
     assert out.shape == (10, 3, 224, 224)
+
+
+def test_complex_aug_pre():
+    tf = Transformation.from_dict_list(
+        {
+            "random_horizontal_flips_batch": {"flip_prob": 0.5},
+            "random_vertical_flips_batch": {"flip_prob": 0.5},
+            "make_complex_both": None,
+        }
+    )
+    data = np.random.randn(10, 224, 224, 3)
+    out = tf(data)
+    assert np.allclose(out.real, out.imag)
+
+
+def test_complex_aug_same():
+    tf = Transformation.from_dict_list(
+        {
+            "make_complex_both": None,
+            "complex_augmentations": {
+                "random_horizontal_flips_batch": {"flip_prob": 1.0},
+                "random_vertical_flips_batch": {"flip_prob": 0.0},
+            },
+        }
+    )
+    data = np.random.randn(10, 224, 224, 3)
+    out = tf(data)
+    assert np.allclose(out.real, out.imag)
+
+
+def test_complex_aug_diff():
+    tf = Transformation.from_dict_list(
+        {
+            "make_complex_both": None,
+            "complex_augmentations": {
+                "random_horizontal_flips_batch": {"flip_prob": 0.5},
+                "random_vertical_flips_batch": {"flip_prob": 0.5},
+                # "random_img_shift_batch": {"max_shift": 4},
+            },
+        }
+    )
+    data = np.random.randn(10, 224, 224, 3)
+    out = tf(data)
+    assert not np.allclose(
+        out.real, out.imag
+    )  # chance that this fails although it's correct is 0.000000954
+    # -> chance that it failed once after 1000 runs is still < 1%
+    # -> chance that it failed once after 100.000 runs is < 10%

@@ -154,11 +154,11 @@ def main(
     loss_fn = loss_class.create_loss_fn(model_vars, model)
     loss_gv = create_loss_gradient(config, model, model_vars, loss_fn)
 
-    augmenter = Transformation.from_dict_list(config["augmentations"])
-    augment_op = augmenter.create_vectorized_transform()
+    augment_op = Transformation.from_dict_list(config["augmentations"])
+    # augment_op = augment_op.create_vectorized_transform()
     if "test_augmentations" in config:
-        test_augmenter = Transformation.from_dict_list(config["test_augmentations"])
-        test_aug = test_augmenter.create_vectorized_transform()
+        test_aug = Transformation.from_dict_list(config["test_augmentations"])
+        # test_aug = test_augmenter.create_vectorized_transform()
     else:
         test_aug = lambda x: x
     scheduler = make_scheduler_from_config(config)

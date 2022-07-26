@@ -1,23 +1,26 @@
+from typing import Any, Callable, Optional
+
 import objax
-from typing import Callable, Any, Optional
-from torchvision import transforms
-from omegaconf import DictConfig
-
-
 from dptraining.utils.transform import (
+    MakeComplexOnlyReal,
+    MakeComplexRealAndImaginary,
+    NormalizeJAX,
+    NormalizeJAXBatch,
     NormalizeNumpyBatch,
     NormalizeNumpyImg,
     PILToJAXNumpy,
-    NormalizeJAX,
     PILToNumpy,
-    RandomVerticalFlipsJax,
     RandomHorizontalFlipsJax,
+    RandomHorizontalFlipsJaxBatch,
     RandomImageShiftsJax,
-    MakeComplexOnlyReal,
-    MakeComplexRealAndImaginary,
+    RandomImageShiftsJaxBatch,
+    RandomVerticalFlipsJax,
+    RandomVerticalFlipsJaxBatch,
     TransposeNumpyBatchToCHW,
     TransposeNumpyImgToCHW,
 )
+from omegaconf import DictConfig
+from torchvision import transforms
 
 torchvision_transforms = {
     mn: getattr(transforms, mn)
@@ -26,20 +29,33 @@ torchvision_transforms = {
 }
 
 
+class ComplexAugmentations:
+    def __init__(self, **augmentations: dict) -> None:
+        self.aug = Transformation.from_dict_list(augmentations)
+
+    def __call__(self, data, labels=None):
+        return self.aug(data.real) + 1j * self.aug(data.imag)
+
+
 class Transformation:
     _mapping: dict[str, Callable] = {
         "random_horizontal_flips": RandomHorizontalFlipsJax,
         "random_vertical_flips": RandomVerticalFlipsJax,
         "random_img_shift": RandomImageShiftsJax,
+        "random_horizontal_flips_batch": RandomHorizontalFlipsJaxBatch,
+        "random_vertical_flips_batch": RandomVerticalFlipsJaxBatch,
+        "random_img_shift_batch": RandomImageShiftsJaxBatch,
         "pil_to_numpy": PILToNumpy,
         "normalize_np_img": NormalizeNumpyImg,
         "normalize_np_batch": NormalizeNumpyBatch,
         "pil_to_jax": PILToJAXNumpy,
         "normalize_jax": NormalizeJAX,
+        "normalize_jax_batch": NormalizeJAXBatch,
         "make_complex_real": MakeComplexOnlyReal,
         "make_complex_both": MakeComplexRealAndImaginary,
         "numpy_batch_to_chw": TransposeNumpyBatchToCHW,
         "numpy_img_to_chw": TransposeNumpyImgToCHW,
+        "complex_augmentations": ComplexAugmentations,
         **torchvision_transforms,
     }
 

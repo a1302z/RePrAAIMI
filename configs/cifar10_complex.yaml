@@ -13,6 +13,13 @@ loader:
   collate_fn: numpy
 augmentations:
   make_complex_both:
+  complex_augmentations:
+    random_horizontal_flips_batch: 
+      flip_prob: 0.25
+    random_vertical_flips_batch:
+      flip_prob: 0.25
+    random_img_shift_batch:
+      max_shift: 4
 test_augmentations:
   make_complex_both:
 model:

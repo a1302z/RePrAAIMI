@@ -16,9 +16,9 @@ def test_train_cifar_one_batch():
         "loader": {"num_workers": 2, "collate_fn": "numpy"},
         "model": {"name": "cifar10model", "num_classes": 10},
         "augmentations": {
-            "random_vertical_flips": None,
-            "random_horizontal_flips": None,
-            "random_img_shift": {"img_shape": (3, 32, 32)},
+            "random_vertical_flips_batch": None,
+            "random_horizontal_flips_batch": None,
+            "random_img_shift_batch": None,
         },
         "dataset": {"name": "CIFAR10", "root": "./data", "train_val_split": 0.9},
         "optim": {"name": "momentum", "momentum": 0.5},
