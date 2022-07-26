@@ -1,4 +1,5 @@
 from copy import deepcopy
+from warnings import warn
 
 from deepee.dataloader import UniformWORSubsampler
 
@@ -69,12 +70,14 @@ def make_loader_from_config(config):
         train_loader_kwargs = deepcopy(loader_kwargs)
         val_loader_kwargs = deepcopy(loader_kwargs)
         test_loader_kwargs = deepcopy(loader_kwargs)
-    if config["DP"]["disable_dp"]:
+    overfitting = "overfit" in config["hyperparams"] and isinstance(
+        config["hyperparams"]["overfit"], int
+    )
+    if config["DP"]["disable_dp"] or overfitting:
         train_loader_kwargs["batch_size"] = config["hyperparams"]["batch_size"]
-        train_loader_kwargs["shuffle"] = not (
-            "overfit" in config["hyperparams"]
-            and isinstance(config["hyperparams"]["overfit"], int)
-        )
+        train_loader_kwargs["shuffle"] = not overfitting
+        if overfitting and not config["DP"]["disable_dp"]:
+            warn("Due to overfitting argument we turn off correct sampling for DP")
     else:
         train_loader_kwargs["batch_sampler"] = UniformWORSubsampler(
             train_ds, config["hyperparams"]["batch_size"]
