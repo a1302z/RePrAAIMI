@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path.cwd()))
-from dptraining.utils.augment import Transformation, ComplexAugmentations
+from dptraining.utils.augment import Transformation
 from dptraining.utils.transform import (
     RandomHorizontalFlipsJax,
     RandomVerticalFlipsJax,
@@ -151,12 +151,13 @@ def test_complex_aug_diff():
         {
             "make_complex_both": None,
             "complex_augmentations": {
-                "random_horizontal_flips_batch": {"flip_prob": 0.5},
-                "random_vertical_flips_batch": {"flip_prob": 0.5},
+                "random_horizontal_flips": {"flip_prob": 0.5},
+                "random_vertical_flips": {"flip_prob": 0.5},
                 # "random_img_shift_batch": {"max_shift": 4},
             },
         }
     )
+    tf = tf.create_vectorized_transform()
     data = np.random.randn(10, 224, 224, 3)
     out = tf(data)
     assert not np.allclose(
@@ -164,3 +165,65 @@ def test_complex_aug_diff():
     )  # chance that this fails although it's correct is 0.000000954
     # -> chance that it failed once after 1000 runs is still < 1%
     # -> chance that it failed once after 100.000 runs is < 10%
+
+
+def test_multiplicity():
+    tf = Transformation.from_dict_list(
+        {
+            "make_complex_both": None,
+            "complex_augmentations": [
+                "stack_augmentations",
+                {"random_horizontal_flips": {"flip_prob": 0}},  # identity
+                {"random_horizontal_flips": {"flip_prob": 1.0}},
+                {"random_vertical_flips": {"flip_prob": 1.0}},
+                {"random_horizontal_flips": {"flip_prob": 0.5}},
+                {"random_horizontal_flips": {"flip_prob": 0.5}},
+                {"random_horizontal_flips": {"flip_prob": 0.5}},
+                {"random_vertical_flips": {"flip_prob": 0.5}},
+                {"random_vertical_flips": {"flip_prob": 0.5}},
+                {"random_vertical_flips": {"flip_prob": 0.5}},
+                {"random_img_shift": {"max_shift": 4}},
+                {"random_img_shift": {"max_shift": 4}},
+                {"random_img_shift": {"max_shift": 4}},
+                {"random_img_shift": {"max_shift": 8}},
+                {"random_img_shift": {"max_shift": 8}},
+                {"random_img_shift": {"max_shift": 8}},
+                {
+                    "complex_augmentations": {  # combined
+                        "random_horizontal_flips": {"flip_prob": 0.5},
+                        "random_vertical_flips": {"flip_prob": 0.5},
+                        "random_img_shift": {"max_shift": 4},
+                    }
+                },
+                {
+                    "complex_augmentations": {  # combined
+                        "random_horizontal_flips": {"flip_prob": 0.5},
+                        "random_vertical_flips": {"flip_prob": 0.5},
+                        "random_img_shift": {"max_shift": 6},
+                    }
+                },
+                {
+                    "complex_augmentations": {  # combined
+                        "random_horizontal_flips": {"flip_prob": 0.5},
+                        "random_vertical_flips": {"flip_prob": 0.5},
+                        "random_img_shift": {"max_shift": 8},
+                    }
+                },
+            ],
+        }
+    )
+    tf = tf.create_vectorized_transform()
+    data = np.random.randn(10, 224, 224, 3)
+    out = tf(data)
+    assert np.allclose(out[:, 0].real, data) and np.allclose(out[:, 0].imag, data)
+    assert np.allclose(out[:, 1].real, out[:, 1].imag)
+    assert np.allclose(out[:, 2].real, out[:, 2].imag)
+
+    for i in range(out.shape[1]):
+        for j in range(i + 1, out.shape[1]):
+            if jnp.allclose(out[:, j], out[:, i]):
+                raise ValueError()
+            if jnp.allclose(out[:, j].real, out[:, i].real):
+                raise ValueError()
+            if jnp.allclose(out[:, j].imag, out[:, i].imag):
+                raise ValueError()

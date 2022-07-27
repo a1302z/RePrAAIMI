@@ -1,6 +1,7 @@
 from typing import Any, Callable, Optional
 
 import objax
+from jax import numpy as jnp
 from dptraining.utils.transform import (
     MakeComplexOnlyReal,
     MakeComplexRealAndImaginary,
@@ -30,8 +31,16 @@ torchvision_transforms = {
 
 
 class ComplexAugmentations:
-    def __init__(self, **augmentations: dict) -> None:
-        self.aug = Transformation.from_dict_list(augmentations)
+    def __init__(self, *args, **kwargs) -> None:
+        transf = []
+        if len(args) > 0:
+            transf.append(Transformation.from_dict_list(*args))
+        if len(kwargs) > 0:
+            transf.append(Transformation.from_dict_list(kwargs))
+        if len(transf) > 1:
+            self.aug = Transformation(transf)
+        else:
+            self.aug = transf[0]
 
     def __call__(self, data, labels=None):
         return self.aug(data.real) + 1j * self.aug(data.imag)
@@ -59,12 +68,36 @@ class Transformation:
         **torchvision_transforms,
     }
 
-    def __init__(self, transformations: list[Callable]):
+    def __init__(
+        self, transformations: list[Callable], stack_augmentations: bool = False
+    ):
         self._transformations: list[Callable]
+        self._stack_augmentations: bool = stack_augmentations
         if all(isinstance(var, Callable) for var in transformations):
             self._transformations = transformations
         else:
             raise ValueError("Uncallable transforms")
+
+    def __len__(self):
+        return len(self._transformations)
+
+    def get_n_augmentations(self):
+        if self._stack_augmentations:
+            return len(self._transformations)
+        else:
+            return max(
+                [
+                    t.get_n_augmentations()
+                    for t in self._transformations
+                    if isinstance(t, Transformation)
+                ]
+                + [
+                    t.aug.get_n_augmentations()
+                    for t in self._transformations
+                    if isinstance(t, ComplexAugmentations)
+                ]
+                + [1]
+            )
 
     @classmethod
     def from_string_list(cls, transformations: list[str]):
@@ -85,14 +118,27 @@ class Transformation:
         return cls([Transformation._mapping[aug]() for aug in transformations])
 
     @classmethod
-    def from_dict_list(cls, transformations: Optional[dict[dict[str, Any]]]):
+    def from_dict_list(  # pylint:disable=too-many-branches
+        cls, transformations: Optional[dict[dict[str, Any]]]
+    ):
         if transformations is None:
             return cls([])
-        if not isinstance(transformations, (dict, DictConfig)):
+        stack_augmentations = False
+        if "stack_augmentations" in transformations:
+            if isinstance(transformations, dict):
+                stack_augmentations = transformations["stack_augmentations"]
+                del transformations["stack_augmentations"]
+            elif isinstance(transformations, list):
+                stack_augmentations = True
+                transformations.remove("stack_augmentations")
+        list_of_dicts = isinstance(transformations, list) and all(
+            (isinstance(t, dict) for t in transformations)
+        )
+        if not (isinstance(transformations, (dict, DictConfig)) or list_of_dicts):
             raise ValueError(
                 "Transforms with args need to be defined as dict (of dicts)"
             )
-        if not all(
+        if not list_of_dicts and not all(
             var in Transformation._mapping
             for var in transformations.keys()
             if isinstance(var, (DictConfig, dict))
@@ -106,18 +152,30 @@ class Transformation:
                 f"{u_transf} not known. "
                 f"Supported ops are: {Transformation._mapping.keys()}"
             )
+        if list_of_dicts:
+            tfs = [Transformation.from_dict_list(t) for t in transformations]
+        else:
+            tfs = []
+            for aug, kwargs in transformations.items():
+                if kwargs is not None:
+                    if isinstance(kwargs, dict):
+                        transform = Transformation._mapping[aug](**kwargs)
+                    else:
+                        transform = Transformation._mapping[aug](kwargs)
+                else:
+                    transform = Transformation._mapping[aug]()
+                tfs.append(transform)
         return cls(
-            [
-                Transformation._mapping[aug](**kwargs)
-                if kwargs is not None
-                else Transformation._mapping[aug]()
-                for aug, kwargs in transformations.items()
-            ]
+            tfs,
+            stack_augmentations,
         )
 
     def __call__(self, x):  # pylint:disable=invalid-name
-        for transf in self._transformations:
-            x = transf(x)
+        if self._stack_augmentations:
+            x = jnp.stack([t(x) for t in self._transformations], axis=0)
+        else:
+            for transf in self._transformations:
+                x = transf(x)
         return x
 
     def append_transform(self, new_transform: Callable):

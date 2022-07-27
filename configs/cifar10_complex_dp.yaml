@@ -14,12 +14,52 @@ loader:
 augmentations:
   make_complex_both:
   complex_augmentations:
-    random_horizontal_flips_batch: 
-      flip_prob: 0.1
-    random_vertical_flips_batch:
-      flip_prob: 0.1
-    random_img_shift_batch:
-      max_shift: 4
+    - stack_augmentations
+    - random_horizontal_flips: # identity
+        flip_prob: 0
+    - random_horizontal_flips: 
+        flip_prob: 1.0
+    - random_vertical_flips:
+        flip_prob: 1.0
+    - random_horizontal_flips: 
+        flip_prob: 0.5
+    - random_vertical_flips:
+        flip_prob: 0.5
+    - random_horizontal_flips: 
+        flip_prob: 0.5
+    - random_vertical_flips:
+        flip_prob: 0.5
+    - random_horizontal_flips: 
+        flip_prob: 0.5
+    - random_vertical_flips:
+        flip_prob: 0.5
+    - random_img_shift:
+        max_shift: 4
+    - random_img_shift:
+        max_shift: 6
+    - random_img_shift:
+        max_shift: 8
+    - complex_augmentations: # combined
+        random_horizontal_flips: 
+          flip_prob: 0.1
+        random_vertical_flips:
+          flip_prob: 0.1
+        random_img_shift:
+          max_shift: 4
+    - complex_augmentations: # combined
+        random_horizontal_flips: 
+          flip_prob: 0.1
+        random_vertical_flips:
+          flip_prob: 0.1
+        random_img_shift:
+          max_shift: 6
+    - complex_augmentations: # combined
+        random_horizontal_flips: 
+          flip_prob: 0.1
+        random_vertical_flips:
+          flip_prob: 0.1
+        random_img_shift:
+          max_shift: 8
 test_augmentations:
   make_complex_both:
 model:
@@ -39,7 +79,7 @@ ema:
   decay: 0.999
 hyperparams:
   epochs: 200
-  batch_size: 512
+  batch_size: 64
   batch_size_test: 512
   lr: 2e-3
   # momentum: 0.9
@@ -59,4 +99,4 @@ DP:
   max_per_sample_grad_norm: 2.0
   delta: 1e-5
   norm_acc: False
-  grad_acc_steps: 8
+  grad_acc_steps: 64

@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path.cwd()))
 from dptraining.privacy import ClipAndAccumulateGrads
 
 
-def create_train_op(  # pylint:disable=too-many-arguments
+def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
     train_vars,
     grad_calc,
     opt,
@@ -25,6 +25,7 @@ def create_train_op(  # pylint:disable=too-many-arguments
     grad_accumulation: bool,
     noise: float,
     effective_batch_size: int,
+    n_augmentations: int = 1,
     parallel=False,
 ):
     if grad_accumulation:
@@ -33,6 +34,13 @@ def create_train_op(  # pylint:disable=too-many-arguments
         @objax.Function.with_vars(train_vars)
         def calc_grads(image_batch, label_batch):
             image_batch = augment_op(image_batch)
+            if n_augmentations > 1:
+                label_batch = jn.repeat(
+                    label_batch[:, jn.newaxis], n_augmentations, axis=1
+                )
+            else:
+                image_batch = image_batch[:, jn.newaxis, ...]
+                label_batch = label_batch[:, jn.newaxis, ...]
             clipped_grad, loss_value = grad_calc.calc_per_sample_grads(
                 image_batch, label_batch
             )
@@ -91,6 +99,18 @@ def create_train_op(  # pylint:disable=too-many-arguments
         ):
             # assert image_batch.shape[0] == effective_batch_size
             image_batch = augment_op(image_batch)
+            if n_augmentations > 1:
+                label_batch = jn.repeat(
+                    label_batch[:, jn.newaxis], n_augmentations, axis=1
+                )
+                if not isinstance(grad_calc, ClipAndAccumulateGrads):
+                    ibs = image_batch.shape
+                    image_batch = image_batch.reshape(ibs[0] * ibs[1], *ibs[2:])
+                    label_batch = label_batch.flatten()
+            elif isinstance(grad_calc, ClipAndAccumulateGrads):
+                image_batch = image_batch[:, jn.newaxis, ...]
+                label_batch = label_batch[:, jn.newaxis, ...]
+
             grads, loss = grad_calc(image_batch, label_batch)
             if parallel:
                 if isinstance(grad_calc, ClipAndAccumulateGrads):

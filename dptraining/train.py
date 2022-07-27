@@ -171,11 +171,15 @@ def main(
     loss_fn = loss_class.create_loss_fn(model_vars, model)
     loss_gv = create_loss_gradient(config, model, model_vars, loss_fn)
 
-    augment_op = Transformation.from_dict_list(config["augmentations"])
+    augmenter = Transformation.from_dict_list(config["augmentations"])
+    n_augmentations = augmenter.get_n_augmentations()
+    augment_op = augmenter.create_vectorized_transform()
+    if n_augmentations > 1:
+        print(f"Augmentation multiplicity of {n_augmentations}")
     # augment_op = augment_op.create_vectorized_transform()
     if "test_augmentations" in config:
-        test_aug = Transformation.from_dict_list(config["test_augmentations"])
-        # test_aug = test_augmenter.create_vectorized_transform()
+        test_augmenter = Transformation.from_dict_list(config["test_augmentations"])
+        test_aug = test_augmenter.create_vectorized_transform()
     else:
         test_aug = lambda x: x
     scheduler = make_scheduler_from_config(config)
@@ -195,6 +199,7 @@ def main(
         grad_accumulation=grad_acc > 1,
         noise=total_noise,
         effective_batch_size=effective_batch_size,
+        n_augmentations=n_augmentations,
         parallel=parallel,
     )
 

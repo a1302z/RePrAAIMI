@@ -19,9 +19,16 @@ class ClipAndAccumulateGrads(PrivateGradValues):
         batch_axis: Tuple[Optional[int], ...] = (0,),
         use_norm_accumulation: bool = False,
         gradient_accumulation_steps: int = 1,
+        num_augmented_samples: int = 1,
     ):
         super().__init__(
-            loss_fn, variables, 0.0, l2_norm_clip, 1, batch_axis, use_norm_accumulation,
+            loss_fn,
+            variables,
+            0.0,
+            l2_norm_clip,
+            num_augmented_samples,
+            batch_axis,
+            use_norm_accumulation,
         )
         self.gradient_accumulation_steps = gradient_accumulation_steps
         self.counter = StateVar(jnp.array(0, dtype=jnp.int32))
@@ -33,9 +40,7 @@ class ClipAndAccumulateGrads(PrivateGradValues):
 
     def calc_per_sample_grads(self, *args):
         self.counter.value += 1
-        clipped_grad, loss_value = self.clipped_grad(
-            *[self.reshape_microbatch(x) for x in args]
-        )
+        clipped_grad, loss_value = self.clipped_grad(*args)
         return clipped_grad, loss_value
 
     def accumulate_grad(self, clipped_grads, loss_values):
