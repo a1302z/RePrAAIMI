@@ -97,7 +97,7 @@ class ClipAndAccumulateGrads(PrivateGradValues):
 
         def clipped_grad(*args):
             grads, loss = clipped_grad_vectorized(*args)
-            grads, loss = jax.tree_map(
+            grads, loss = jax.tree_util.tree_map(
                 functools.partial(jnp.sum, axis=0), (grads, loss)
             )
             return grads, loss
