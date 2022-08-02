@@ -194,10 +194,19 @@ class Transformation:
         self._transformations.append(new_transform)
 
     def create_vectorized_transform(self):
-        @objax.Function.with_vars(objax.random.DEFAULT_GENERATOR.vars())
-        def augment_op(x):  # pylint:disable=invalid-name
-            for transf in self._transformations:
-                x = transf(x)
-            return x
+        if self._stack_augmentations:
+
+            @objax.Function.with_vars(objax.random.DEFAULT_GENERATOR.vars())
+            def augment_op(x):  # pylint:disable=invalid-name
+                x = jnp.stack([t(x) for t in self._transformations], axis=0)
+                return x
+
+        else:
+
+            @objax.Function.with_vars(objax.random.DEFAULT_GENERATOR.vars())
+            def augment_op(x):  # pylint:disable=invalid-name
+                for transf in self._transformations:
+                    x = transf(x)
+                return x
 
         return objax.Vectorize(augment_op)

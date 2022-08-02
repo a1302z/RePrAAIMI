@@ -127,7 +127,7 @@ def test_grad_equality():
         }
     )
     data, label = setup_fake_data((10, 3, 32, 32), (10, 1))
-    mv, gv = setup_fake_training(model)
+    _, gv = setup_fake_training(model)
 
     grads1, _ = gv.calc_per_sample_grads(
         tf1(data)[:, jnp.newaxis, ...], label[:, jnp.newaxis, ...]
@@ -135,4 +135,4 @@ def test_grad_equality():
     grads2, _ = gv.calc_per_sample_grads(
         tf2(data), jnp.repeat(label[:, jnp.newaxis], 4, axis=1)
     )
-    assert all([np.allclose(g1, g2, rtol=1e-2) for g1, g2 in zip(grads1, grads2)])
+    assert all([np.allclose(g1, g2, rtol=1e-5) for g1, g2 in zip(grads1, grads2)])
