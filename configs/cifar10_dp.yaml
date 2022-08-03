@@ -2,23 +2,98 @@ project: cifar-DP
 general:
   log_wandb: False
   parallel: False
+  eval_train: True
 dataset: 
   name: CIFAR10
   root: ./data
   train_val_split: 0.9
 loader: 
-  num_workers: 2
+  num_workers: 16
+  prefetch_factor: 16
   collate_fn: numpy
 augmentations:
-  # random_vertical_flips:
-  #     flip_prob: 0.5
-  # random_horizontal_flips:
-  #     flip_prob: 0.5
-  # random_img_shift:
-  #     img_shape: 
-  #       - 3
-  #       - 32
-  #       - 32
+  consecutive_augmentations: # combined
+    - stack_augmentations
+    - consecutive_augmentations: # combined
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations: # combined
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations: # combined
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations: # combined
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations: # combined
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations: # combined
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations: # combined
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations: # combined
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations: # combined
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations: # combined
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations: # combined
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations: # combined
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations: # combined
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations: # combined
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations: # combined
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations: # combined
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
 model:
   name: resnet9
   in_channels: 3
@@ -29,19 +104,29 @@ model:
   scale_norm: True
 optim:
   name: nadam
+ema:
+  use_ema: False
+  decay: 0.999
 hyperparams:
-  epochs: 50
-  batch_size: 1024
-  batch_size_test: 200
+  epochs: 200
+  batch_size: 256
+  batch_size_test: 512
   lr: 2e-3
-  momentum: 0.9
+  # momentum: 0.9
 scheduler:
-  type: const
+  type: reduceonplateau
   normalize_lr: False
+  patience: 20
+  min_delta: 0.01
+  factor: 0.5
+# earlystopping:
+#   mode: maximize
+#   patience: 100
+#   min_delta: 0.01
 DP:
   disable_dp: False
   epsilon: 7.5
-  max_per_sample_grad_norm: 3.0
+  max_per_sample_grad_norm: 1.0
   delta: 1e-5
   norm_acc: False
-  grad_acc_steps: 1
+  grad_acc_steps: 8

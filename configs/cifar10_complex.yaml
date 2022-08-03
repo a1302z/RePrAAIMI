@@ -14,28 +14,36 @@ loader:
 augmentations:
   make_complex_both:
   random_augmentations:
-    - complex_augmentations: 
+    - consecutive_augmentations:
+        complex: True
         random_horizontal_flips: # identity
           flip_prob: 0
-    - complex_augmentations:
+    - consecutive_augmentations:
+        complex: True
         random_horizontal_flips: 
           flip_prob: 1.0
-    - complex_augmentations: 
+    - consecutive_augmentations:
+        complex: True
         random_vertical_flips:
           flip_prob: 1.0
-    - complex_augmentations: 
+    - consecutive_augmentations:
+        complex: True
         random_horizontal_flips: 
           flip_prob: 0.5
-    - complex_augmentations: 
+    - consecutive_augmentations:
+        complex: True
         random_vertical_flips:
           flip_prob: 0.5
-    - complex_augmentations: 
+    - consecutive_augmentations:
+        complex: True
         random_img_shift:
           max_shift: 4
-    - complex_augmentations: 
+    - consecutive_augmentations:
+        complex: True
         random_img_shift:
           max_shift: 8
-    - complex_augmentations: # combined
+    - consecutive_augmentations:
+        complex: True
         random_horizontal_flips: 
           flip_prob: 0.1
         random_vertical_flips:

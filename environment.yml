@@ -10,6 +10,8 @@ dependencies:
   - conda-forge::cudnn==8.2.1.32
   - conda-forge::wandb
   - conda-forge::scikit-learn
+  - ipykernel
+  - matplotlib
   - black
   - pytest
   - pylint

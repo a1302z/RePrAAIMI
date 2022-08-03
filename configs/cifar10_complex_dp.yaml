@@ -13,53 +13,150 @@ loader:
   collate_fn: numpy
 augmentations:
   make_complex_both:
-  complex_augmentations:
+  consecutive_augmentations:
     - stack_augmentations
-    - random_horizontal_flips: # identity
-        flip_prob: 0
-    - random_horizontal_flips: 
-        flip_prob: 1.0
-    - random_vertical_flips:
-        flip_prob: 1.0
-    - random_horizontal_flips: 
-        flip_prob: 0.5
-    - random_vertical_flips:
-        flip_prob: 0.5
-    - random_horizontal_flips: 
-        flip_prob: 0.5
-    - random_vertical_flips:
-        flip_prob: 0.5
-    - random_horizontal_flips: 
-        flip_prob: 0.5
-    - random_vertical_flips:
-        flip_prob: 0.5
-    - random_img_shift:
-        max_shift: 4
-    - random_img_shift:
-        max_shift: 6
-    - random_img_shift:
-        max_shift: 8
-    - complex_augmentations: # combined
-        random_horizontal_flips: 
-          flip_prob: 0.1
-        random_vertical_flips:
-          flip_prob: 0.1
+    - complex
+    - consecutive_augmentations:
+        complex: True
         random_img_shift:
           max_shift: 4
-    - complex_augmentations: # combined
-        random_horizontal_flips: 
-          flip_prob: 0.1
         random_vertical_flips:
-          flip_prob: 0.1
+          flip_prob: 0.5
+    - consecutive_augmentations:
+        complex: True
         random_img_shift:
-          max_shift: 6
-    - complex_augmentations: # combined
-        random_horizontal_flips: 
-          flip_prob: 0.1
+          max_shift: 4
         random_vertical_flips:
-          flip_prob: 0.1
+          flip_prob: 0.5
+    - consecutive_augmentations:
+        complex: True
         random_img_shift:
-          max_shift: 8
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations:
+        complex: True
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations:
+        complex: True
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations:
+        complex: True
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations:
+        complex: True
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations:
+        complex: True
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations:
+        complex: True
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations:
+        complex: True
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations:
+        complex: True
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations:
+        complex: True
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations:
+        complex: True
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations:
+        complex: True
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations:
+        complex: True
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    - consecutive_augmentations:
+        complex: True
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
+    # - random_horizontal_flips: # identity
+    #     flip_prob: 0
+    # - random_horizontal_flips: 
+    #     flip_prob: 1.0
+    # - random_vertical_flips:
+    #     flip_prob: 1.0
+    # - random_horizontal_flips: 
+    #     flip_prob: 0.5
+    # - random_vertical_flips:
+    #     flip_prob: 0.5
+    # - random_horizontal_flips: 
+    #     flip_prob: 0.5
+    # - random_vertical_flips:
+    #     flip_prob: 0.5
+    # - random_horizontal_flips: 
+    #     flip_prob: 0.5
+    # - random_vertical_flips:
+    #     flip_prob: 0.5
+    # - random_img_shift:
+    #     max_shift: 4
+    # - random_img_shift:
+    #     max_shift: 6
+    # - random_img_shift:
+    #     max_shift: 8
+    # - complex_augmentations: # combined
+    #     random_horizontal_flips: 
+    #       flip_prob: 0.1
+    #     random_vertical_flips:
+    #       flip_prob: 0.5
+    #     random_img_shift:
+    #       max_shift: 4
+    # - complex_augmentations: # combined
+    #     random_horizontal_flips: 
+    #       flip_prob: 0.1
+    #     random_vertical_flips:
+    #       flip_prob: 0.1
+    #     random_img_shift:
+    #       max_shift: 6
+    # - complex_augmentations: # combined
+    #     random_horizontal_flips: 
+    #       flip_prob: 0.1
+    #     random_vertical_flips:
+    #       flip_prob: 0.1
+    #     random_img_shift:
+    #       max_shift: 8
 test_augmentations:
   make_complex_both:
 model:

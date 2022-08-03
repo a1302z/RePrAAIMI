@@ -100,8 +100,9 @@ def test_grad_equality():
     tf2 = Transformation.from_dict_list(
         {
             "make_complex_both": None,
-            "complex_augmentations": [
+            "consecutive_augmentations": [
                 "stack_augmentations",
+                "complex",
                 {"random_horizontal_flips": {"flip_prob": 0}},
                 {"random_horizontal_flips": {"flip_prob": 0}},
                 {"random_horizontal_flips": {"flip_prob": 0}},

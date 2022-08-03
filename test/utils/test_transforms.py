@@ -135,7 +135,8 @@ def test_complex_aug_same():
     tf = Transformation.from_dict_list(
         {
             "make_complex_both": None,
-            "complex_augmentations": {
+            "consecutive_augmentations": {
+                "complex": True,
                 "random_horizontal_flips_batch": {"flip_prob": 1.0},
                 "random_vertical_flips_batch": {"flip_prob": 0.0},
             },
@@ -150,7 +151,8 @@ def test_complex_aug_diff():
     tf = Transformation.from_dict_list(
         {
             "make_complex_both": None,
-            "complex_augmentations": {
+            "consecutive_augmentations": {
+                "complex": True,
                 "random_horizontal_flips": {"flip_prob": 0.5},
                 "random_vertical_flips": {"flip_prob": 0.5},
                 # "random_img_shift_batch": {"max_shift": 4},
@@ -171,8 +173,9 @@ def test_multiplicity():
     tf = Transformation.from_dict_list(
         {
             "make_complex_both": None,
-            "complex_augmentations": [
+            "consecutive_augmentations": [
                 "stack_augmentations",
+                "complex",
                 {"random_horizontal_flips": {"flip_prob": 0}},  # identity
                 {"random_horizontal_flips": {"flip_prob": 1.0}},
                 {"random_vertical_flips": {"flip_prob": 1.0}},
@@ -189,21 +192,24 @@ def test_multiplicity():
                 {"random_img_shift": {"max_shift": 8}},
                 {"random_img_shift": {"max_shift": 8}},
                 {
-                    "complex_augmentations": {  # combined
+                    "consecutive_augmentations": {  # combined
+                        "complex": True,
                         "random_horizontal_flips": {"flip_prob": 0.5},
                         "random_vertical_flips": {"flip_prob": 0.5},
                         "random_img_shift": {"max_shift": 4},
                     }
                 },
                 {
-                    "complex_augmentations": {  # combined
+                    "consecutive_augmentations": {  # combined
+                        "complex": True,
                         "random_horizontal_flips": {"flip_prob": 0.5},
                         "random_vertical_flips": {"flip_prob": 0.5},
                         "random_img_shift": {"max_shift": 6},
                     }
                 },
                 {
-                    "complex_augmentations": {  # combined
+                    "consecutive_augmentations": {  # combined
+                        "complex": True,
                         "random_horizontal_flips": {"flip_prob": 0.5},
                         "random_vertical_flips": {"flip_prob": 0.5},
                         "random_img_shift": {"max_shift": 8},

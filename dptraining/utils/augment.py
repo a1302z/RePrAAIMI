@@ -34,26 +34,37 @@ torchvision_transforms = {
 }
 
 
-class ComplexAugmentations:
+class ConsecutiveAugmentations:
     def __init__(self, *args, **kwargs) -> None:
         assert (len(args) > 0) ^ (len(kwargs) > 0), "Either args or kwargs, not both"
         if isinstance(args, tuple) and len(args) == 1:
             args = args[0]
+        self.complex = False
         if len(args) > 0:
             stack_augmentations = False
             if "stack_augmentations" in args:
                 stack_augmentations = True
                 args.remove("stack_augmentations")
+            if "complex" in args:
+                self.complex = True
+                args.remove("complex")
             assert all((isinstance(arg, dict) for arg in args))
             self.aug = Transformation(
                 [Transformation.from_dict_list(arg) for arg in args],
                 stack_augmentations=stack_augmentations,
             )
         if len(kwargs) > 0:
+            if "complex" in kwargs:
+                self.complex = kwargs["complex"]
+                del kwargs["complex"]
             self.aug = Transformation.from_dict_list(kwargs)
 
     def __call__(self, data, labels=None):
-        return self.aug(data.real) + 1j * self.aug(data.imag)
+        return (
+            self.aug(data.real) + 1j * self.aug(data.imag)
+            if self.complex
+            else self.aug(data)
+        )
 
 
 class RandomTransform:
@@ -91,7 +102,7 @@ class Transformation:
         "make_complex_both": MakeComplexRealAndImaginary,
         "numpy_batch_to_chw": TransposeNumpyBatchToCHW,
         "numpy_img_to_chw": TransposeNumpyImgToCHW,
-        "complex_augmentations": ComplexAugmentations,
+        "consecutive_augmentations": ConsecutiveAugmentations,
         "random_augmentations": RandomTransform,
         **torchvision_transforms,
     }
@@ -122,7 +133,7 @@ class Transformation:
                 + [
                     t.aug.get_n_augmentations()
                     for t in self._transformations
-                    if isinstance(t, ComplexAugmentations)
+                    if isinstance(t, ConsecutiveAugmentations)
                 ]
                 + [1]
             )
