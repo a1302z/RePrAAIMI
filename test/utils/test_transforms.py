@@ -106,16 +106,16 @@ def test_complex_conversion_real():
 
 def test_transpose_to_hwc():
     tf = Transformation.from_string_list(["numpy_img_to_chw"])
-    data = np.random.randn(224, 224, 3)
+    data = np.random.randn(32, 32, 3)
     out = tf(data)
-    assert out.shape == (3, 224, 224)
+    assert out.shape == (3, 32, 32)
 
 
 def test_transpose_to_hwc_batch():
     tf = Transformation.from_string_list(["numpy_batch_to_chw"])
-    data = np.random.randn(10, 224, 224, 3)
+    data = np.random.randn(10, 32, 32, 3)
     out = tf(data)
-    assert out.shape == (10, 3, 224, 224)
+    assert out.shape == (10, 3, 32, 32)
 
 
 def test_complex_aug_pre():
@@ -126,7 +126,7 @@ def test_complex_aug_pre():
             "make_complex_both": None,
         }
     )
-    data = np.random.randn(10, 3, 224, 224)
+    data = np.random.randn(10, 3, 32, 32)
     out = tf(data)
     assert np.allclose(out.real, out.imag)
 
@@ -141,7 +141,7 @@ def test_complex_aug_same():
             },
         }
     )
-    data = np.random.randn(10, 3, 224, 224)
+    data = np.random.randn(10, 3, 32, 32)
     out = tf(data)
     assert np.allclose(out.real, out.imag)
 
@@ -158,7 +158,7 @@ def test_complex_aug_diff():
         }
     )
     tf = tf.create_vectorized_transform()
-    data = np.random.randn(10, 3, 224, 224)
+    data = np.random.randn(10, 3, 32, 32)
     out = tf(data)
     assert not np.allclose(
         out.real, out.imag
@@ -213,7 +213,7 @@ def test_multiplicity():
         }
     )
     tf = tf.create_vectorized_transform()
-    data = np.random.randn(10, 3, 224, 224)
+    data = np.random.randn(10, 3, 32, 32)
     out = tf(data)
     assert np.allclose(out[:, 0].real, data) and np.allclose(out[:, 0].imag, data)
     assert np.allclose(out[:, 1].real, out[:, 1].imag)
@@ -232,24 +232,14 @@ def test_multiplicity():
 def test_random_transform():
     tf = Transformation.from_dict_list(
         {
-            "make_complex_both": None,
             "random_augmentations": [
-                {
-                    "complex_augmentations": {
-                        "random_horizontal_flips": {"flip_prob": 1.0}
-                    }  # identity
-                },
-                {
-                    "complex_augmentations": {
-                        "random_horizontal_flips": {"flip_prob": 1.0}
-                    }
-                },
+                {"random_horizontal_flips": {"flip_prob": 1.0}},
+                {"random_horizontal_flips": {"flip_prob": 1.0}},
             ],
         }
     )
 
     tf = tf.create_vectorized_transform()
-    data = np.random.randn(10, 3, 224, 224)
+    data = np.random.randn(10, 3, 32, 32)
     out = tf(data)
-    assert np.allclose(data, out.real[:, :, ::-1, :])
-    assert np.allclose(data, out.imag[:, :, ::-1, :])
+    assert np.allclose(data, out[:, :, ::-1, :])

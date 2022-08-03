@@ -36,15 +36,21 @@ torchvision_transforms = {
 
 class ComplexAugmentations:
     def __init__(self, *args, **kwargs) -> None:
-        transf = []
+        assert (len(args) > 0) ^ (len(kwargs) > 0), "Either args or kwargs, not both"
+        if isinstance(args, tuple) and len(args) == 1:
+            args = args[0]
         if len(args) > 0:
-            transf.append(Transformation.from_dict_list(*args))
+            stack_augmentations = False
+            if "stack_augmentations" in args:
+                stack_augmentations = True
+                args.remove("stack_augmentations")
+            assert all((isinstance(arg, dict) for arg in args))
+            self.aug = Transformation(
+                [Transformation.from_dict_list(arg) for arg in args],
+                stack_augmentations=stack_augmentations,
+            )
         if len(kwargs) > 0:
-            transf.append(Transformation.from_dict_list(kwargs))
-        if len(transf) > 1:
-            self.aug = Transformation(transf)
-        else:
-            self.aug = transf[0]
+            self.aug = Transformation.from_dict_list(kwargs)
 
     def __call__(self, data, labels=None):
         return self.aug(data.real) + 1j * self.aug(data.imag)
@@ -150,17 +156,11 @@ class Transformation:
             if isinstance(transformations, dict):
                 stack_augmentations = transformations["stack_augmentations"]
                 del transformations["stack_augmentations"]
-            elif isinstance(transformations, list):
-                stack_augmentations = True
-                transformations.remove("stack_augmentations")
-        list_of_dicts = isinstance(transformations, list) and all(
-            (isinstance(t, dict) for t in transformations)
-        )
-        if not (isinstance(transformations, (dict, DictConfig)) or list_of_dicts):
+        if not isinstance(transformations, (dict, DictConfig)):  # or list_of_dicts):
             raise ValueError(
                 "Transforms with args need to be defined as dict (of dicts)"
             )
-        if not list_of_dicts and not all(
+        if not all(  # not list_of_dicts and
             var in Transformation._mapping
             for var in transformations.keys()
             if isinstance(var, (DictConfig, dict))
@@ -174,19 +174,16 @@ class Transformation:
                 f"{u_transf} not known. "
                 f"Supported ops are: {Transformation._mapping.keys()}"
             )
-        if list_of_dicts:
-            tfs = [Transformation.from_dict_list(t) for t in transformations]
-        else:
-            tfs = []
-            for aug, kwargs in transformations.items():
-                if kwargs is not None:
-                    if isinstance(kwargs, dict):
-                        transform = Transformation._mapping[aug](**kwargs)
-                    else:
-                        transform = Transformation._mapping[aug](kwargs)
+        tfs = []
+        for aug, kwargs in transformations.items():
+            if kwargs is not None:
+                if isinstance(kwargs, dict):
+                    transform = Transformation._mapping[aug](**kwargs)
                 else:
-                    transform = Transformation._mapping[aug]()
-                tfs.append(transform)
+                    transform = Transformation._mapping[aug](kwargs)
+            else:
+                transform = Transformation._mapping[aug]()
+            tfs.append(transform)
         return cls(
             tfs,
             stack_augmentations,
