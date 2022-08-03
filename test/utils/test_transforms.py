@@ -126,7 +126,7 @@ def test_complex_aug_pre():
             "make_complex_both": None,
         }
     )
-    data = np.random.randn(10, 224, 224, 3)
+    data = np.random.randn(10, 3, 224, 224)
     out = tf(data)
     assert np.allclose(out.real, out.imag)
 
@@ -141,7 +141,7 @@ def test_complex_aug_same():
             },
         }
     )
-    data = np.random.randn(10, 224, 224, 3)
+    data = np.random.randn(10, 3, 224, 224)
     out = tf(data)
     assert np.allclose(out.real, out.imag)
 
@@ -158,7 +158,7 @@ def test_complex_aug_diff():
         }
     )
     tf = tf.create_vectorized_transform()
-    data = np.random.randn(10, 224, 224, 3)
+    data = np.random.randn(10, 3, 224, 224)
     out = tf(data)
     assert not np.allclose(
         out.real, out.imag
@@ -213,7 +213,7 @@ def test_multiplicity():
         }
     )
     tf = tf.create_vectorized_transform()
-    data = np.random.randn(10, 224, 224, 3)
+    data = np.random.randn(10, 3, 224, 224)
     out = tf(data)
     assert np.allclose(out[:, 0].real, data) and np.allclose(out[:, 0].imag, data)
     assert np.allclose(out[:, 1].real, out[:, 1].imag)
@@ -227,3 +227,29 @@ def test_multiplicity():
                 raise ValueError()
             if jnp.allclose(out[:, j].imag, out[:, i].imag):
                 raise ValueError()
+
+
+def test_random_transform():
+    tf = Transformation.from_dict_list(
+        {
+            "make_complex_both": None,
+            "random_augmentations": [
+                {
+                    "complex_augmentations": {
+                        "random_horizontal_flips": {"flip_prob": 1.0}
+                    }  # identity
+                },
+                {
+                    "complex_augmentations": {
+                        "random_horizontal_flips": {"flip_prob": 1.0}
+                    }
+                },
+            ],
+        }
+    )
+
+    tf = tf.create_vectorized_transform()
+    data = np.random.randn(10, 3, 224, 224)
+    out = tf(data)
+    assert np.allclose(data, out.real[:, :, ::-1, :])
+    assert np.allclose(data, out.imag[:, :, ::-1, :])

@@ -23,6 +23,10 @@ from dptraining.utils.transform import (
 from omegaconf import DictConfig
 from torchvision import transforms
 
+from random import choice, seed
+
+seed(0)
+
 torchvision_transforms = {
     mn: getattr(transforms, mn)
     for mn in dir(transforms)
@@ -46,6 +50,23 @@ class ComplexAugmentations:
         return self.aug(data.real) + 1j * self.aug(data.imag)
 
 
+class RandomTransform:
+    def __init__(self, *args, **kwargs) -> None:
+        if isinstance(args, tuple) and len(args) == 1:
+            args = args[0]
+        assert (len(args) > 0) ^ (len(kwargs) > 0), "Either args or kwargs, not both"
+        if len(args) > 0:
+            self.aug = [Transformation.from_dict_list(arg) for arg in args]
+        elif len(kwargs) > 0:
+            self.aug = [Transformation.from_dict_list(kwarg) for kwarg in kwargs]
+        else:
+            raise ValueError("There should be a transform")
+
+    def __call__(self, data) -> Any:
+        transf = choice(self.aug)
+        return transf(data)
+
+
 class Transformation:
     _mapping: dict[str, Callable] = {
         "random_horizontal_flips": RandomHorizontalFlipsJax,
@@ -65,6 +86,7 @@ class Transformation:
         "numpy_batch_to_chw": TransposeNumpyBatchToCHW,
         "numpy_img_to_chw": TransposeNumpyImgToCHW,
         "complex_augmentations": ComplexAugmentations,
+        "random_augmentations": RandomTransform,
         **torchvision_transforms,
     }
 
