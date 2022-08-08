@@ -191,5 +191,11 @@ class WideResNet(WideResNetGeneral):
         n = (depth - 4) // 6
         blocks_per_group = [n] * 3
         super().__init__(
-            nin, nclass, blocks_per_group, width, bn, scale_norm=scale_norm
+            nin,
+            nclass,
+            blocks_per_group,
+            width,
+            bn,
+            scale_norm=scale_norm,
+            conv_layer=conv_layer,
         )
