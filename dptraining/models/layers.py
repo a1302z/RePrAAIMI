@@ -15,6 +15,19 @@ class Flatten(Module):
         return flatten(x)
 
 
+class ConvWS2D(nn.Conv2D):
+    def __call__(self, x: JaxArray) -> JaxArray:
+        self.w.assign(self.w.value - self.w.value.mean(axis=(0, 1, 2), keepdims=True))
+        self.w.assign(self.w.value / self.w.value.std(axis=(0, 1, 2), keepdims=True))
+        return super().__call__(x)
+
+
+class ConvCentering2D(nn.Conv2D):
+    def __call__(self, x: JaxArray) -> JaxArray:
+        self.w.assign(self.w.value - self.w.value.mean(axis=(0, 1, 2), keepdims=True))
+        return super().__call__(x)
+
+
 class AdaptivePooling(Module):
     def __init__(
         self,
