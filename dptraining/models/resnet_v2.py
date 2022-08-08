@@ -84,6 +84,7 @@ class ResNetV2Block(objax.Module):
         stride: Union[int, Sequence[int]],
         use_projection: bool,
         bottleneck: bool,
+        conv_layer: objax.Module = Conv2D,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
         scale_norm: bool = False,
@@ -104,15 +105,17 @@ class ResNetV2Block(objax.Module):
         self.stride = stride
 
         if self.use_projection:
-            self.proj_conv = Conv2D(nin, nout, 1, strides=stride, **conv_args(1, nout))
+            self.proj_conv = conv_layer(
+                nin, nout, 1, strides=stride, **conv_args(1, nout)
+            )
 
         if bottleneck:
             self.norm_0 = normalization_fn(nin)
-            self.conv_0 = Conv2D(
+            self.conv_0 = conv_layer(
                 nin, nout // 4, 1, strides=1, **conv_args(1, nout // 4)
             )
             self.norm_1 = normalization_fn(nout // 4)
-            self.conv_1 = Conv2D(
+            self.conv_1 = conv_layer(
                 nout // 4,
                 nout // 4,
                 3,
@@ -120,7 +123,9 @@ class ResNetV2Block(objax.Module):
                 **conv_args(3, nout // 4, (1, 1)),
             )
             self.norm_2 = normalization_fn(nout // 4)
-            self.conv_2 = Conv2D(nout // 4, nout, 1, strides=1, **conv_args(1, nout))
+            self.conv_2 = conv_layer(
+                nout // 4, nout, 1, strides=1, **conv_args(1, nout)
+            )
             self.layers = (
                 (self.norm_0, self.conv_0),
                 (self.norm_1, self.conv_1),
@@ -128,9 +133,11 @@ class ResNetV2Block(objax.Module):
             )
         else:
             self.norm_0 = normalization_fn(nin)
-            self.conv_0 = Conv2D(nin, nout, 3, strides=1, **conv_args(3, nout, (1, 1)))
+            self.conv_0 = conv_layer(
+                nin, nout, 3, strides=1, **conv_args(3, nout, (1, 1))
+            )
             self.norm_1 = normalization_fn(nout)
-            self.conv_1 = Conv2D(
+            self.conv_1 = conv_layer(
                 nout, nout, 3, strides=stride, **conv_args(3, nout, (1, 1))
             )
             self.layers = ((self.norm_0, self.conv_0), (self.norm_1, self.conv_1))
@@ -175,6 +182,7 @@ class ResNetV2BlockGroup(objax.nn.Sequential):
         stride: Union[int, Sequence[int]],
         use_projection: bool,
         bottleneck: bool,
+        conv_layer: objax.Module = Conv2D,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
         scale_norm: bool = False,
@@ -200,6 +208,7 @@ class ResNetV2BlockGroup(objax.nn.Sequential):
                     stride=(stride if i == num_blocks - 1 else 1),
                     use_projection=(i == 0 and use_projection),
                     bottleneck=bottleneck,
+                    conv_layer=conv_layer,
                     normalization_fn=normalization_fn,
                     activation_fn=activation_fn,
                     scale_norm=scale_norm,
@@ -220,6 +229,7 @@ class ResNetV2(objax.nn.Sequential):
         channels_per_group: Sequence[int] = (256, 512, 1024, 2048),
         group_strides: Sequence[int] = (1, 2, 2, 2),
         group_use_projection: Sequence[bool] = (True, True, True, True),
+        conv_layer: objax.Module = Conv2D,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
         scale_norm: bool = False,
@@ -242,7 +252,7 @@ class ResNetV2(objax.nn.Sequential):
         nin = in_channels
         nout = 64
         ops = [
-            Conv2D(nin, nout, k=7, strides=2, **conv_args(7, 64, (3, 3))),
+            conv_layer(nin, nout, k=7, strides=2, **conv_args(7, 64, (3, 3))),
             functools.partial(jn.pad, pad_width=((0, 0), (0, 0), (1, 1), (1, 1))),
             functools.partial(
                 objax.functional.max_pool_2d,
@@ -262,6 +272,7 @@ class ResNetV2(objax.nn.Sequential):
                     stride=group_strides[i],
                     bottleneck=bottleneck,
                     use_projection=group_use_projection[i],
+                    conv_layer=conv_layer,
                     normalization_fn=normalization_fn,
                     activation_fn=activation_fn,
                     scale_norm=scale_norm,
@@ -286,6 +297,7 @@ class ResNet18(ResNetV2):
         self,
         in_channels: int,
         num_classes: int,
+        conv_layer: objax.Module = Conv2D,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
         scale_norm: bool = False,
@@ -308,6 +320,7 @@ class ResNet18(ResNetV2):
             normalization_fn=normalization_fn,
             activation_fn=activation_fn,
             scale_norm=scale_norm,
+            conv_layer=conv_layer,
         )
 
 
@@ -318,6 +331,7 @@ class ResNet34(ResNetV2):
         self,
         in_channels: int,
         num_classes: int,
+        conv_layer: objax.Module = Conv2D,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
         scale_norm: bool = False,
@@ -340,6 +354,7 @@ class ResNet34(ResNetV2):
             normalization_fn=normalization_fn,
             activation_fn=activation_fn,
             scale_norm=scale_norm,
+            conv_layer=conv_layer,
         )
 
 
@@ -350,6 +365,7 @@ class ResNet50(ResNetV2):
         self,
         in_channels: int,
         num_classes: int,
+        conv_layer: objax.Module = Conv2D,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
         scale_norm: bool = False,
@@ -371,6 +387,7 @@ class ResNet50(ResNetV2):
             normalization_fn=normalization_fn,
             activation_fn=activation_fn,
             scale_norm=scale_norm,
+            conv_layer=conv_layer,
         )
 
 
@@ -381,6 +398,7 @@ class ResNet101(ResNetV2):
         self,
         in_channels: int,
         num_classes: int,
+        conv_layer: objax.Module = Conv2D,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
         scale_norm: bool = False,
@@ -402,6 +420,7 @@ class ResNet101(ResNetV2):
             normalization_fn=normalization_fn,
             activation_fn=activation_fn,
             scale_norm=scale_norm,
+            conv_layer=conv_layer,
         )
 
 
@@ -412,6 +431,7 @@ class ResNet152(ResNetV2):
         self,
         in_channels: int,
         num_classes: int,
+        conv_layer: objax.Module = Conv2D,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
         scale_norm: bool = False,
@@ -433,6 +453,7 @@ class ResNet152(ResNetV2):
             normalization_fn=normalization_fn,
             activation_fn=activation_fn,
             scale_norm=scale_norm,
+            conv_layer=conv_layer,
         )
 
 
@@ -443,6 +464,7 @@ class ResNet200(ResNetV2):
         self,
         in_channels: int,
         num_classes: int,
+        conv_layer: objax.Module = Conv2D,
         normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
         activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
         scale_norm: bool = False,
@@ -464,6 +486,7 @@ class ResNet200(ResNetV2):
             normalization_fn=normalization_fn,
             activation_fn=activation_fn,
             scale_norm=scale_norm,
+            conv_layer=conv_layer,
         )
 
 
