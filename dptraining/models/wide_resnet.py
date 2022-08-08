@@ -61,6 +61,7 @@ class WRNBlock(objax.Module):
             objax.nn.BatchNorm2D, momentum=BN_MOM, eps=BN_EPS
         ),
         scale_norm: bool = False,
+        conv_layer: objax.Module = objax.nn.Conv2D,
     ):
         """Creates WRNBlock instance.
 
@@ -71,18 +72,16 @@ class WRNBlock(objax.Module):
             bn: module which used as batch norm function.
         """
         if nin != nout or stride > 1:
-            self.proj_conv = objax.nn.Conv2D(
+            self.proj_conv = conv_layer(
                 nin, nout, 1, strides=stride, **conv_args(1, nout)
             )
         else:
             self.proj_conv = None
 
         self.norm_1 = bn(nin)
-        self.conv_1 = objax.nn.Conv2D(
-            nin, nout, 3, strides=stride, **conv_args(3, nout)
-        )
+        self.conv_1 = conv_layer(nin, nout, 3, strides=stride, **conv_args(3, nout))
         self.norm_2 = bn(nout)
-        self.conv_2 = objax.nn.Conv2D(nout, nout, 3, strides=1, **conv_args(3, nout))
+        self.conv_2 = conv_layer(nout, nout, 3, strides=1, **conv_args(3, nout))
         self.activation = objax.functional.relu
         self.scale_norm = bn(nout) if scale_norm else lambda x: x
 
@@ -113,6 +112,7 @@ class WideResNetGeneral(objax.nn.Sequential):
             objax.nn.BatchNorm2D, momentum=BN_MOM, eps=BN_EPS
         ),
         scale_norm: bool = False,
+        conv_layer: objax.Module = objax.nn.Conv2D,
     ):
         """Creates WideResNetGeneral instance.
 
@@ -129,12 +129,25 @@ class WideResNetGeneral(objax.nn.Sequential):
         ]
 
         n = 16
-        ops = [objax.nn.Conv2D(nin, n, 3, **conv_args(3, n))]
+        ops = [conv_layer(nin, n, 3, **conv_args(3, n))]
         for i, (block, width) in enumerate(zip(blocks_per_group, widths)):
             stride = 2 if i > 0 else 1
-            ops.append(WRNBlock(n, width, stride, bn, scale_norm=scale_norm))
+            ops.append(
+                WRNBlock(
+                    n, width, stride, bn, scale_norm=scale_norm, conv_layer=conv_layer
+                )
+            )
             for b in range(1, block):
-                ops.append(WRNBlock(width, width, 1, bn, scale_norm=scale_norm))
+                ops.append(
+                    WRNBlock(
+                        width,
+                        width,
+                        1,
+                        bn,
+                        scale_norm=scale_norm,
+                        conv_layer=conv_layer,
+                    )
+                )
             n = width
         ops += [
             bn(n),
@@ -163,6 +176,7 @@ class WideResNet(WideResNetGeneral):
             objax.nn.BatchNorm2D, momentum=BN_MOM, eps=BN_EPS
         ),
         scale_norm: bool = False,
+        conv_layer: objax.Module = objax.nn.Conv2D,
     ):
         """Creates WideResNet instance.
 

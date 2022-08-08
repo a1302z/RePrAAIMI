@@ -7,6 +7,7 @@ from dptraining.models.cifar10models import Cifar10ConvNet
 from dptraining.models.resnet9 import ResNet9
 from dptraining.models.smoothnet import get_smoothnet
 from dptraining.models.activations import mish
+from dptraining.models.layers import ConvWS2D, ConvCentering2D
 from dptraining.models.complex.activations import (
     IGaussian,
     SeparableMish,
@@ -32,6 +33,7 @@ from dptraining.models.complex.converter import ComplexModelConverter
 
 SUPPORTED_MODELS = ("cifar10model", "resnet18", "resnet9", "smoothnet", "wide_resnet")
 SUPPORTED_NORMALIZATION = ("bn", "gn")
+SUPPORTED_CONV = ("conv", "convws", "convws_nw")
 SUPPORTED_ACTIVATION = ("relu", "selu", "leakyrelu", "mish")
 SUPPORTED_POOLING = ("maxpool", "avgpool")
 
@@ -65,6 +67,21 @@ def make_complex_normalization_from_config(config: dict) -> Callable:
             raise ValueError(
                 f"Unsupported normalization layer '{fail}'. "
                 f"Legal options are: {SUPPORTED_COMPLEX_NORMALIZATION}"
+            )
+
+
+def make_conv_from_config(config: dict) -> Callable:
+    match config["model"]["conv"]:
+        case "conv":
+            return nn.Conv2D
+        case "convws":
+            return ConvWS2D
+        case "convws_nw":
+            return ConvCentering2D
+        case _ as fail:
+            raise ValueError(
+                f"Unsupported convolutional layer '{fail}'. "
+                f"Legal options are: {SUPPORTED_CONV}"
             )
 
 
@@ -172,6 +189,7 @@ def make_normal_model_from_config(config: dict) -> Callable:
             return resnet_v2.ResNet18(
                 config["model"]["in_channels"],
                 config["model"]["num_classes"],
+                conv_layer=make_conv_from_config(config),
                 normalization_fn=make_normalization_from_config(config),
                 activation_fn=make_activation_from_config(config),
                 scale_norm=scale_norm,
@@ -180,6 +198,7 @@ def make_normal_model_from_config(config: dict) -> Callable:
             return wide_resnet.WideResNet(
                 config["model"]["in_channels"],
                 config["model"]["num_classes"],
+                conv_layer=make_conv_from_config(config),
                 bn=make_normalization_from_config(config),
                 scale_norm=scale_norm,
             )
@@ -187,6 +206,7 @@ def make_normal_model_from_config(config: dict) -> Callable:
             return ResNet9(
                 config["model"]["in_channels"],
                 config["model"]["num_classes"],
+                conv_cls=make_conv_from_config(config),
                 norm_cls=make_normalization_from_config(config),
                 act_func=make_activation_from_config(config),
                 pool_func=partial(make_pooling_from_config(config), size=2),
@@ -196,6 +216,7 @@ def make_normal_model_from_config(config: dict) -> Callable:
             return get_smoothnet(
                 in_channels=config["model"]["in_channels"],
                 num_classes=config["model"]["num_classes"],
+                conv_cls=make_conv_from_config(config),
                 norm_cls=make_normalization_from_config(config),
                 act_func=make_activation_from_config(config),
                 pool_func=partial(

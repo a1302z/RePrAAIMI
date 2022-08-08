@@ -15,6 +15,7 @@ import pytest
 sys.path.insert(0, str(Path.cwd()))
 
 from dptraining.models import (
+    SUPPORTED_CONV,
     SUPPORTED_POOLING,
     make_model_from_config,
     ResNet9,
@@ -60,6 +61,7 @@ def test_resnet18():
         {
             "model": {
                 "name": "resnet18",
+                "conv": "conv",
                 "activation": "selu",
                 "normalization": "gn",
                 "in_channels": 3,
@@ -87,6 +89,7 @@ def test_make_resnet9():
         {
             "model": {
                 "name": "resnet9",
+                "conv": "conv",
                 "activation": "selu",
                 "normalization": "gn",
                 "in_channels": 12,
@@ -101,8 +104,9 @@ def test_make_resnet9():
 
 def test_all_options():
     fake_data = np.random.randn(6, 3, 39, 39)
-    for model, act, norm, pool in product(
+    for model, conv, act, norm, pool in product(
         SUPPORTED_MODELS,
+        SUPPORTED_CONV,
         SUPPORTED_ACTIVATION,
         SUPPORTED_NORMALIZATION,
         SUPPORTED_POOLING,
@@ -110,6 +114,7 @@ def test_all_options():
         config = {
             "model": {
                 "name": model,
+                "conv": conv,
                 "in_channels": 3,
                 "num_classes": 5,
                 "activation": act,
