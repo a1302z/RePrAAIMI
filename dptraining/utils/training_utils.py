@@ -7,7 +7,7 @@ import numpy as np
 import objax
 import sys
 
-from jax import numpy as jn
+from jax import numpy as jn, local_device_count
 from pathlib import Path
 from sklearn import metrics
 from tqdm import tqdm
@@ -15,6 +15,8 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path.cwd()))
 
 from dptraining.privacy import ClipAndAccumulateGrads
+
+N_DEVICES = local_device_count()
 
 
 def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
@@ -256,6 +258,11 @@ def test(  # pylint:disable=too-many-arguments
             leave=False,
         ):
             image = test_aug(image)
+            n_images = image.shape[0]
+            if parallel and not (n_images % N_DEVICES) == 0:
+                max_samples = n_images - (n_images % N_DEVICES)
+                image = image[:max_samples]
+                label = label[:max_samples]
             y_pred = predict_op(image)
             correct.append(label)
             predicted.append(y_pred)

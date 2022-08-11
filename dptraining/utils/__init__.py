@@ -44,8 +44,28 @@ def make_scheduler_from_config(config):
     return scheduler
 
 
+SUPPORTED_LOSSES = ("cse",)
+SUPPORTED_REDUCTION = ("sum", "mean")
+
+
 def make_loss_from_config(config):  # pylint:disable=unused-argument
-    return CSELogitsSparse
+    if (
+        not "loss" in config
+        or not "type" in config["loss"]
+        or not "reduction" in config["loss"]
+    ):
+        raise ValueError("Loss not specified. (Needs type and reduction)")
+    loss_config = config["loss"]
+    assert (
+        loss_config["type"] in SUPPORTED_LOSSES
+    ), f"Loss {loss_config['type']} not supported. (Only {SUPPORTED_LOSSES})"
+    assert (
+        loss_config["reduction"] in SUPPORTED_REDUCTION
+    ), f"Loss {loss_config['reduction']} not supported. (Only {SUPPORTED_REDUCTION})"
+    if loss_config["type"] == "cse":
+        return CSELogitsSparse(config)
+    else:
+        raise ValueError(f"Unknown loss type ({loss_config['type']})")
 
 
 def make_stopper_from_config(config):

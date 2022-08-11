@@ -83,21 +83,19 @@ def main(
     model_vars = model.vars()
 
     opt = make_optim_from_config(config, model_vars)
-    if parallel:
-        predict_op = objax.Parallel(
-            lambda x: objax.functional.softmax(
-                model(x, training=False)  # pylint:disable=not-callable
-            ),
-            model_vars,
-            reduce=np.concatenate,
-        )
-    else:
-        predict_op = objax.Jit(
-            lambda x: objax.functional.softmax(
-                model(x, training=False)  # pylint:disable=not-callable
-            ),
-            model_vars,
-        )
+    predict_op_parallel = objax.Parallel(
+        lambda x: objax.functional.softmax(
+            model(x, training=False)  # pylint:disable=not-callable
+        ),
+        model_vars,
+        reduce=np.concatenate,
+    )
+    predict_op_jit = objax.Jit(
+        lambda x: objax.functional.softmax(
+            model(x, training=False)  # pylint:disable=not-callable
+        ),
+        model_vars,
+    )
     ema: Optional[ExponentialMovingAverage] = None
     if "ema" in config and config["ema"]["use_ema"]:
         ema = ExponentialMovingAverage(
@@ -147,7 +145,7 @@ def main(
         print(
             f"This training will lead to a final epsilon of {final_epsilon:.2f}"
             f" for {config['hyperparams']['epochs']} epochs"
-            f" at a noise multiplier of {sigma:.2f} and a delta of {delta:2f}"
+            f" at a noise multiplier of {sigma:5f} and a delta of {delta}"
         )
         max_batches = (
             config["hyperparams"]["overfit"]
@@ -235,14 +233,20 @@ def main(
             test(
                 config,
                 train_loader,
-                predict_op,
+                predict_op_parallel if parallel else predict_op_jit,
                 test_aug,
                 model_vars,
                 parallel,
                 "train",
             )
         metric = test(
-            config, val_loader, predict_op, test_aug, model_vars, parallel, "val"
+            config,
+            val_loader,
+            predict_op_parallel if parallel else predict_op_jit,
+            test_aug,
+            model_vars,
+            parallel,
+            "val",
         )
         scheduler.update_score(metric)
         if not config["DP"]["disable_dp"]:
@@ -260,8 +264,9 @@ def main(
             print("Early Stopping was activated -> Stopping Training")
             break
 
+    # never do test parallel as this could emit some test samples and thus distort results
     metric = test(
-        config, test_loader, predict_op, test_aug, model_vars, parallel, "test"
+        config, test_loader, predict_op_jit, test_aug, model_vars, False, "test"
     )
     if config["general"]["log_wandb"]:
         run.finish()

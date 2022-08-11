@@ -164,13 +164,16 @@ model:
   name: resnet9
   in_channels: 3
   num_classes: 10
-  conv: convws_nw
+  conv: conv
   activation: conjmish
   normalization: gnw
   pooling: avgpool
   scale_norm: True
 optim:
   name: nadam
+loss: 
+  type: cse
+  reduction: sum
 ema:
   use_ema: False
   decay: 0.999
@@ -193,7 +196,7 @@ scheduler:
 DP:
   disable_dp: False
   epsilon: 7.5
-  max_per_sample_grad_norm: 2.0
+  max_per_sample_grad_norm: 1.0
   delta: 1e-5
   norm_acc: False
   grad_acc_steps: 64

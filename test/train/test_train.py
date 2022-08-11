@@ -22,6 +22,7 @@ def test_train_cifar_one_batch():
         },
         "dataset": {"name": "CIFAR10", "root": "./data", "train_val_split": 0.9},
         "optim": {"name": "momentum", "momentum": 0.5},
+        "loss": {"type": "cse", "reduction": "mean"},
         "hyperparams": {
             "epochs": 1,
             "batch_size": 128,
