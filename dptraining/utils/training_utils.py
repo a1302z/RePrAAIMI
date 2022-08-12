@@ -37,6 +37,10 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
         def calc_grads(image_batch, label_batch):
             image_batch = augment_op(image_batch)
             if n_augmentations > 1:
+                if image_batch.shape[1] != n_augmentations:
+                    raise RuntimeError(
+                        "number of augmentations different than augmentation axis"
+                    )
                 label_batch = jn.repeat(
                     label_batch[:, jn.newaxis], n_augmentations, axis=1
                 )

@@ -12,84 +12,9 @@ loader:
   prefetch_factor: 16
   collate_fn: numpy
 augmentations:
-  consecutive_augmentations: # combined
-    - stack_augmentations
-    - consecutive_augmentations: # combined
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
-    - consecutive_augmentations: # combined
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
-    - consecutive_augmentations: # combined
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
-    - consecutive_augmentations: # combined
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
-    - consecutive_augmentations: # combined
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
-    - consecutive_augmentations: # combined
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
-    - consecutive_augmentations: # combined
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
-    - consecutive_augmentations: # combined
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
-    - consecutive_augmentations: # combined
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
-    - consecutive_augmentations: # combined
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
-    - consecutive_augmentations: # combined
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
-    - consecutive_augmentations: # combined
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
-    - consecutive_augmentations: # combined
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
-    - consecutive_augmentations: # combined
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
-    - consecutive_augmentations: # combined
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
-    - consecutive_augmentations: # combined
+  consecutive_augmentations:
+    - multiplicity: 16
+    - consecutive_augmentations:
         random_img_shift:
           max_shift: 4
         random_vertical_flips:

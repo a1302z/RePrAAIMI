@@ -101,8 +101,8 @@ def test_grad_equality():
         {
             "make_complex_both": None,
             "consecutive_augmentations": [
-                "stack_augmentations",
-                "complex",
+                {"multiplicity": True},
+                {"complex": True},
                 {"random_horizontal_flips": {"flip_prob": 0}},
                 {"random_horizontal_flips": {"flip_prob": 0}},
                 {"random_horizontal_flips": {"flip_prob": 0}},
