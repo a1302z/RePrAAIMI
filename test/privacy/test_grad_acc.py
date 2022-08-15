@@ -12,12 +12,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path.cwd()))
 
+from dptraining.utils.augment import Transformation
 from dptraining.privacy import ClipAndAccumulateGrads
-from dptraining.utils.training_utils import create_train_op
+
+# from dptraining.utils.training_utils import create_train_op
+from dptraining.models import make_complex_model_from_config, make_model_from_config
 
 
-def setup_fake_training():
-    model = objax.nn.Sequential([objax.nn.Linear(10, 1)])
+def setup_fake_training(model=objax.nn.Sequential([objax.nn.Linear(10, 1)])):
     model_vars = model.vars()
     for key, mv in model_vars.items():
         model_vars[key].assign(jnp.zeros_like(mv))
@@ -28,15 +30,19 @@ def setup_fake_training():
         return objax.functional.loss.mean_squared_error(logit, label).mean()
 
     grad_values = ClipAndAccumulateGrads(
-        loss_fn, model_vars, 1.0, gradient_accumulation_steps=1, batch_axis=(0, 0),
+        loss_fn,
+        model_vars,
+        1.0,
+        gradient_accumulation_steps=1,
+        batch_axis=(0, 0),
     )
 
     return model_vars, grad_values
 
 
-def setup_fake_data():
-    data = np.random.randn(5, 10)  # 5 samples with 10 values
-    label = np.random.randn(5, 1)
+def setup_fake_data(inpt_shape=(5, 10), otpt_shape=(5, 1)):
+    data = np.random.randn(*inpt_shape)  # 5 samples with 10 values
+    label = np.random.randn(*otpt_shape)
     return data, label
 
 
@@ -82,3 +88,52 @@ def test_grad_acc_step():
 #     )
 #     train_op_acc(*setup_fake_data(), 1.0, apply_norm_acc=False)
 #     train_op_acc(*setup_fake_data(), 1.0, apply_norm_acc=True)
+
+
+def test_grad_equality():
+    tf1 = Transformation.from_dict_list(
+        {
+            "make_complex_both": None,
+        }
+    )
+    tf1 = tf1.create_vectorized_transform()
+    tf2 = Transformation.from_dict_list(
+        {
+            "make_complex_both": None,
+            "consecutive_augmentations": [
+                {"multiplicity": True},
+                {"complex": True},
+                {"random_horizontal_flips": {"flip_prob": 0}},
+                {"random_horizontal_flips": {"flip_prob": 0}},
+                {"random_horizontal_flips": {"flip_prob": 0}},
+                {"random_horizontal_flips": {"flip_prob": 0}},
+            ],
+        }
+    )
+    tf2 = tf2.create_vectorized_transform()
+
+    model = make_model_from_config(
+        {
+            "model": {
+                "complex": True,
+                "name": "cifar10model",
+                "in_channels": 3,
+                "num_classes": 1,
+                "conv": "convws_nw",
+                "activation": "conjmish",
+                "normalization": "bn",
+                "pooling": "avgpool",
+                "scale_norm": True,
+            }
+        }
+    )
+    data, label = setup_fake_data((10, 3, 32, 32), (10, 1))
+    _, gv = setup_fake_training(model)
+
+    grads1, _ = gv.calc_per_sample_grads(
+        tf1(data)[:, jnp.newaxis, ...], label[:, jnp.newaxis, ...]
+    )
+    grads2, _ = gv.calc_per_sample_grads(
+        tf2(data), jnp.repeat(label[:, jnp.newaxis], 4, axis=1)
+    )
+    assert all([np.allclose(g1, g2, rtol=1e-5) for g1, g2 in zip(grads1, grads2)])

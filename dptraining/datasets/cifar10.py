@@ -22,7 +22,7 @@ class NumpyCIFAR10(CIFAR10):
 
 class CIFAR10Creator(DataLoaderCreator):
     CIFAR_MEAN = (0.4914, 0.4822, 0.4465)
-    CIFAR_STDDEV = (0.2023, 0.1994, 0.2010)
+    CIFAR_STDDEV = (0.24703279, 0.24348423, 0.26158753)
 
     @staticmethod
     def normalize_images(image: np.array):

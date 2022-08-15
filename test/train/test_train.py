@@ -18,10 +18,11 @@ def test_train_cifar_one_batch():
         "augmentations": {
             "random_vertical_flips": None,
             "random_horizontal_flips": None,
-            "random_img_shift": {"img_shape": (3, 32, 32)},
+            "random_img_shift": None,
         },
         "dataset": {"name": "CIFAR10", "root": "./data", "train_val_split": 0.9},
         "optim": {"name": "momentum", "momentum": 0.5},
+        "loss": {"type": "cse", "reduction": "mean"},
         "hyperparams": {
             "epochs": 1,
             "batch_size": 128,

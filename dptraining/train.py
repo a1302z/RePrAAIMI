@@ -83,21 +83,19 @@ def main(
     model_vars = model.vars()
 
     opt = make_optim_from_config(config, model_vars)
-    if parallel:
-        predict_op = objax.Parallel(
-            lambda x: objax.functional.softmax(
-                model(x, training=False)  # pylint:disable=not-callable
-            ),
-            model_vars,
-            reduce=np.concatenate,
-        )
-    else:
-        predict_op = objax.Jit(
-            lambda x: objax.functional.softmax(
-                model(x, training=False)  # pylint:disable=not-callable
-            ),
-            model_vars,
-        )
+    predict_op_parallel = objax.Parallel(
+        lambda x: objax.functional.softmax(
+            model(x, training=False)  # pylint:disable=not-callable
+        ),
+        model_vars,
+        reduce=np.concatenate,
+    )
+    predict_op_jit = objax.Jit(
+        lambda x: objax.functional.softmax(
+            model(x, training=False)  # pylint:disable=not-callable
+        ),
+        model_vars,
+    )
     ema: Optional[ExponentialMovingAverage] = None
     if "ema" in config and config["ema"]["use_ema"]:
         ema = ExponentialMovingAverage(
@@ -147,7 +145,7 @@ def main(
         print(
             f"This training will lead to a final epsilon of {final_epsilon:.2f}"
             f" for {config['hyperparams']['epochs']} epochs"
-            f" at a noise multiplier of {sigma:.2f} and a delta of {delta:2f}"
+            f" at a noise multiplier of {sigma:5f} and a delta of {delta}"
         )
         max_batches = (
             config["hyperparams"]["overfit"]
@@ -172,12 +170,16 @@ def main(
     loss_gv = create_loss_gradient(config, model, model_vars, loss_fn)
 
     augmenter = Transformation.from_dict_list(config["augmentations"])
+    n_augmentations = augmenter.get_n_augmentations()
     augment_op = augmenter.create_vectorized_transform()
+    if n_augmentations > 1:
+        print(f"Augmentation multiplicity of {n_augmentations}")
+    # augment_op = augment_op.create_vectorized_transform()
     if "test_augmentations" in config:
         test_augmenter = Transformation.from_dict_list(config["test_augmentations"])
         test_aug = test_augmenter.create_vectorized_transform()
     else:
-        test_aug = lambda x: x
+        test_aug = lambda x: x  # pylint:disable=unnecessary-lambda-assignment
     scheduler = make_scheduler_from_config(config)
     stopper = make_stopper_from_config(config)
 
@@ -195,6 +197,7 @@ def main(
         grad_accumulation=grad_acc > 1,
         noise=total_noise,
         effective_batch_size=effective_batch_size,
+        n_augmentations=n_augmentations,
         parallel=parallel,
     )
 
@@ -230,14 +233,20 @@ def main(
             test(
                 config,
                 train_loader,
-                predict_op,
+                predict_op_parallel if parallel else predict_op_jit,
                 test_aug,
                 model_vars,
                 parallel,
                 "train",
             )
         metric = test(
-            config, val_loader, predict_op, test_aug, model_vars, parallel, "val"
+            config,
+            val_loader,
+            predict_op_parallel if parallel else predict_op_jit,
+            test_aug,
+            model_vars,
+            parallel,
+            "val",
         )
         scheduler.update_score(metric)
         if not config["DP"]["disable_dp"]:
@@ -255,8 +264,9 @@ def main(
             print("Early Stopping was activated -> Stopping Training")
             break
 
+    # never do test parallel as this could emit some test samples and thus distort results
     metric = test(
-        config, test_loader, predict_op, test_aug, model_vars, parallel, "test"
+        config, test_loader, predict_op_jit, test_aug, model_vars, False, "test"
     )
     if config["general"]["log_wandb"]:
         run.finish()

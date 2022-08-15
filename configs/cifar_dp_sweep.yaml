@@ -1,13 +1,20 @@
 program: dptraining/train.py
-method: bayes
+project: cifar-DP
+method: grid
 metric: 
   name: val.accuracy
   goal: maximize
 parameters: 
-  DP.max_per_sample_grad_norm:
-    min: 0.01
-    max: 1.0
-    distribution: log_uniform_values
+  model.conv:
+    values:
+    - conv
+    - convws
+    - convws_nw
+  model.name: 
+    values:
+    - resnet9
+    - resnet18
+    - wide_resnet
 command:
   - ${env}
   - python

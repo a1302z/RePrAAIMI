@@ -8,7 +8,7 @@ import numpy as np
 from pathlib import Path
 
 sys.path.insert(0, str(Path.cwd()))
-from dptraining.utils.loss import CSELogitsSparse
+from dptraining.utils import make_loss_from_config, SUPPORTED_REDUCTION
 
 
 class MiniModel(objax.nn.Sequential):
@@ -22,7 +22,10 @@ class MiniModel(objax.nn.Sequential):
 def test_cselogitssparse_loss():
     model = MiniModel()
     model_vars = model.vars()
-    loss_fn = CSELogitsSparse.create_loss_fn(model_vars, model)
-    mini_data = np.random.randn(3, 2, 8, 8).reshape(-1, 128)
-    mini_label = np.random.randint(0, 10, size=(3,))
-    loss = loss_fn(mini_data, mini_label)
+    for reduction in SUPPORTED_REDUCTION:
+        config = {"loss": {"type": "cse", "reduction": reduction}}
+        loss_class = make_loss_from_config(config)
+        loss_fn = loss_class.create_loss_fn(model_vars, model)
+        mini_data = np.random.randn(3, 2, 8, 8).reshape(-1, 128)
+        mini_label = np.random.randint(0, 10, size=(3,))
+        loss_fn(mini_data, mini_label)
