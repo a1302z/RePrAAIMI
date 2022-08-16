@@ -36,6 +36,7 @@ def main(
     # This is absolutely disgusting but necessary to disable gpu training
     import objax
     from jax import device_count, lax
+    from torch.random import manual_seed as torch_manual_seed
 
     from dptraining.datasets import make_loader_from_config
     from dptraining.models import make_model_from_config
@@ -54,6 +55,11 @@ def main(
         test,
         train,
     )
+
+    seed: int = config["general"]["seed"] if "seed" in config["general"] else 0
+    np.random.seed(seed)
+    objax.random.DEFAULT_GENERATOR.seed(seed)
+    torch_manual_seed(seed)
 
     parallel = "parallel" in config["general"] and config["general"]["parallel"]
     if parallel:

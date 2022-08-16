@@ -105,7 +105,9 @@ class ConsecutiveAugmentations:
                         else:
                             aug_data = sub_aug(aug_data)
                 augm.append(aug_data)
-            if any((len(a.shape) > len(data.shape) for a in augm)):
+            if self.multiplicity == 1:
+                return aug_data
+            elif any((len(a.shape) > len(data.shape) for a in augm)):
                 augm = [  # pylint:disable=use-a-generator
                     a[jnp.newaxis, ...] if len(a.shape) == len(data.shape) else a
                     for a in augm
