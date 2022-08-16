@@ -1,5 +1,5 @@
 program: dptraining/train.py
-project: cifar-DP
+project: cifar-DP-complex
 method: bayes
 metric: 
   name: val.accuracy
@@ -40,7 +40,7 @@ command:
   - python
   - ${program}
   - -cn 
-  - cifar10_dp.yaml
+  - cifar10_complex_dp.yaml
   - general.log_wandb=True
   - general.parallel=False
   - ${args_no_hyphens}
