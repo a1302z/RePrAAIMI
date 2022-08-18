@@ -12,7 +12,7 @@ model = Linear(10, 1)
 
 
 def test_init_ema():
-    ema = ExponentialMovingAverage(model.vars(), 0.9)
+    ExponentialMovingAverage(model.vars(), 0.9)
 
 
 def test_update_ema():
@@ -21,10 +21,10 @@ def test_update_ema():
     for key, mv in model_vars.items():
         model_vars[key].assign(jn.ones_like(mv))
     ema = ExponentialMovingAverage(model.vars(), decay, use_num_updates=False)
-    for k, v in model.vars().items():
+    for v in model.vars().values():
         v.assign(jn.array(np.zeros_like(v)))
-    ema.update(model.vars())
-    ema.copy_to(model.vars())
+    ema.update()
+    ema.copy_to()
     assert all([jn.all(jn.isclose(v, 0.9)).item() for v in model.vars().values()])
 
 
@@ -46,5 +46,5 @@ def test_jit_ema():
 
     for _ in range(3):
         increase_model_weights()
-        ema.update(model_vars)
-        ema.copy_to(model_vars)
+        ema.update()
+        ema.copy_to()
