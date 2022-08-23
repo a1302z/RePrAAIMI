@@ -225,3 +225,39 @@ class TransposeNumpyImgToCHW(Transform):
 
     def __call__(self, data: np.array, labels=None):
         return data.transpose(2, 0, 1)
+
+
+class FFT(Transform):
+    def __init__(self, axes=(1, 2, 3)) -> None:
+        super().__init__()
+        self.axes = axes
+
+    def __call__(self, x):
+        return np.fft.fft2(np.fft.fftshift(x, axes=self.axes), axes=self.axes)
+
+
+class JaxFFT(Transform):
+    def __init__(self, axes=(1, 2, 3)) -> None:
+        super().__init__()
+        self.axes = axes
+
+    def __call__(self, x):
+        return jn.fft.fft2(jn.fft.fftshift(x, axes=self.axes), axes=self.axes)
+
+
+class IFFT(Transform):
+    def __init__(self, axes=(1, 2, 3)) -> None:
+        super().__init__()
+        self.axes = axes
+
+    def __call__(self, x):
+        return np.fft.ifft2(np.fft.ifftshift(x, axes=self.axes), axes=self.axes).real
+
+
+class JaxIFFT(Transform):
+    def __init__(self, axes=(1, 2, 3)) -> None:
+        super().__init__()
+        self.axes = axes
+
+    def __call__(self, x):
+        return jn.fft.ifft2(jn.fft.ifftshift(x, axes=self.axes), axes=self.axes).real

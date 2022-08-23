@@ -7,6 +7,10 @@ from sklearn.model_selection import train_test_split
 from dptraining.datasets.base_creator import DataLoaderCreator
 
 
+def fft_conversion(img, axes=None):
+    return np.fft.fftshift(np.fft.fft2(img, axes=axes), axes=axes)
+
+
 class NumpyCIFAR10(CIFAR10):
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         img, target = self.data[index], self.targets[index]
@@ -25,10 +29,14 @@ class CIFAR10Creator(DataLoaderCreator):
     CIFAR_STDDEV = (0.24703279, 0.24348423, 0.26158753)
 
     @staticmethod
-    def normalize_images(image: np.array):
+    def reshape_images(image: np.array):
         image = image.astype(np.float32)
         image = image / 255.0
         image = image.transpose(0, 3, 1, 2)
+        return image
+
+    @staticmethod
+    def normalize_images(image: np.array):
         image = (
             image - np.reshape(CIFAR10Creator.CIFAR_MEAN, [1, 3, 1, 1])
         ) / np.reshape(CIFAR10Creator.CIFAR_STDDEV, [1, 3, 1, 1])
@@ -72,14 +80,24 @@ class CIFAR10Creator(DataLoaderCreator):
             train_ds = NumpyCIFAR10(**train_kwargs)
             val_ds = NumpyCIFAR10(**val_kwargs)
             test_ds = NumpyCIFAR10(**test_kwargs)
+            train_ds.data = CIFAR10Creator.reshape_images(train_ds.data)
+            val_ds.data = CIFAR10Creator.reshape_images(val_ds.data)
+            test_ds.data = CIFAR10Creator.reshape_images(test_ds.data)
         else:
             train_ds = CIFAR10(**train_kwargs)
             val_ds = CIFAR10(**val_kwargs)
             test_ds = CIFAR10(**test_kwargs)
+
         if normalize_by_default:
             train_ds.data = CIFAR10Creator.normalize_images(train_ds.data)
             val_ds.data = CIFAR10Creator.normalize_images(val_ds.data)
             test_ds.data = CIFAR10Creator.normalize_images(test_ds.data)
+        if "fft" in config["dataset"] and config["dataset"]["fft"]:
+            if not numpy_optimisation:
+                raise ValueError("FFT only works with numpy optimisation")
+            train_ds.data = fft_conversion(train_ds.data, axes=(1, 2, 3))
+            val_ds.data = fft_conversion(val_ds.data, axes=(1, 2, 3))
+            test_ds.data = fft_conversion(test_ds.data, axes=(1, 2, 3))
         train_val_split = config["dataset"]["train_val_split"]
         train_data, val_data, train_targets, val_targets = train_test_split(
             train_ds.data, train_ds.targets, train_size=train_val_split

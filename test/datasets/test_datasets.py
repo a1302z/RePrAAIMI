@@ -53,6 +53,21 @@ def test_cifar10_standard_torchvision():
     access_dataset(train_ds, val_ds, test_ds)
 
 
+def test_cifar10_fft():
+    train_ds, val_ds, test_ds = CIFAR10Creator.make_datasets(
+        {
+            "dataset": {
+                "root": "./data",
+                "download": True,
+                "train_val_split": 0.9,
+                "fft": True,
+            }
+        },
+        (None, None, None),
+    )
+    access_dataset(train_ds, val_ds, test_ds)
+
+
 def test_imagenet():
     train_ds, val_ds, test_ds = ImageNetCreator.make_datasets(
         {

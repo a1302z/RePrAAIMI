@@ -7,18 +7,20 @@ dataset:
   name: CIFAR10
   root: ./data
   train_val_split: 0.9
+  normalization: True
+  fft: False
 loader: 
   num_workers: 16
   prefetch_factor: 16
   collate_fn: numpy
 augmentations:
   consecutive_augmentations:
-    - multiplicity: 16
-    - consecutive_augmentations:
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
+    multiplicity: 16
+    consecutive_augmentations:
+      random_img_shift:
+        max_shift: 4
+      random_vertical_flips:
+        flip_prob: 0.5
 model:
   name: resnet9
   in_channels: 3
@@ -34,7 +36,7 @@ loss:
   type: cse
   reduction: sum
 ema:
-  use_ema: False
+  use_ema: True
   decay: 0.04
 hyperparams:
   epochs: 200

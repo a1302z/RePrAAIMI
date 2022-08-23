@@ -7,23 +7,26 @@ dataset:
   name: CIFAR10
   root: ./data
   train_val_split: 0.9
+  normalization: True
+  fft: True
 loader: 
   num_workers: 16
   prefetch_factor: 16
   collate_fn: numpy
 augmentations:
-  make_complex_both:
-  consecutive_augmentations:
-    - multiplicity: 16
-    - complex: True
-    - consecutive_augmentations:
-        complex: True
-        random_img_shift:
-          max_shift: 4
-        random_vertical_flips:
-          flip_prob: 0.5
+  # make_complex_real:
+  # make_complex_both:
+  # consecutive_augmentations:
+  #   - multiplicity: 1
+  #   - complex: True
+  #   - consecutive_augmentations:
+  #       complex: True
+  #       random_img_shift:
+  #         max_shift: 4
+  #       random_vertical_flips:
+  #         flip_prob: 0.5
 test_augmentations:
-  make_complex_both:
+  # make_complex_real:
 model:
   complex: True
   name: resnet9
