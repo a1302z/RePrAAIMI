@@ -23,7 +23,22 @@ def test_cselogitssparse_loss():
     model = MiniModel()
     model_vars = model.vars()
     for reduction in SUPPORTED_REDUCTION:
-        config = {"loss": {"type": "cse", "reduction": reduction}}
+        config = {"loss": {"type": "cse", "reduction": reduction}, "hyperparams": {}}
+        loss_class = make_loss_from_config(config)
+        loss_fn = loss_class.create_loss_fn(model_vars, model)
+        mini_data = np.random.randn(3, 2, 8, 8).reshape(-1, 128)
+        mini_label = np.random.randint(0, 10, size=(3,))
+        loss_fn(mini_data, mini_label)
+
+
+def test_combinedl2regularization():
+    model = MiniModel()
+    model_vars = model.vars()
+    for reduction in SUPPORTED_REDUCTION:
+        config = {
+            "loss": {"type": "cse", "reduction": reduction},
+            "hyperparams": {"l2regularization": 0.5},
+        }
         loss_class = make_loss_from_config(config)
         loss_fn = loss_class.create_loss_fn(model_vars, model)
         mini_data = np.random.randn(3, 2, 8, 8).reshape(-1, 128)
