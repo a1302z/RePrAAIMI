@@ -8,14 +8,13 @@ dataset:
   root: ./data
   train_val_split: 0.9
   normalization: True
-  fft: True
+  fft: False
 loader: 
   num_workers: 16
   prefetch_factor: 16
   collate_fn: numpy
 augmentations:
-  # make_complex_real:
-  # make_complex_both:
+  make_complex_both:
   # consecutive_augmentations:
   #   - multiplicity: 1
   #   - complex: True
@@ -26,7 +25,7 @@ augmentations:
   #       random_vertical_flips:
   #         flip_prob: 0.5
 test_augmentations:
-  # make_complex_real:
+  make_complex_both:
 model:
   complex: True
   name: resnet9
