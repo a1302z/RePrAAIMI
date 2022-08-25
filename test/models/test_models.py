@@ -96,6 +96,7 @@ def test_make_resnet9():
                 "num_classes": 256,
                 "pooling": "maxpool",
                 "num_groups": [4, 8, 16, 32],
+                "channels": [8, 32, 64, 128],
             }
         }
     )
