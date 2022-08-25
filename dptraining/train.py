@@ -36,6 +36,7 @@ def main(
     # This is absolutely disgusting but necessary to disable gpu training
     import objax
     from jax import device_count, lax
+    from torch.random import manual_seed as torch_manual_seed
 
     from dptraining.datasets import make_loader_from_config
     from dptraining.models import make_model_from_config
@@ -54,6 +55,11 @@ def main(
         test,
         train,
     )
+
+    seed: int = config["general"]["seed"] if "seed" in config["general"] else 0
+    np.random.seed(seed)
+    objax.random.DEFAULT_GENERATOR.seed(seed)
+    torch_manual_seed(seed)
 
     parallel = "parallel" in config["general"] and config["general"]["parallel"]
     if parallel:
@@ -82,11 +88,20 @@ def main(
     model: Callable = make_model_from_config(config)
     model_vars = model.vars()
 
+    ema: Optional[ExponentialMovingAverage] = None
+    use_ema: bool = "ema" in config and config["ema"]["use_ema"]
+    if use_ema:
+        ema = ExponentialMovingAverage(
+            model_vars,
+            config["ema"]["decay"],
+            update_every=config["ema"]["update_every"]
+            if "update_every" in config["ema"]
+            else 1,
+        )
     opt = make_optim_from_config(config, model_vars)
+
     predict_op_parallel = objax.Parallel(
-        lambda x: objax.functional.softmax(
-            model(x, training=False)  # pylint:disable=not-callable
-        ),
+        lambda x: objax.functional.softmax(model(x, training=False)),
         model_vars,
         reduce=np.concatenate,
     )
@@ -96,15 +111,6 @@ def main(
         ),
         model_vars,
     )
-    ema: Optional[ExponentialMovingAverage] = None
-    if "ema" in config and config["ema"]["use_ema"]:
-        ema = ExponentialMovingAverage(
-            model_vars,
-            config["ema"]["decay"],
-            config["ema"]["use_num_updates"]
-            if "use_num_updates" in config["ema"]
-            else True,
-        )
 
     if config["DP"]["disable_dp"]:
         sampling_rate, delta, sigma, final_epsilon, total_noise = 0, 0, 0, 0, 0
@@ -167,7 +173,7 @@ def main(
 
     loss_class = make_loss_from_config(config)
     loss_fn = loss_class.create_loss_fn(model_vars, model)
-    loss_gv = create_loss_gradient(config, model, model_vars, loss_fn)
+    loss_gv = create_loss_gradient(config, model_vars, loss_fn)
 
     augmenter = Transformation.from_dict_list(config["augmentations"])
     n_augmentations = augmenter.get_n_augmentations()
@@ -193,12 +199,12 @@ def main(
         loss_gv,
         opt,
         augment_op,
-        # complex_valued="complex" in config["model"] and config["model"]["complex"],
         grad_accumulation=grad_acc > 1,
         noise=total_noise,
         effective_batch_size=effective_batch_size,
         n_augmentations=n_augmentations,
         parallel=parallel,
+        ema=ema,
     )
 
     epoch_time = []
@@ -221,8 +227,6 @@ def main(
             train_vars,
             parallel,
             grad_acc,
-            model_vars,
-            ema,
         )
         if config["general"]["log_wandb"]:
             wandb.log({"epoch": epoch, "lr": learning_rate})

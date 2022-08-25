@@ -284,3 +284,13 @@ def test_multiplicity():
     data = np.random.randn(10, 3, 32, 32)
     aug_data = aug_op(data)
     assert aug_data.shape[1] == n_transforms
+
+
+def test_fft():
+    augmenter = Transformation.from_dict_list({"jaxfft": (1, 2)})
+    aug_op = augmenter.create_vectorized_transform()
+    data = jnp.array(np.random.randn(10, 3, 32, 32))
+    fft_data = aug_op(data)
+    fft_data = np.array(fft_data)
+    recon_data = np.fft.ifftshift(np.fft.ifft2(fft_data, axes=(2, 3)), axes=(2, 3)).real
+    assert np.allclose(data, recon_data, atol=1e-5)

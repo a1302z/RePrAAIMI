@@ -20,6 +20,10 @@ from dptraining.utils.transform import (
     RandomVerticalFlipsJaxBatch,
     TransposeNumpyBatchToCHW,
     TransposeNumpyImgToCHW,
+    FFT,
+    IFFT,
+    JaxFFT,
+    JaxIFFT,
 )
 from omegaconf import DictConfig
 from torchvision import transforms
@@ -105,7 +109,9 @@ class ConsecutiveAugmentations:
                         else:
                             aug_data = sub_aug(aug_data)
                 augm.append(aug_data)
-            if any((len(a.shape) > len(data.shape) for a in augm)):
+            if self.multiplicity == 1:
+                return aug_data
+            elif any((len(a.shape) > len(data.shape) for a in augm)):
                 augm = [  # pylint:disable=use-a-generator
                     a[jnp.newaxis, ...] if len(a.shape) == len(data.shape) else a
                     for a in augm
@@ -176,6 +182,10 @@ class Transformation:
         "numpy_img_to_chw": TransposeNumpyImgToCHW,
         "consecutive_augmentations": ConsecutiveAugmentations,
         "random_augmentations": RandomTransform,
+        "fft": FFT,
+        "ifft": IFFT,
+        "jaxfft": JaxFFT,
+        "jaxifft": JaxIFFT,
         **torchvision_transforms,
     }
 

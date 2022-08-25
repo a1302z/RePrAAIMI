@@ -16,7 +16,7 @@ from dptraining.utils.augment import Transformation
 from dptraining.privacy import ClipAndAccumulateGrads
 
 # from dptraining.utils.training_utils import create_train_op
-from dptraining.models import make_complex_model_from_config, make_model_from_config
+from dptraining.models import make_model_from_config
 
 
 def setup_fake_training(model=objax.nn.Sequential([objax.nn.Linear(10, 1)])):
@@ -100,14 +100,11 @@ def test_grad_equality():
     tf2 = Transformation.from_dict_list(
         {
             "make_complex_both": None,
-            "consecutive_augmentations": [
-                {"multiplicity": True},
-                {"complex": True},
-                {"random_horizontal_flips": {"flip_prob": 0}},
-                {"random_horizontal_flips": {"flip_prob": 0}},
-                {"random_horizontal_flips": {"flip_prob": 0}},
-                {"random_horizontal_flips": {"flip_prob": 0}},
-            ],
+            "consecutive_augmentations": {
+                "multiplicity": 4,
+                "complex": True,
+                "random_horizontal_flips": {"flip_prob": 0},
+            },
         }
     )
     tf2 = tf2.create_vectorized_transform()

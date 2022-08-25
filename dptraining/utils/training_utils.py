@@ -29,6 +29,7 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
     effective_batch_size: int,
     n_augmentations: int = 1,
     parallel=False,
+    ema=None,
 ):
     if grad_accumulation:
         assert isinstance(grad_calc, ClipAndAccumulateGrads)
@@ -62,10 +63,11 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
             grad_calc.reset_accumulated_grads()
             if parallel:
                 grads = objax.functional.parallel.psum(grads)
-            # if isinstance(loss_gv, ClipAndAccumulateGrads):
             grads = grad_calc.add_noise(grads, noise, objax.random.DEFAULT_GENERATOR)
             grads = [gx / effective_batch_size for gx in grads]
             opt(learning_rate, grads)
+            if ema is not None:
+                ema()
             return grads
 
         if parallel:
@@ -134,6 +136,8 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
             else:
                 loss = loss[0]
             opt(learning_rate, grads)
+            if ema is not None:
+                ema()
             return loss, grads
 
         if parallel:
@@ -144,9 +148,9 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
     return train_op
 
 
-def create_loss_gradient(config, model, model_vars, loss_fn):
+def create_loss_gradient(config, model_vars, loss_fn):
     if config["DP"]["disable_dp"]:
-        loss_gv = objax.GradValues(loss_fn, model.vars())
+        loss_gv = objax.GradValues(loss_fn, model_vars)
     else:
         loss_gv = ClipAndAccumulateGrads(
             loss_fn,
@@ -170,13 +174,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
     train_vars,
     parallel,
     grad_acc: int,
-    model_vars=None,
-    ema=None,
 ):
-    @objax.Function.with_vars(model_vars)
-    def ema_update():
-        ema.update(model_vars)
-        ema.copy_to(model_vars)
 
     start_time = time.time()
     max_batches = (
@@ -210,9 +208,6 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                 train_loss, grads = train_result
                 train_loss = train_loss.item()
                 pbar.set_description(f"Train_loss: {train_loss:.2f}")
-            if ema is not None and train_result is not None:
-                # with model_vars.replicate() if parallel else contextlib.suppress():
-                ema_update()
             if config["general"]["log_wandb"] and train_result is not None:
                 log_dict = {
                     "train_loss": train_loss,
@@ -220,13 +215,6 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                         [jn.linalg.norm(g) for g in grads]
                     ).item(),
                 }
-                if ema is not None:
-                    log_dict.update(
-                        {
-                            k: (jn.abs(v.value) if jn.iscomplexobj(v) else v.value)
-                            for k, v in model_vars.items()
-                        }
-                    )
                 wandb.log(
                     log_dict,
                     commit=i % 10 == 0,
