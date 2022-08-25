@@ -78,6 +78,7 @@ hyperparams:
   batch_size_test: 512
   lr: 2e-3
   # momentum: 0.9
+  l2regularization: 1e-5
 scheduler:
   type: reduceonplateau
   normalize_lr: False
