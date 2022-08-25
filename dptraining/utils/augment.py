@@ -212,7 +212,7 @@ class Transformation:
             a.get_n_augmentations()
             for tf in self._transformations
             if isinstance(tf, RandomTransform)
-            for a in tf.a
+            for a in tf.aug
         ]
         complete_list = multi_tfs + random_tfs
         complete_list = list(filter((1).__ne__, complete_list))
