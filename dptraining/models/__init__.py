@@ -52,7 +52,24 @@ def get_kwargs(func: Callable, already_defined: list[str], original_kwargs: dict
         for k, v in original_kwargs.items()
         if k in signature[0] and k not in already_defined
     }
+    ignoring = {
+        k: v
+        for k, v in original_kwargs.items()
+        if k not in signature[0]
+        and k
+        not in [
+            "in_channels",
+            "num_classes",
+            "conv",
+            "activation",
+            "pooling",
+            "normalization",
+            "name",
+        ]
+    }
     print(f"Additional kwargs for {func}: {kwargs}")
+    if len(ignoring) > 0:
+        warnings.warn(f" -> Ignoring: {ignoring}")
     return kwargs
 
 
@@ -217,7 +234,7 @@ def make_normal_model_from_config(config: dict) -> Callable:
         case "wide_resnet":
             kwargs = get_kwargs(
                 wide_resnet.WideResNet,
-                ["nin", "nclass", "conv_layer", "bn"],
+                ["nin", "nclass", "conv_layer", "bn", "act"],
                 config["model"],
             )
             return wide_resnet.WideResNet(
@@ -225,6 +242,7 @@ def make_normal_model_from_config(config: dict) -> Callable:
                 config["model"]["num_classes"],
                 conv_layer=make_conv_from_config(config),
                 bn=make_normalization_from_config(config),
+                act=make_activation_from_config(config),
                 **kwargs,
             )
         case "resnet9":

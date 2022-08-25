@@ -62,6 +62,7 @@ class WRNBlock(objax.Module):
         ),
         scale_norm: bool = False,
         conv_layer: objax.Module = objax.nn.Conv2D,
+        act=objax.functional.relu,
     ):
         """Creates WRNBlock instance.
 
@@ -82,7 +83,7 @@ class WRNBlock(objax.Module):
         self.conv_1 = conv_layer(nin, nout, 3, strides=stride, **conv_args(3, nout))
         self.norm_2 = bn(nout)
         self.conv_2 = conv_layer(nout, nout, 3, strides=1, **conv_args(3, nout))
-        self.activation = objax.functional.relu
+        self.activation = act
         self.scale_norm = bn(nout) if scale_norm else lambda x: x
 
     def __call__(self, x: JaxArray, training: bool) -> JaxArray:
@@ -113,6 +114,7 @@ class WideResNetGeneral(objax.nn.Sequential):
         ),
         scale_norm: bool = False,
         conv_layer: objax.Module = objax.nn.Conv2D,
+        act=objax.functional.relu,
     ):
         """Creates WideResNetGeneral instance.
 
@@ -134,7 +136,13 @@ class WideResNetGeneral(objax.nn.Sequential):
             stride = 2 if i > 0 else 1
             ops.append(
                 WRNBlock(
-                    n, width, stride, bn, scale_norm=scale_norm, conv_layer=conv_layer
+                    n,
+                    width,
+                    stride,
+                    bn,
+                    scale_norm=scale_norm,
+                    conv_layer=conv_layer,
+                    act=act,
                 )
             )
             for b in range(1, block):
@@ -146,12 +154,13 @@ class WideResNetGeneral(objax.nn.Sequential):
                         bn,
                         scale_norm=scale_norm,
                         conv_layer=conv_layer,
+                        act=act,
                     )
                 )
             n = width
         ops += [
             bn(n),
-            objax.functional.relu,
+            act,
             self.mean_reduce,
             objax.nn.Linear(n, nclass, w_init=objax.nn.init.xavier_truncated_normal),
         ]
@@ -177,6 +186,7 @@ class WideResNet(WideResNetGeneral):
         ),
         scale_norm: bool = False,
         conv_layer: objax.Module = objax.nn.Conv2D,
+        act=objax.functional.relu,
     ):
         """Creates WideResNet instance.
 
@@ -198,4 +208,5 @@ class WideResNet(WideResNetGeneral):
             bn,
             scale_norm=scale_norm,
             conv_layer=conv_layer,
+            act=act,
         )
