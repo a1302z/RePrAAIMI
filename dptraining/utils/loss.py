@@ -37,7 +37,7 @@ class CombinedLoss(LossFunctionCreator):
 
         @objax.Function.with_vars(model_vars)
         def loss_fn(inpt, label):
-            return sum([l(inpt, label) for l in self._losses])
+            return sum((l(inpt, label) for l in self._losses))
 
         return loss_fn
 
@@ -65,16 +65,16 @@ class L2Regularization(LossFunctionCreator):
 
     def create_loss_fn(self, model_vars, model):
         @objax.Function.with_vars(model_vars)
-        def loss_fn(inpt, label):
+        def loss_fn(*_):
             return (
                 self._regularization
                 * 0.5
                 * sum(
-                    [
+                    (
                         jnp.sum(jnp.square(x.value))
                         for k, x in model_vars.items()
                         if k.endswith(".w")
-                    ]
+                    )
                 )
             )
 
