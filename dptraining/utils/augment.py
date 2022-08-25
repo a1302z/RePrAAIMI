@@ -20,6 +20,10 @@ from dptraining.utils.transform import (
     RandomVerticalFlipsJaxBatch,
     TransposeNumpyBatchToCHW,
     TransposeNumpyImgToCHW,
+    FFT,
+    IFFT,
+    JaxFFT,
+    JaxIFFT,
 )
 from omegaconf import DictConfig
 from torchvision import transforms
@@ -178,6 +182,10 @@ class Transformation:
         "numpy_img_to_chw": TransposeNumpyImgToCHW,
         "consecutive_augmentations": ConsecutiveAugmentations,
         "random_augmentations": RandomTransform,
+        "fft": FFT,
+        "ifft": IFFT,
+        "jaxfft": JaxFFT,
+        "jaxifft": JaxIFFT,
         **torchvision_transforms,
     }
 

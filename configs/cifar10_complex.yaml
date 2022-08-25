@@ -7,49 +7,51 @@ dataset:
   name: CIFAR10
   root: ./data
   train_val_split: 0.9
+  fft: False
+  normalization: True
 loader: 
   num_workers: 16
   prefetch_factor: 16
   collate_fn: numpy
 augmentations:
   make_complex_both:
-  random_augmentations:
-    - consecutive_augmentations:
-        complex: True
-        random_horizontal_flips: # identity
-          flip_prob: 0
-    - consecutive_augmentations:
-        complex: True
-        random_horizontal_flips: 
-          flip_prob: 1.0
-    - consecutive_augmentations:
-        complex: True
-        random_vertical_flips:
-          flip_prob: 1.0
-    - consecutive_augmentations:
-        complex: True
-        random_horizontal_flips: 
-          flip_prob: 0.5
-    - consecutive_augmentations:
-        complex: True
-        random_vertical_flips:
-          flip_prob: 0.5
-    - consecutive_augmentations:
-        complex: True
-        random_img_shift:
-          max_shift: 4
-    - consecutive_augmentations:
-        complex: True
-        random_img_shift:
-          max_shift: 8
-    - consecutive_augmentations:
-        complex: True
-        random_horizontal_flips: 
-          flip_prob: 0.1
-        random_vertical_flips:
-          flip_prob: 0.1
-        random_img_shift:
-          max_shift: 4
+  # random_augmentations:
+  #   - consecutive_augmentations:
+  #       complex: True
+  #       random_horizontal_flips: # identity
+  #         flip_prob: 0
+  #   - consecutive_augmentations:
+  #       complex: True
+  #       random_horizontal_flips: 
+  #         flip_prob: 1.0
+  #   - consecutive_augmentations:
+  #       complex: True
+  #       random_vertical_flips:
+  #         flip_prob: 1.0
+  #   - consecutive_augmentations:
+  #       complex: True
+  #       random_horizontal_flips: 
+  #         flip_prob: 0.5
+  #   - consecutive_augmentations:
+  #       complex: True
+  #       random_vertical_flips:
+  #         flip_prob: 0.5
+  #   - consecutive_augmentations:
+  #       complex: True
+  #       random_img_shift:
+  #         max_shift: 4
+  #   - consecutive_augmentations:
+  #       complex: True
+  #       random_img_shift:
+  #         max_shift: 8
+  #   - consecutive_augmentations:
+  #       complex: True
+  #       random_horizontal_flips: 
+  #         flip_prob: 0.1
+  #       random_vertical_flips:
+  #         flip_prob: 0.1
+  #       random_img_shift:
+  #         max_shift: 4
 test_augmentations:
   make_complex_both:
 model:
@@ -64,6 +66,9 @@ model:
   scale_norm: True
 optim:
   name: nadam
+loss: 
+  type: cse
+  reduction: mean
 ema:
   use_ema: False
   decay: 0.999
