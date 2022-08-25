@@ -1,3 +1,4 @@
+import inspect
 from typing import Callable
 import warnings
 from copy import deepcopy
@@ -42,6 +43,17 @@ SUPPORTED_COMPLEX_CONV = ("conv", "convws", "convws_nw")
 SUPPORTED_COMPLEX_NORMALIZATION = ("gnw", "bn")
 SUPPORTED_COMPLEX_ACTIVATION = ("mish", "sepmish", "conjmish", "igaussian", "cardioid")
 SUPPORTED_COMPLEX_POOLING = ("conjmaxpool", "sepmaxpool", "avgpool")
+
+
+def get_kwargs(func: Callable, already_defined: list[str], original_kwargs: dict):
+    signature = inspect.getfullargspec(func)
+    kwargs = {
+        k: v
+        for k, v in original_kwargs.items()
+        if k in signature[0] and k not in already_defined
+    }
+    print(f"Additional kwargs for {func}: {kwargs}")
+    return kwargs
 
 
 def make_normalization_from_config(config: dict) -> Callable:
@@ -175,9 +187,6 @@ def make_complex_pooling_from_config(
 
 
 def make_normal_model_from_config(config: dict) -> Callable:
-    scale_norm = (
-        config["model"]["scale_norm"] if "scale_norm" in config["model"] else False
-    )
     match config["model"]["name"]:
         case "cifar10model":
             if "activation" in config["model"]:
@@ -186,23 +195,48 @@ def make_normal_model_from_config(config: dict) -> Callable:
                 warnings.warn("No choice of normalization supported for cifar 10 model")
             return Cifar10ConvNet(nclass=config["model"]["num_classes"])
         case "resnet18":
+            kwargs = get_kwargs(
+                resnet_v2.ResNet18,
+                [
+                    "in_channels",
+                    "num_classes",
+                    "conv_layer",
+                    "normalization_fn",
+                    "activation_fn",
+                ],
+                config["model"],
+            )
             return resnet_v2.ResNet18(
                 config["model"]["in_channels"],
                 config["model"]["num_classes"],
                 conv_layer=make_conv_from_config(config),
                 normalization_fn=make_normalization_from_config(config),
                 activation_fn=make_activation_from_config(config),
-                scale_norm=scale_norm,
+                **kwargs,
             )
         case "wide_resnet":
+            kwargs = get_kwargs(
+                wide_resnet.WideResNet,
+                ["nin", "nclass", "conv_layer", "bn"],
+                config["model"],
+            )
             return wide_resnet.WideResNet(
                 config["model"]["in_channels"],
                 config["model"]["num_classes"],
                 conv_layer=make_conv_from_config(config),
                 bn=make_normalization_from_config(config),
-                scale_norm=scale_norm,
+                **kwargs,
             )
         case "resnet9":
+            already_defined = (
+                "in_channels",
+                "num_classes",
+                "conv_cls",
+                "norm_cls",
+                "act_func",
+                "pool_func",
+            )
+            kwargs = get_kwargs(ResNet9, already_defined, config["model"])
             return ResNet9(
                 config["model"]["in_channels"],
                 config["model"]["num_classes"],
@@ -210,9 +244,18 @@ def make_normal_model_from_config(config: dict) -> Callable:
                 norm_cls=make_normalization_from_config(config),
                 act_func=make_activation_from_config(config),
                 pool_func=partial(make_pooling_from_config(config), size=2),
-                scale_norm=scale_norm,
+                **kwargs,
             )
         case "smoothnet":
+            already_defined = (
+                "in_channels",
+                "num_classes",
+                "conv_cls",
+                "norm_cls",
+                "act_func",
+                "pool_func",
+            )
+            kwargs = get_kwargs(get_smoothnet, already_defined, config["model"])
             return get_smoothnet(
                 in_channels=config["model"]["in_channels"],
                 num_classes=config["model"]["num_classes"],
@@ -222,6 +265,7 @@ def make_normal_model_from_config(config: dict) -> Callable:
                 pool_func=partial(
                     make_pooling_from_config(config), size=3, strides=1, padding=1
                 ),
+                **kwargs,
             )
         case _ as fail:
             raise ValueError(
@@ -232,6 +276,17 @@ def make_normal_model_from_config(config: dict) -> Callable:
 def make_complex_model_from_config(config: dict) -> Callable:
     match config["model"]["name"]:
         case "resnet9":
+            already_defined = (
+                "in_channels",
+                "num_classes",
+                "conv_cls",
+                "norm_cls",
+                "act_func",
+                "pool_func",
+                "linear_cls",
+                "out_func",
+            )
+            kwargs = get_kwargs(ResNet9, already_defined, config["model"])
             return ResNet9(
                 config["model"]["in_channels"],
                 config["model"]["num_classes"],
@@ -245,11 +300,20 @@ def make_complex_model_from_config(config: dict) -> Callable:
                 ),
                 linear_cls=ComplexLinear,
                 out_func=ComplexToReal(),
-                scale_norm=config["model"]["scale_norm"]
-                if "scale_norm" in config["model"]
-                else False,
+                **kwargs,
             )
         case "smoothnet":
+            already_defined = (
+                "in_channels",
+                "num_classes",
+                "conv_cls",
+                "norm_cls",
+                "act_func",
+                "pool_func",
+                "linear_cls",
+                "out_func",
+            )
+            kwargs = get_kwargs(get_smoothnet, already_defined, config["model"])
             return get_smoothnet(
                 in_channels=config["model"]["in_channels"],
                 num_classes=config["model"]["num_classes"],
@@ -265,6 +329,7 @@ def make_complex_model_from_config(config: dict) -> Callable:
                 ),
                 linear_cls=ComplexLinear,
                 out_func=ComplexToReal(),
+                **kwargs,
             )
         case _ as fail:
             raise ValueError(

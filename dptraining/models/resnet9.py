@@ -48,9 +48,7 @@ class ResNet9(Module):  # pylint:disable=too-many-instance-attributes
         """
         super().__init__()
 
-        assert (
-            isinstance(num_groups, tuple) and len(num_groups) == 4
-        ), "num_groups must be a tuple with 4 members"
+        assert len(num_groups) == 4, "num_groups must be a tuple with 4 members"
         groups = num_groups
 
         self.conv1 = conv_norm_act(

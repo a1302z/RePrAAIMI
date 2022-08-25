@@ -95,11 +95,16 @@ def test_make_resnet9():
                 "in_channels": 12,
                 "num_classes": 256,
                 "pooling": "maxpool",
+                "num_groups": [4, 8, 16, 32],
             }
         }
     )
     random_input_data = np.random.randn(2, 12, 224, 224)
     m(random_input_data, training=False)
+    assert m.conv1[1].groups == 4
+    assert m.res1[0][1].groups == 8
+    assert m.conv3[1].groups == 16
+    assert m.res2[0][1].groups == 32
 
 
 def test_all_options():
