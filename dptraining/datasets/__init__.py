@@ -11,6 +11,9 @@ from dptraining.utils.augment import Transformation
 
 SUPPORTED_DATASETS = ("cifar10", "imagenet")
 
+SUPPORTED_FFT = ("cifar10",)
+SUPPORTED_NORMALIZATION = ("cifar10",)
+
 
 def modify_collate_fn_config(config):
     if "collate_fn" in config:
@@ -21,6 +24,16 @@ def modify_collate_fn_config(config):
 
 
 def make_dataset(config):
+    fft = "fft" in config["dataset"] and config["dataset"]["fft"]
+    normalize = (
+        "normalization" in config["dataset"] and config["dataset"]["normalization"]
+    )
+    if fft and config["dataset"]["name"].lower() not in SUPPORTED_FFT:
+        raise ValueError(f"Direct FFT conversion only supported for {SUPPORTED_FFT}")
+    if normalize and config["dataset"]["name"].lower() not in SUPPORTED_NORMALIZATION:
+        raise ValueError(
+            f"Direct normalization only supported for {SUPPORTED_NORMALIZATION}"
+        )
 
     train_tf = (
         Transformation.from_dict_list(config["train_transforms"])
@@ -39,8 +52,7 @@ def make_dataset(config):
     )
     if config["dataset"]["name"].lower() == "cifar10":
         train_ds, val_ds, test_ds = CIFAR10Creator.make_datasets(
-            config,
-            (train_tf, val_tf, test_tf),
+            config, (train_tf, val_tf, test_tf), normalize_by_default=normalize
         )
     elif config["dataset"]["name"].lower() == "imagenet":
         train_ds, val_ds, test_ds = ImageNetCreator.make_datasets(

@@ -150,7 +150,7 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
 
 def create_loss_gradient(config, model_vars, loss_fn):
     if config["DP"]["disable_dp"]:
-        loss_gv = objax.GradValues(loss_fn, model_vars())
+        loss_gv = objax.GradValues(loss_fn, model_vars)
     else:
         loss_gv = ClipAndAccumulateGrads(
             loss_fn,

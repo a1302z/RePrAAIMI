@@ -42,28 +42,27 @@ class ResNet9(Module):  # pylint:disable=too-many-instance-attributes
         out_func: Callable = lambda x: x,
         scale_norm: bool = False,
         num_groups: tuple[int, ...] = (32, 32, 32, 32),
+        channels: tuple[int, ...] = (64, 128, 256, 256),
     ):
         """9-layer Residual Network. Architecture:
         conv-conv-Residual(conv, conv)-conv-conv-Residual(conv-conv)-FC
         """
         super().__init__()
 
-        assert (
-            isinstance(num_groups, tuple) and len(num_groups) == 4
-        ), "num_groups must be a tuple with 4 members"
+        assert len(num_groups) == 4, "num_groups must be a tuple with 4 members"
         groups = num_groups
 
         self.conv1 = conv_norm_act(
             in_channels,
-            64,
+            channels[0],
             conv_cls=conv_cls,
             act_func=act_func,
             norm_cls=norm_cls,
             num_groups=groups[0],
         )
         self.conv2 = conv_norm_act(
-            64,
-            128,
+            channels[0],
+            channels[1],
             conv_cls=conv_cls,
             pool_func=pool_func,
             act_func=act_func,
@@ -74,16 +73,16 @@ class ResNet9(Module):  # pylint:disable=too-many-instance-attributes
         self.res1 = nn.Sequential(
             [
                 conv_norm_act(
-                    128,
-                    128,
+                    channels[1],
+                    channels[1],
                     conv_cls=conv_cls,
                     act_func=act_func,
                     norm_cls=norm_cls,
                     num_groups=groups[1],
                 ),
                 conv_norm_act(
-                    128,
-                    128,
+                    channels[1],
+                    channels[1],
                     conv_cls=conv_cls,
                     act_func=act_func,
                     norm_cls=norm_cls,
@@ -93,8 +92,8 @@ class ResNet9(Module):  # pylint:disable=too-many-instance-attributes
         )
 
         self.conv3 = conv_norm_act(
-            128,
-            256,
+            channels[1],
+            channels[2],
             conv_cls=conv_cls,
             pool_func=pool_func,
             act_func=act_func,
@@ -102,8 +101,8 @@ class ResNet9(Module):  # pylint:disable=too-many-instance-attributes
             num_groups=groups[2],
         )
         self.conv4 = conv_norm_act(
-            256,
-            256,
+            channels[2],
+            channels[3],
             conv_cls=conv_cls,
             pool_func=pool_func,
             act_func=act_func,
@@ -114,16 +113,16 @@ class ResNet9(Module):  # pylint:disable=too-many-instance-attributes
         self.res2 = nn.Sequential(
             [
                 conv_norm_act(
-                    256,
-                    256,
+                    channels[3],
+                    channels[3],
                     conv_cls=conv_cls,
                     act_func=act_func,
                     norm_cls=norm_cls,
                     num_groups=groups[3],
                 ),
                 conv_norm_act(
-                    256,
-                    256,
+                    channels[3],
+                    channels[3],
                     conv_cls=conv_cls,
                     act_func=act_func,
                     norm_cls=norm_cls,
@@ -137,19 +136,19 @@ class ResNet9(Module):  # pylint:disable=too-many-instance-attributes
         # self.MP = partial(functional.average_pool_2d, ((2, 2)))
         # self.FlatFeats = lambda x: x.reshape(x.shape[0], -1)
         self.flatten = Flatten()
-        self.classifier = linear_cls(1024, num_classes)
+        self.classifier = linear_cls(4 * channels[3], num_classes)
 
         if scale_norm:
             self.scale_norm_1 = (
-                partial(norm_cls, groups=min(num_groups[1], 128))
+                partial(norm_cls, groups=min(num_groups[1], channels[1]))
                 if is_groupnorm(norm_cls)
                 else norm_cls
-            )(nin=128)
+            )(nin=channels[1])
             self.scale_norm_2 = (
-                partial(norm_cls, groups=min(num_groups[1], 256))
+                partial(norm_cls, groups=min(num_groups[3], channels[3]))
                 if is_groupnorm(norm_cls)
                 else norm_cls
-            )(nin=256)
+            )(nin=channels[3])
         else:
             self.scale_norm_1 = lambda x: x
             self.scale_norm_2 = lambda x: x

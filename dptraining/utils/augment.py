@@ -20,6 +20,10 @@ from dptraining.utils.transform import (
     RandomVerticalFlipsJaxBatch,
     TransposeNumpyBatchToCHW,
     TransposeNumpyImgToCHW,
+    FFT,
+    IFFT,
+    JaxFFT,
+    JaxIFFT,
 )
 from omegaconf import DictConfig
 from torchvision import transforms
@@ -178,6 +182,10 @@ class Transformation:
         "numpy_img_to_chw": TransposeNumpyImgToCHW,
         "consecutive_augmentations": ConsecutiveAugmentations,
         "random_augmentations": RandomTransform,
+        "fft": FFT,
+        "ifft": IFFT,
+        "jaxfft": JaxFFT,
+        "jaxifft": JaxIFFT,
         **torchvision_transforms,
     }
 
@@ -204,7 +212,7 @@ class Transformation:
             a.get_n_augmentations()
             for tf in self._transformations
             if isinstance(tf, RandomTransform)
-            for a in tf.a
+            for a in tf.aug
         ]
         complete_list = multi_tfs + random_tfs
         complete_list = list(filter((1).__ne__, complete_list))
