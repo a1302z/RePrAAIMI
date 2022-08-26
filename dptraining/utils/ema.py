@@ -59,9 +59,12 @@ class ExponentialMovingAverage(Module):
         self.num_updates = StateVar(jnp.array(0, jnp.uint32))
         self.use_num_updates = use_num_updates
         self.shadow_params = ModuleList(
-            StateVar(jnp.array(p.value.copy())) for p in model_vars.values()
+            StateVar(jnp.array(p.value.copy()))
+            for p in model_vars.values()
+            if isinstance(p, TrainVar)
         )
         self.model_vars = ModuleList(TrainRef(x) for x in model_vars.subset(TrainVar))
+        assert len(self.shadow_params) == len(self.model_vars)
         self.update_every = jnp.array(update_every, jnp.uint32)
 
     # def parallel_reduce(self):
