@@ -1,41 +1,87 @@
+from enum import Enum
 from functools import partial
 from objax.privacy.dpsgd import analyze_dp
 from scipy.optimize import minimize_scalar
 
 
-def optimisation_f(sigma, epsilon, sampling_rate, steps, delta):
-    calc_eps = analyze_dp(
-        q=sampling_rate, noise_multiplier=sigma, steps=steps, delta=delta,
-    )
+class NoiseCalcMode(Enum):
+    SIGMA = 1
+    EPOCHS = 2
+
+
+def epsilon_opt_func(*args, epsilon=None, opt_keyword=None, **kwargs):
+    kwargs = {opt_keyword: args[0], **kwargs}
+    calc_eps = analyze_dp(**kwargs)
     return abs(epsilon - calc_eps)
 
 
 class EpsCalculator:
     def __init__(self, config, train_loader) -> None:
+        assert "epsilon" in config["DP"]
+        self._config = config
         self._eps = config["DP"]["epsilon"]
-        effective_bs = EpsCalculator.calc_effective_batch_size(config)
-        self._sampling_rate = effective_bs / len(train_loader.dataset)
         self._delta = config["DP"]["delta"]
-        self._steps = (
-            len(train_loader)
-            // EpsCalculator.calc_artificial_batch_expansion_factor(config)
-        ) * config["hyperparams"]["epochs"]
+        if (
+            "sigma" in config["DP"]
+            # and "grad_acc_steps" in config["DP"]
+            and not "epochs" in config["hyperparams"]
+        ):
+            self._mode = NoiseCalcMode.EPOCHS
+            self._sigma = config["DP"]["sigma"]
+            effective_bs = EpsCalculator.calc_effective_batch_size(config)
+            self._sampling_rate = effective_bs / len(train_loader.dataset)
+            self._eff_batch_size = len(train_loader) // EpsCalculator.get_grad_acc(
+                config
+            )
+        elif (
+            # "grad_acc_steps" in config["DP"] and
+            "epochs" in config["hyperparams"]
+            and not "sigma" in config["DP"]
+        ):
+            self._mode = NoiseCalcMode.SIGMA
+            effective_bs = EpsCalculator.calc_effective_batch_size(config)
+            self._sampling_rate = effective_bs / len(train_loader.dataset)
+            self._steps = (
+                len(train_loader) // EpsCalculator.get_grad_acc(config)
+            ) * config["hyperparams"]["epochs"]
+        else:
+            raise ValueError(
+                "You need to specify either one of sigma or epochs in the config"
+            )
 
-    def calc_noise_for_eps(self, tol=1e-5) -> float:
-        result = minimize_scalar(
-            partial(
-                optimisation_f,
-                epsilon=self._eps,
-                sampling_rate=self._sampling_rate,
-                steps=self._steps,
-                delta=self._delta,
-            ),
-            tol=tol,
-        )
-        return result.x
+    def fill_config(self, tol=1e-5) -> float:
+        if self._mode == NoiseCalcMode.SIGMA:
+            result = minimize_scalar(
+                partial(
+                    epsilon_opt_func,
+                    epsilon=self._eps,
+                    q=self._sampling_rate,
+                    steps=self._steps,
+                    delta=self._delta,
+                    opt_keyword="noise_multiplier",
+                ),
+                tol=tol,
+            )
+            self._config["DP"]["sigma"] = result.x
+        elif self._mode == NoiseCalcMode.EPOCHS:
+            result = minimize_scalar(
+                partial(
+                    epsilon_opt_func,
+                    epsilon=self._eps,
+                    noise_multiplier=self._sigma,
+                    q=self._sampling_rate,
+                    delta=self._delta,
+                    opt_keyword="steps",
+                ),
+                tol=tol,
+            )
+            steps = result.x
+            self._config["hyperparams"]["epochs"] = int(steps // self._eff_batch_size)
+        else:
+            raise RuntimeError("Mode not implemented")
 
     @staticmethod
-    def calc_artificial_batch_expansion_factor(config):
+    def get_grad_acc(config):
         grad_acc = (
             config["DP"]["grad_acc_steps"]
             if "DP" in config and "grad_acc_steps" in config["DP"]
@@ -47,7 +93,6 @@ class EpsCalculator:
     @staticmethod
     def calc_effective_batch_size(config):
         effective_batch_size = (
-            EpsCalculator.calc_artificial_batch_expansion_factor(config)
-            * config["hyperparams"]["batch_size"]
+            EpsCalculator.get_grad_acc(config) * config["hyperparams"]["batch_size"]
         )
         return effective_batch_size
