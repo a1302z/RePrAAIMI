@@ -117,14 +117,15 @@ def main(
         batch_expansion_factor, grad_acc = 1, 1
         effective_batch_size = config["hyperparams"]["batch_size"]
     else:
+        delta = config["DP"]["delta"]
+        eps_calc = EpsCalculator(config, train_loader)
+        eps_calc.fill_config()
+        sigma = config["DP"]["sigma"]
         grad_acc = (
             config["DP"]["grad_acc_steps"]
             if "DP" in config and "grad_acc_steps" in config["DP"]
             else 1
         )
-        delta = config["DP"]["delta"]
-        eps_calc = EpsCalculator(config, train_loader)
-        sigma = eps_calc.calc_noise_for_eps()
 
         complex_correction_factor = (
             lax.rsqrt(2.0)
@@ -132,13 +133,13 @@ def main(
             else 1.0
         )
         total_noise = (
-            sigma * complex_correction_factor * config["DP"]["max_per_sample_grad_norm"]
+            config["DP"]["sigma"]
+            * complex_correction_factor
+            * config["DP"]["max_per_sample_grad_norm"]
         )
 
         effective_batch_size = EpsCalculator.calc_effective_batch_size(config)
-        batch_expansion_factor = EpsCalculator.calc_artificial_batch_expansion_factor(
-            config
-        )
+        batch_expansion_factor = EpsCalculator.get_grad_acc(config)
         sampling_rate: float = effective_batch_size / len(train_loader.dataset)
         final_epsilon = objax.privacy.dpsgd.analyze_dp(
             q=sampling_rate,
