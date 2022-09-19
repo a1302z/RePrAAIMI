@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path.cwd()))
-from dptraining.datasets import CIFAR10Creator, ImageNetCreator
+from dptraining.datasets import CIFAR10Creator, ImageNetCreator, TinyImageNetCreator
 
 
 def access_dataset(*args):
@@ -80,3 +80,31 @@ def test_imagenet():
         (None, None, None),
     )
     access_dataset(train_ds, val_ds, test_ds)
+
+
+def test_tinyimagenet32():
+    train_ds, val_ds, test_ds = TinyImageNetCreator.make_datasets(
+        {
+            "dataset": {
+                "root": "./data/ImageNet32",
+                "train_val_split": 0.9,
+                "version": 32,
+            }
+        },
+        (None, None, None),
+    )
+    access_dataset(train_ds, val_ds, test_ds)
+
+
+# def test_tinyimagenet64(): # this is too slow to test each time
+#     train_ds, val_ds, test_ds = TinyImageNetCreator.make_datasets(
+#         {
+#             "dataset": {
+#                 "root": "./data/ImageNet64",
+#                 "train_val_split": 0.9,
+#                 "version": 64,
+#             }
+#         },
+#         (None, None, None),
+#     )
+#     access_dataset(train_ds, val_ds, test_ds)

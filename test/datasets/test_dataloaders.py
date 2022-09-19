@@ -91,3 +91,27 @@ def test_no_val_set():
     assert len(train_dl) == 50000
     assert len(test_dl) == 10000
     assert val_dl is None
+
+
+def test_imagenet_from_config():
+    train_dl, val_dl, test_dl = make_loader_from_config(
+        {
+            "hyperparams": {"batch_size": 4, "batch_size_test": 1},
+            "dataset": {
+                "name": "tinyimagenet",
+                "root": "./data/ImageNet32",
+                "version": 32,
+                "train_val_split": 0.9,
+            },
+            "train_transforms": {
+                "ToTensor": None,
+            },
+            "test_transforms": {
+                "ToTensor": None,
+            },
+            "augmentations": {"random_vertical_flips": {"flip_prob": 0.5}},
+            "loader": {},
+            "DP": {"disable_dp": False},
+        }
+    )
+    access_dataloader(train_dl, val_dl, test_dl)

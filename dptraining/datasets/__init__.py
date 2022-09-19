@@ -5,14 +5,15 @@ from deepee.dataloader import UniformWORSubsampler
 
 from dptraining.datasets.cifar10 import CIFAR10Creator
 from dptraining.datasets.imagenet import ImageNetCreator
+from dptraining.datasets.tinyimagenet import TinyImageNetCreator
 from dptraining.datasets.utils import collate_np_arrays
 from dptraining.utils.augment import Transformation
 
 
-SUPPORTED_DATASETS = ("cifar10", "imagenet")
+SUPPORTED_DATASETS = ("cifar10", "imagenet", "tinyimagenet")
 
 SUPPORTED_FFT = ("cifar10",)
-SUPPORTED_NORMALIZATION = ("cifar10",)
+SUPPORTED_NORMALIZATION = ("cifar10", "tinyimagenet")
 
 
 def modify_collate_fn_config(config):
@@ -53,6 +54,10 @@ def make_dataset(config):
     if config["dataset"]["name"].lower() == "cifar10":
         train_ds, val_ds, test_ds = CIFAR10Creator.make_datasets(
             config, (train_tf, val_tf, test_tf), normalize_by_default=normalize
+        )
+    elif config["dataset"]["name"].lower() == "tinyimagenet":
+        train_ds, val_ds, test_ds = TinyImageNetCreator.make_datasets(
+            config, (train_tf, val_tf, test_tf)
         )
     elif config["dataset"]["name"].lower() == "imagenet":
         train_ds, val_ds, test_ds = ImageNetCreator.make_datasets(
@@ -105,6 +110,15 @@ def make_loader_from_config(config):
 
     if config["dataset"]["name"].lower() == "cifar10":
         train_loader, val_loader, test_loader = CIFAR10Creator.make_dataloader(
+            train_ds,
+            val_ds,
+            test_ds,
+            train_loader_kwargs,
+            val_loader_kwargs,
+            test_loader_kwargs,
+        )
+    elif config["dataset"]["name"].lower() == "tinyimagenet":
+        train_loader, val_loader, test_loader = TinyImageNetCreator.make_dataloader(
             train_ds,
             val_ds,
             test_ds,
