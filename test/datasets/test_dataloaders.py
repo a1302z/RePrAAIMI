@@ -72,3 +72,22 @@ def test_imagenet_from_config():
         }
     )
     access_dataloader(train_dl, val_dl, test_dl)
+
+
+def test_no_val_set():
+    train_dl, val_dl, test_dl = make_loader_from_config(
+        {
+            "hyperparams": {"batch_size": 1, "batch_size_test": 1},
+            "dataset": {
+                "name": "CIFAR10",
+                "root": "./data/",
+                "train_val_split": 1.0,
+            },
+            "augmentations": {},
+            "loader": {},
+            "DP": {"disable_dp": False},
+        }
+    )
+    assert len(train_dl) == 50000
+    assert len(test_dl) == 10000
+    assert val_dl is None
