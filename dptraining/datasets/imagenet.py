@@ -27,6 +27,7 @@ class ImageNetCreator(DataLoaderCreator):
         train_ds = ImageNet(**train_kwargs)
         val_ds = ImageNet(**val_kwargs)
         train_val_split = config["dataset"]["train_val_split"]
+        # pylint:disable=duplicate-code
         assert 0.0 < train_val_split <= 1.0, "Train/Val split must be in (0,1]"
         if abs(train_val_split - 1.0) < 1e-5:
             val_ds = None
