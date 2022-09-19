@@ -19,6 +19,6 @@ class DataLoaderCreator(abc.ABC):
         test_kwargs,
     ) -> Tuple[DataLoader, DataLoader]:
         train_dl = DataLoader(train_ds, **train_kwargs)
-        val_dl = DataLoader(val_ds, **val_kwargs)
+        val_dl = DataLoader(val_ds, **val_kwargs) if val_ds is not None else None
         test_dl = DataLoader(test_ds, **test_kwargs)
         return train_dl, val_dl, test_dl

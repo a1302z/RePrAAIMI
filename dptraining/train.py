@@ -244,16 +244,19 @@ def main(
                 parallel,
                 "train",
             )
-        metric = test(
-            config,
-            val_loader,
-            predict_op_parallel if parallel else predict_op_jit,
-            test_aug,
-            model_vars,
-            parallel,
-            "val",
-        )
-        scheduler.update_score(metric)
+        if val_loader is not None:
+            metric = test(
+                config,
+                val_loader,
+                predict_op_parallel if parallel else predict_op_jit,
+                test_aug,
+                model_vars,
+                parallel,
+                "val",
+            )
+            scheduler.update_score(metric)
+        else:
+            metric = None
         if not config["DP"]["disable_dp"]:
             epsilon = objax.privacy.dpsgd.analyze_dp(
                 q=sampling_rate,
@@ -265,7 +268,7 @@ def main(
                 wandb.log({"epsilon": epsilon})
             else:
                 print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})")
-        if stopper(metric):
+        if metric is not None and stopper(metric):
             print("Early Stopping was activated -> Stopping Training")
             break
 

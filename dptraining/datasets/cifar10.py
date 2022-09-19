@@ -99,13 +99,17 @@ class CIFAR10Creator(DataLoaderCreator):
             val_ds.data = fft_conversion(val_ds.data, axes=(1, 2, 3))
             test_ds.data = fft_conversion(test_ds.data, axes=(1, 2, 3))
         train_val_split = config["dataset"]["train_val_split"]
-        train_data, val_data, train_targets, val_targets = train_test_split(
-            train_ds.data, train_ds.targets, train_size=train_val_split
-        )
-        train_ds.data = train_data
-        train_ds.targets = train_targets
-        val_ds.data = val_data
-        val_ds.targets = val_targets
+        assert 0.0 < train_val_split <= 1.0, "Train/Val split must be in (0,1]"
+        if abs(train_val_split - 1.0) < 1e-5:
+            val_ds = None
+        else:
+            train_data, val_data, train_targets, val_targets = train_test_split(
+                train_ds.data, train_ds.targets, train_size=train_val_split
+            )
+            train_ds.data = train_data
+            train_ds.targets = train_targets
+            val_ds.data = val_data
+            val_ds.targets = val_targets
         return train_ds, val_ds, test_ds
 
     @staticmethod
@@ -118,6 +122,6 @@ class CIFAR10Creator(DataLoaderCreator):
         test_kwargs,
     ) -> Tuple[DataLoader, DataLoader]:
         train_dl = DataLoader(train_ds, **train_kwargs)
-        val_dl = DataLoader(val_ds, **val_kwargs)
+        val_dl = DataLoader(val_ds, **val_kwargs) if val_ds is not None else None
         test_dl = DataLoader(test_ds, **test_kwargs)
         return train_dl, val_dl, test_dl
