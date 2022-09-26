@@ -127,14 +127,14 @@ def main(
             else 1
         )
 
-        complex_correction_factor = (
+        noise_adaptation = (
             lax.rsqrt(2.0)
-            if "complex" in config["model"] and config["model"]["complex"]
+            if "adapt_noise" in config["DP"] and config["DP"]["adapt_noise"]
             else 1.0
         )
         total_noise = (
             config["DP"]["sigma"]
-            * complex_correction_factor
+            * noise_adaptation
             * config["DP"]["max_per_sample_grad_norm"]
         )
 

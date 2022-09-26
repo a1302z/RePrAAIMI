@@ -5,6 +5,8 @@ from objax.typing import JaxArray
 from objax.functional import flatten
 from dptraining.models.complex import ComplexGroupNormWhitening
 
+from jax import lax, numpy as jn
+
 
 def is_groupnorm(instance):
     return issubclass(instance, (nn.GroupNorm2D, ComplexGroupNormWhitening))
@@ -24,8 +26,18 @@ class ConvWS2D(nn.Conv2D):
 
 class ConvCentering2D(nn.Conv2D):
     def __call__(self, x: JaxArray) -> JaxArray:
-        self.w.assign(self.w.value - self.w.value.mean(axis=(0, 1, 2), keepdims=True))
-        return super().__call__(x)
+        weight = self.w - jn.mean(self.w.value, axis=(0, 1, 2), keepdims=True)
+        # return super().__call__(x)
+        output = lax.conv_general_dilated(
+            x,
+            weight,
+            self.strides,
+            self.padding,
+            rhs_dilation=self.dilations,
+            feature_group_count=self.groups,
+            dimension_numbers=("NCHW", "HWIO", "NCHW"),
+        )
+        return output
 
 
 class AdaptivePooling(Module):

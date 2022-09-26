@@ -90,3 +90,4 @@ DP:
   delta: 8e-7
   norm_acc: False
   grad_acc_steps: 64
+  adapt_noise: True
