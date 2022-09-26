@@ -16,14 +16,14 @@ class Flatten(Module):
 
 
 class ConvWS2D(nn.Conv2D):
-    def __call__(self, x: JaxArray) -> JaxArray:
+    def __call__(self, x: JaxArray, training=True) -> JaxArray:
         self.w.assign(self.w.value - self.w.value.mean(axis=(0, 1, 2), keepdims=True))
         self.w.assign(self.w.value / self.w.value.std(axis=(0, 1, 2), keepdims=True))
         return super().__call__(x)
 
 
 class ConvCentering2D(nn.Conv2D):
-    def __call__(self, x: JaxArray) -> JaxArray:
+    def __call__(self, x: JaxArray, training=True) -> JaxArray:
         self.w.assign(self.w.value - self.w.value.mean(axis=(0, 1, 2), keepdims=True))
         return super().__call__(x)
 
@@ -50,7 +50,7 @@ class AdaptivePooling(Module):
     def _calc_kernel(inpt_size, outpt_size, stride) -> int:
         return inpt_size - (outpt_size - 1) * stride
 
-    def __call__(self, x):
+    def __call__(self, x, training=True):
         _, _, size_x, size_y = x.shape
         if self.stride is None:
             stride = (size_x // self.output_size_x, size_y // self.output_size_y)

@@ -5,7 +5,7 @@ from jax import numpy as jnp
 from typing import Optional, Callable, Tuple
 from objax.gradient import GradValues
 from objax.module import Function, Vectorize
-from objax import random, ModuleList, StateVar
+from objax import random, ModuleList, StateVar, TrainVar
 from objax.variable import VarCollection
 from objax.privacy.dpsgd import PrivateGradValues
 
@@ -35,7 +35,7 @@ class ClipAndAccumulateGrads(PrivateGradValues):
         # self.num_elements = StateVar(jnp.array(0, dtype=jnp.int32))
         self.accumulated_loss = StateVar(jnp.array(0.0))
         self.accumulated_grads = ModuleList(
-            StateVar(jnp.zeros_like(tv)) for tv in variables
+            StateVar(jnp.zeros_like(tv)) for tv in variables if isinstance(tv, TrainVar)
         )
 
     def calc_per_sample_grads(self, *args):
@@ -97,6 +97,8 @@ class ClipAndAccumulateGrads(PrivateGradValues):
 
         def clipped_grad(*args):
             grads, loss = clipped_grad_vectorized(*args)
+            # grads, loss = zip(*[clipped_grad_vectorized(*arg) for arg in zip(*args)])
+            # grads, loss = list(grads), list(loss)
             grads, loss = jax.tree_util.tree_map(
                 functools.partial(jnp.sum, axis=0), (grads, loss)
             )

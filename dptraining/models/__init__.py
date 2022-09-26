@@ -6,6 +6,7 @@ from functools import partial
 from objax import nn, functional
 from dptraining.models.cifar10models import Cifar10ConvNet
 from dptraining.models.resnet9 import ResNet9
+from dptraining.models.nfnets import NFNet, VPGELU, VPReLU
 from dptraining.models.smoothnet import get_smoothnet
 from dptraining.models.activations import mish
 from dptraining.models.layers import ConvWS2D, ConvCentering2D
@@ -32,10 +33,17 @@ from dptraining.models import resnet_v2, wide_resnet
 from dptraining.models.complex.converter import ComplexModelConverter
 
 
-SUPPORTED_MODELS = ("cifar10model", "resnet18", "resnet9", "smoothnet", "wide_resnet")
+SUPPORTED_MODELS = (
+    "cifar10model",
+    "resnet18",
+    "resnet9",
+    "smoothnet",
+    "wide_resnet",
+    "nfnet",
+)
 SUPPORTED_NORMALIZATION = ("bn", "gn")
 SUPPORTED_CONV = ("conv", "convws", "convws_nw")
-SUPPORTED_ACTIVATION = ("relu", "selu", "leakyrelu", "mish")
+SUPPORTED_ACTIVATION = ("relu", "selu", "leakyrelu", "mish", "vpgelu", "vprelu")
 SUPPORTED_POOLING = ("maxpool", "avgpool")
 
 SUPPORTED_COMPLEX_MODELS = ("resnet9", "smoothnet")
@@ -139,6 +147,10 @@ def make_activation_from_config(config: dict) -> Callable:
             return functional.leaky_relu
         case "mish":
             return mish
+        case "vpgelu":
+            return VPGELU()
+        case "vprelu":
+            return VPReLU()
         case _ as fail:
             raise ValueError(
                 f"Unsupported activation layer '{fail}'. Legal options are: {SUPPORTED_ACTIVATION}"
@@ -283,6 +295,23 @@ def make_normal_model_from_config(config: dict) -> Callable:
                 pool_func=partial(
                     make_pooling_from_config(config), size=3, strides=1, padding=1
                 ),
+                **kwargs,
+            )
+        case "nfnet":
+            already_defined = (
+                "in_channels",
+                "num_classes",
+                "activation",
+                "stochdepth_rate",
+            )
+            kwargs = get_kwargs(NFNet, already_defined, config["model"])
+            return NFNet(
+                num_classes=config["model"]["num_classes"],
+                in_channels=config["model"]["in_channels"],
+                activation=make_activation_from_config(config),
+                stochdepth_rate=config["model"]["stochdepth_rate"]
+                if "stochdepth_rate" in config["model"]
+                else 0,
                 **kwargs,
             )
         case _ as fail:

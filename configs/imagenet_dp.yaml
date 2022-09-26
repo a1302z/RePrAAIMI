@@ -58,20 +58,22 @@ loss:
   type: cse
   reduction: sum
 model:
-  name: resnet9
+  name: nfnet
+  stochdepth_rate: 0.0
+  variant: F3
   in_channels: 3
   num_classes: 1000
-  conv: conv
+  # conv: conv
   activation: mish
-  normalization: gn
-  pooling: avgpool
+  # normalization: gn
+  # pooling: avgpool
   scale_norm: True
 ema:
   use_ema: False
   decay: 0.04
 hyperparams:
   epochs: 200
-  batch_size: 128
+  batch_size: 16
   batch_size_test: 256
   lr: 1e-3
 scheduler:

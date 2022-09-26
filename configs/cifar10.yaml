@@ -16,17 +16,17 @@ augmentations:
 test_augmentations:
   # make_complex_both:
 model:
-  complex: False
-  name: smoothnet
+  name: nfnet
+  stochdepth_rate: 0.0
   in_channels: 3
   num_classes: 10
-  conv: conv
-  activation: mish
-  normalization: gn
-  pooling: avgpool
+  activation: vpgelu
   # scale_norm: True
 optim:
   name: nadam
+loss: 
+  type: cse
+  reduction: sum
 ema:
   use_ema: True
   decay: 0.995
