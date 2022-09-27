@@ -41,7 +41,7 @@ def main(
     from dptraining.datasets import make_loader_from_config
     from dptraining.models import make_model_from_config
     from dptraining.optim import make_optim_from_config
-    from dptraining.privacy import EpsCalculator
+    from dptraining.privacy import EpsCalculator, new_noise_multi
     from dptraining.utils import (
         ExponentialMovingAverage,
         make_loss_from_config,
@@ -127,14 +127,26 @@ def main(
             else 1
         )
 
-        noise_adaptation = (
+        rsqrt2_correction_factor = (
             lax.rsqrt(2.0)
-            if "adapt_noise" in config["DP"] and config["DP"]["adapt_noise"]
+            if "rsqrt_noise_adapt" in config["DP"] and config["DP"]["rsqrt_noise_adapt"]
             else 1.0
         )
+        adapted_sigma = (
+            new_noise_multi(
+                sigma,
+                eps_calc.steps,
+                eps_calc.sampling_rate,
+                mode="complex"
+                if "complex" in config["model"] and config["model"]["complex"]
+                else "real",
+            )
+            if "glrt_assumption" in config["DP"] and config["DP"]["glrt_assumption"]
+            else config["DP"]["sigma"]
+        )
         total_noise = (
-            config["DP"]["sigma"]
-            * noise_adaptation
+            adapted_sigma  # config["DP"]["sigma"]
+            * rsqrt2_correction_factor
             * config["DP"]["max_per_sample_grad_norm"]
         )
 
@@ -154,6 +166,8 @@ def main(
             f" for {config['hyperparams']['epochs']} epochs"
             f" at a noise multiplier of {sigma:5f} and a delta of {delta}"
         )
+        if "glrt_assumption" in config["DP"] and config["DP"]["glrt_assumption"]:
+            print(f"Effective sigma due to glrt assumption is {adapted_sigma}")
         max_batches = (
             config["hyperparams"]["overfit"]
             if "overfit" in config["hyperparams"]

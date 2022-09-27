@@ -75,8 +75,10 @@ class EpsCalculator:
                 ),
                 tol=tol,
             )
-            steps = result.x
-            self._config["hyperparams"]["epochs"] = int(steps // self._eff_batch_size)
+            self._steps = result.x
+            self._config["hyperparams"]["epochs"] = int(
+                self._steps // self._eff_batch_size
+            )
         else:
             raise RuntimeError("Mode not implemented")
 
@@ -96,3 +98,11 @@ class EpsCalculator:
             EpsCalculator.get_grad_acc(config) * config["hyperparams"]["batch_size"]
         )
         return effective_batch_size
+
+    @property
+    def steps(self):
+        return self._steps
+
+    @property
+    def sampling_rate(self):
+        return self._sampling_rate
