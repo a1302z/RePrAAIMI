@@ -135,3 +135,28 @@ def test_all_options():
             model = make_model_from_config(config)
         pred = model(fake_data, training=True)
         assert pred.shape[1] == 5
+
+
+def test_ensemble():
+
+    m = make_model_from_config(
+        {
+            "model": {
+                "name": "resnet9",
+                "conv": "conv",
+                "activation": "selu",
+                "normalization": "gn",
+                "in_channels": 12,
+                "num_classes": 256,
+                "pooling": "maxpool",
+                "num_groups": [4, 8, 16, 32],
+                "channels": [8, 32, 64, 128],
+                "ensemble": 2,
+            }
+        }
+    )
+
+    assert len(m.ensemble) == 2
+
+    random_input_data = np.random.randn(2, 12, 224, 224)
+    m(random_input_data, training=False)

@@ -35,13 +35,13 @@ def main(
 
     # This is absolutely disgusting but necessary to disable gpu training
     import objax
-    from jax import device_count, lax
+    from jax import device_count
     from torch.random import manual_seed as torch_manual_seed
 
     from dptraining.datasets import make_loader_from_config
     from dptraining.models import make_model_from_config
     from dptraining.optim import make_optim_from_config
-    from dptraining.privacy import EpsCalculator, new_noise_multi
+    from dptraining.privacy import EpsCalculator
     from dptraining.utils import (
         ExponentialMovingAverage,
         make_loss_from_config,
@@ -127,28 +127,7 @@ def main(
             else 1
         )
 
-        rsqrt2_correction_factor = (
-            lax.rsqrt(2.0)
-            if "rsqrt_noise_adapt" in config["DP"] and config["DP"]["rsqrt_noise_adapt"]
-            else 1.0
-        )
-        adapted_sigma = (
-            new_noise_multi(
-                sigma,
-                eps_calc.steps,
-                eps_calc.sampling_rate,
-                mode="complex"
-                if "complex" in config["model"] and config["model"]["complex"]
-                else "real",
-            )
-            if "glrt_assumption" in config["DP"] and config["DP"]["glrt_assumption"]
-            else config["DP"]["sigma"]
-        )
-        total_noise = (
-            adapted_sigma  # config["DP"]["sigma"]
-            * rsqrt2_correction_factor
-            * config["DP"]["max_per_sample_grad_norm"]
-        )
+        total_noise, adapted_sigma = eps_calc.adapt_sigma()
 
         effective_batch_size = EpsCalculator.calc_effective_batch_size(config)
         batch_expansion_factor = EpsCalculator.get_grad_acc(config)

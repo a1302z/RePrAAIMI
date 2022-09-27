@@ -2,6 +2,9 @@ from enum import Enum
 from functools import partial
 from objax.privacy.dpsgd import analyze_dp
 from scipy.optimize import minimize_scalar
+from jax.lax import rsqrt
+
+from dptraining.privacy.find_noise_mult import new_noise_multi
 
 
 class NoiseCalcMode(Enum):
@@ -98,6 +101,34 @@ class EpsCalculator:
             EpsCalculator.get_grad_acc(config) * config["hyperparams"]["batch_size"]
         )
         return effective_batch_size
+
+    def adapt_sigma(self):
+        rsqrt2_correction_factor = (
+            rsqrt(2.0)
+            if "rsqrt_noise_adapt" in self._config["DP"]
+            and self._config["DP"]["rsqrt_noise_adapt"]
+            else 1.0
+        )
+        adapted_sigma = (
+            new_noise_multi(
+                self._config["DP"]["sigma"],
+                self.steps,
+                self.sampling_rate,
+                mode="complex"
+                if "complex" in self._config["model"]
+                and self._config["model"]["complex"]
+                else "real",
+            )
+            if "glrt_assumption" in self._config["DP"]
+            and self._config["DP"]["glrt_assumption"]
+            else self._config["DP"]["sigma"]
+        )
+        total_noise = (
+            adapted_sigma
+            * rsqrt2_correction_factor
+            * self._config["DP"]["max_per_sample_grad_norm"]
+        )
+        return total_noise, adapted_sigma
 
     @property
     def steps(self):
