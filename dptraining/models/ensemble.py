@@ -14,5 +14,5 @@ class Ensemble(Module):
 
     def __call__(self, x, *args, **kwargs):
         return self.reduction(
-            jn.stack([m(x) for m in self.ensemble])
+            jn.stack([m(x, *args, **kwargs) for m in self.ensemble])
         )  # tree_map(lambda m: m(x), self.ensemble))
