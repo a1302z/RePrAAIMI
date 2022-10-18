@@ -5,6 +5,7 @@ from copy import deepcopy
 from functools import partial
 from objax import nn, functional
 from dptraining.models.cifar10models import Cifar10ConvNet
+from dptraining.models.ensemble import Ensemble
 from dptraining.models.resnet9 import ResNet9
 from dptraining.models.smoothnet import get_smoothnet
 from dptraining.models.activations import mish
@@ -356,32 +357,41 @@ def make_complex_model_from_config(config: dict) -> Callable:
 
 
 def make_model_from_config(config: dict) -> Callable:
-    if "complex" in config["model"] and config["model"]["complex"]:
-        if config["model"]["name"] in SUPPORTED_COMPLEX_MODELS:
-            model = make_complex_model_from_config(config)
-        elif config["model"]["name"] in SUPPORTED_MODELS:
-            fake_config = deepcopy(config)
-            fake_config["model"].update(
-                {
-                    "conv": "conv",
-                    "normalization": "gn",
-                    "activation": "relu",
-                    "pooling": "avgpool",
-                }
-            )
-            model = make_normal_model_from_config(fake_config)
-            converter = ComplexModelConverter(
-                new_conv_class=make_complex_conv_from_config(config),
-                new_norm_class=make_complex_normalization_from_config(config),
-                new_linear_class=ComplexLinear,
-                new_activation=make_complex_activation_from_config(
-                    config, init_layers=False
-                ),
-                new_pooling=make_complex_pooling_from_config(config, init_layers=False),
-            )
-            model = nn.Sequential([converter(model), ComplexToReal()])
+    num_replicas = config["model"]["ensemble"] if "ensemble" in config["model"] else 1
+    ensemble = []
+    for _ in range(num_replicas):
+        if "complex" in config["model"] and config["model"]["complex"]:
+            if config["model"]["name"] in SUPPORTED_COMPLEX_MODELS:
+                model = make_complex_model_from_config(config)
+            elif config["model"]["name"] in SUPPORTED_MODELS:
+                fake_config = deepcopy(config)
+                fake_config["model"].update(
+                    {
+                        "conv": "conv",
+                        "normalization": "gn",
+                        "activation": "relu",
+                        "pooling": "avgpool",
+                    }
+                )
+                model = make_normal_model_from_config(fake_config)
+                converter = ComplexModelConverter(
+                    new_conv_class=make_complex_conv_from_config(config),
+                    new_norm_class=make_complex_normalization_from_config(config),
+                    new_linear_class=ComplexLinear,
+                    new_activation=make_complex_activation_from_config(
+                        config, init_layers=False
+                    ),
+                    new_pooling=make_complex_pooling_from_config(
+                        config, init_layers=False
+                    ),
+                )
+                model = nn.Sequential([converter(model), ComplexToReal()])
+            else:
+                raise ValueError(f"{config['model']['name']} unknown")
         else:
-            raise ValueError(f"{config['model']['name']} unknown")
-    else:
-        model = make_normal_model_from_config(config)
+            model = make_normal_model_from_config(config)
+        if "ensemble" in config["model"] and config["model"]["ensemble"] > 1:
+            ensemble.append(model)
+    if "ensemble" in config["model"] and config["model"]["ensemble"] > 1:
+        model = Ensemble(ensemble)
     return model

@@ -67,3 +67,4 @@ DP:
   delta: 1e-5
   norm_acc: False
   grad_acc_steps: 64
+  rsqrt_noise_adapt: True
