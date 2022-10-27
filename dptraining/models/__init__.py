@@ -28,9 +28,10 @@ from dptraining.models.complex.layers import (
     ComplexToReal,
     ComplexWSConv2DNoWhiten,
 )
-from dptraining.models.complex.pooling import ConjugateMaxPool2D, SeparableMaxPool2D
+from dptraining.models.complex.pooling import ConjugatePool2D, SeparablePool2D
 from dptraining.models import resnet_v2, wide_resnet
 from dptraining.models.complex.converter import ComplexModelConverter
+from dptraining.models.unet import Unet
 
 
 SUPPORTED_MODELS = ("cifar10model", "resnet18", "resnet9", "smoothnet", "wide_resnet")
@@ -39,7 +40,7 @@ SUPPORTED_CONV = ("conv", "convws", "convws_nw")
 SUPPORTED_ACTIVATION = ("relu", "selu", "leakyrelu", "mish")
 SUPPORTED_POOLING = ("maxpool", "avgpool")
 
-SUPPORTED_COMPLEX_MODELS = ("resnet9", "smoothnet")
+SUPPORTED_COMPLEX_MODELS = ("resnet9", "smoothnet", "unet")
 SUPPORTED_COMPLEX_CONV = ("conv", "convws", "convws_nw")
 SUPPORTED_COMPLEX_NORMALIZATION = ("gnw", "bn")
 SUPPORTED_COMPLEX_ACTIVATION = ("mish", "sepmish", "conjmish", "igaussian", "cardioid")
@@ -186,9 +187,9 @@ def make_complex_pooling_from_config(
 ) -> Callable:
     match config["model"]["pooling"]:
         case "conjmaxpool":
-            layer = ConjugateMaxPool2D
+            layer = ConjugatePool2D
         case "sepmaxpool":
-            layer = SeparableMaxPool2D
+            layer = SeparablePool2D
         case "avgpool":
             if len(kwargs) == 0:
                 return functional.average_pool_2d
@@ -349,6 +350,13 @@ def make_complex_model_from_config(config: dict) -> Callable:
                 linear_cls=ComplexLinear,
                 out_func=ComplexToReal(),
                 **kwargs,
+            )
+        case "unet":
+            return Unet(
+                1,
+                1,
+                config["model"]["channels"],
+                actv=make_complex_activation_from_config(config),
             )
         case _ as fail:
             raise ValueError(

@@ -1,0 +1,62 @@
+project: fmri
+general:
+  log_wandb: False
+  parallel: False
+  eval_train: True
+dataset: 
+  name: fastmri
+  root: ./data/FastMRI/knee/data/
+  train_val_split: 0.9
+  fft: False
+  normalization: True
+  mask_type: random
+  center_fractions:
+    - 0.08
+  accelerations:
+    - 4
+  challenge: "singlecoil"
+  resolution: 64
+loader: 
+  num_workers: 1
+  prefetch_factor: 16
+  collate_fn: numpy
+augmentations:
+test_augmentations:
+model:
+  complex: True
+  name: resnet9
+  in_channels: 3
+  num_classes: 10
+  conv: convws_nw
+  activation: conjmish
+  normalization: bn
+  pooling: avgpool
+  scale_norm: True
+optim:
+  name: nadam
+loss: 
+  type: cse
+  reduction: mean
+ema:
+  use_ema: False
+  decay: 0.999
+hyperparams:
+  epochs: 100
+  batch_size: 1
+  batch_size_test: 1
+  lr: 2e-3
+  # momentum: 0.9
+  l2regularization: 1e-5
+  # overfit: 
+scheduler:
+  type: reduceonplateau
+  normalize_lr: False
+  patience: 20
+  min_delta: 0.01
+  factor: 0.5
+# earlystopping:
+#   mode: maximize
+#   patience: 100
+#   min_delta: 0.01
+DP:
+  disable_dp: True
