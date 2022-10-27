@@ -5,12 +5,13 @@ from deepee.dataloader import UniformWORSubsampler
 
 from dptraining.datasets.cifar10 import CIFAR10Creator
 from dptraining.datasets.imagenet import ImageNetCreator
+from dptraining.datasets.fmri import make_fmri_dataset
 from dptraining.datasets.tinyimagenet import TinyImageNetCreator
 from dptraining.datasets.utils import collate_np_arrays
 from dptraining.utils.augment import Transformation
 
 
-SUPPORTED_DATASETS = ("cifar10", "imagenet", "tinyimagenet")
+SUPPORTED_DATASETS = ("cifar10", "imagenet", "tinyimagenet", "fastmri")
 
 SUPPORTED_FFT = ("cifar10",)
 SUPPORTED_NORMALIZATION = ("cifar10", "tinyimagenet")
@@ -67,11 +68,14 @@ def make_dataset(config):
 
 
 def make_loader_from_config(config):
-    if config["dataset"]["name"].lower() not in SUPPORTED_DATASETS:
+    dataset_name = config["dataset"]["name"].lower()
+    if dataset_name not in SUPPORTED_DATASETS:
         raise ValueError(
             f"Dataset {config['dataset']['name']} not supported yet. "
             f"Currently supported datasets: {SUPPORTED_DATASETS}"
         )
+    if dataset_name == "fastmri":
+        return make_fmri_dataset(config)
     train_ds, val_ds, test_ds = make_dataset(config)
     loader_kwargs = deepcopy(config["loader"])
     modify_collate_fn_config(loader_kwargs)
@@ -108,7 +112,7 @@ def make_loader_from_config(config):
     test_loader_kwargs["shuffle"] = False
     val_loader_kwargs["shuffle"] = False
 
-    if config["dataset"]["name"].lower() == "cifar10":
+    if dataset_name == "cifar10":
         train_loader, val_loader, test_loader = CIFAR10Creator.make_dataloader(
             train_ds,
             val_ds,
@@ -117,7 +121,7 @@ def make_loader_from_config(config):
             val_loader_kwargs,
             test_loader_kwargs,
         )
-    elif config["dataset"]["name"].lower() == "tinyimagenet":
+    elif dataset_name == "tinyimagenet":
         train_loader, val_loader, test_loader = TinyImageNetCreator.make_dataloader(
             train_ds,
             val_ds,
@@ -126,7 +130,7 @@ def make_loader_from_config(config):
             val_loader_kwargs,
             test_loader_kwargs,
         )
-    elif config["dataset"]["name"].lower() == "imagenet":
+    elif dataset_name == "imagenet":
         train_loader, val_loader, test_loader = ImageNetCreator.make_dataloader(
             train_ds,
             val_ds,
