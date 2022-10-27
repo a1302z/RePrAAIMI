@@ -11,6 +11,7 @@ from typing import Callable, Optional, Union
 
 import pytorch_lightning as pl
 import torch
+from numpy import stack
 
 from dptraining.datasets.fmri.mri_data import CombinedSliceDataset, SliceDataset
 from dptraining.datasets.fmri.volume_sampler import VolumeSampler
@@ -273,6 +274,20 @@ class FastMriDataModule(pl.LightningDataModule):
             else:
                 sampler = VolumeSampler(dataset, shuffle=False)
 
+        add_kwargs = {}
+        if self.num_workers > 0:
+            add_kwargs["prefetch_factor"] = 10
+
+        def numpy_collate_fn(list_of_samples):
+            if len(list_of_samples) > 1:
+                list_of_outputs = tuple(
+                    stack([s[i] for s in list_of_samples], axis=0)
+                    for i in range(len(list_of_samples[0]))
+                )
+            else:
+                list_of_outputs = tuple(list_of_samples)
+            return list_of_outputs
+
         dataloader = torch.utils.data.DataLoader(
             dataset=dataset,
             batch_size=self.batch_size,
@@ -281,7 +296,8 @@ class FastMriDataModule(pl.LightningDataModule):
             sampler=sampler,
             shuffle=is_train if sampler is None else False,
             pin_memory=True,
-            prefetch_factor=10,
+            collate_fn=numpy_collate_fn,
+            **add_kwargs,
         )
 
         return dataloader

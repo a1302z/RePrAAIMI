@@ -356,7 +356,7 @@ def make_complex_model_from_config(config: dict) -> Callable:
                 1,
                 1,
                 config["model"]["channels"],
-                actv=make_complex_activation_from_config(config),
+                actv=make_complex_activation_from_config(config, init_layers=False),
             )
         case _ as fail:
             raise ValueError(

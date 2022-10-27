@@ -17,36 +17,36 @@ dataset:
   challenge: "singlecoil"
   resolution: 64
 loader: 
-  num_workers: 1
+  num_workers: 16
   prefetch_factor: 16
   collate_fn: numpy
 augmentations:
 test_augmentations:
 model:
   complex: True
-  name: resnet9
+  name: unet
   in_channels: 3
-  num_classes: 10
-  conv: convws_nw
-  activation: conjmish
-  normalization: bn
-  pooling: avgpool
-  scale_norm: True
+  channels: 16
+  # conv: convws_nw
+  # normalization: bn
+  activation: cardioid
+  # pooling: avgpool
+  # scale_norm: True
 optim:
   name: nadam
 loss: 
-  type: cse
+  type: l1
   reduction: mean
 ema:
   use_ema: False
   decay: 0.999
 hyperparams:
   epochs: 100
-  batch_size: 1
+  batch_size: 16
   batch_size_test: 1
   lr: 2e-3
   # momentum: 0.9
-  l2regularization: 1e-5
+  # l2regularization: 1e-5
   # overfit: 
 scheduler:
   type: reduceonplateau

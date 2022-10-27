@@ -1,4 +1,9 @@
-from dptraining.utils.loss import CSELogitsSparse, CombinedLoss, L2Regularization
+from dptraining.utils.loss import (
+    CSELogitsSparse,
+    CombinedLoss,
+    L1Loss,
+    L2Regularization,
+)
 from dptraining.utils.scheduler import (
     CosineSchedule,
     ConstantSchedule,
@@ -44,7 +49,7 @@ def make_scheduler_from_config(config):
     return scheduler
 
 
-SUPPORTED_LOSSES = ("cse",)
+SUPPORTED_LOSSES = ("cse", "l1")
 SUPPORTED_REDUCTION = ("sum", "mean")
 
 
@@ -64,6 +69,8 @@ def make_loss_from_config(config):  # pylint:disable=unused-argument
     ), f"Loss {loss_config['reduction']} not supported. (Only {SUPPORTED_REDUCTION})"
     if loss_config["type"] == "cse":
         loss_fn = CSELogitsSparse(config)
+    elif loss_config["type"] == "l1":
+        loss_fn = L1Loss(config)
     else:
         raise ValueError(f"Unknown loss type ({loss_config['type']})")
 

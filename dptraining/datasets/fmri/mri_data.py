@@ -403,6 +403,11 @@ class SliceDataset(torch.utils.data.Dataset):
         else:
             sample = self.transform(kspace, mask, target, attrs, fname.name, dataslice)
 
+        sample = list(sample)
+        for i, s in enumerate(sample):
+            if isinstance(s, torch.Tensor):
+                sample[i] = s.numpy()
+
         return sample
 
 

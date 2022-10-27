@@ -77,7 +77,7 @@ class Unet(Module):
             size=2, strides=2, padding=0, pool_func=average_pool_2d
         )
 
-    def __call__(self, image):
+    def __call__(self, image, **kwargs):
         """
         Args:
             image: Input 4D tensor of shape `(N, in_chans, H, W)`.

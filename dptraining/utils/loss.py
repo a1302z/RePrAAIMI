@@ -58,6 +58,22 @@ class CSELogitsSparse(LossFunctionCreator):
         return loss_fn
 
 
+class L1Loss(LossFunctionCreator):
+    def create_loss_fn(self, model_vars, model):
+        @objax.Function.with_vars(model_vars)
+        def loss_fn(inpt, label):
+            logit = model(inpt, training=True)
+            loss = objax.functional.loss.mean_absolute_error(logit, label)
+            if self._reduction == Reduction.SUM:
+                return loss.sum()
+            elif self._reduction == Reduction.MEAN:
+                return loss.mean()
+            else:
+                raise RuntimeError("No supported loss reduction")
+
+        return loss_fn
+
+
 class L2Regularization(LossFunctionCreator):
     def __init__(self, config) -> None:
         super().__init__(config)
