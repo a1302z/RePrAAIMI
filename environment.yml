@@ -11,6 +11,7 @@ dependencies:
   - conda-forge::cudnn==8.2.1.32
   - conda-forge::wandb
   - conda-forge::scikit-learn
+  - conda-forge::scikit-image
   - nvidia::cuda-nvcc
   - ipykernel
   - matplotlib

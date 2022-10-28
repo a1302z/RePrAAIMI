@@ -47,6 +47,7 @@ def main(
         make_loss_from_config,
         make_scheduler_from_config,
         make_stopper_from_config,
+        make_metrics,
     )
     from dptraining.utils.augment import Transformation
     from dptraining.utils.training_utils import (
@@ -169,6 +170,8 @@ def main(
     loss_fn = loss_class.create_loss_fn(model_vars, model)
     loss_gv = create_loss_gradient(config, model_vars, loss_fn)
 
+    metric_fns = make_metrics(config)
+
     augmenter = Transformation.from_dict_list(config["augmentations"])
     n_augmentations = augmenter.get_n_augmentations()
     augment_op = augmenter.create_vectorized_transform()
@@ -236,6 +239,8 @@ def main(
                 model_vars,
                 parallel,
                 "train",
+                metrics=metric_fns,
+                loss_fn=loss_fn,
             )
         if val_loader is not None:
             metric = test(

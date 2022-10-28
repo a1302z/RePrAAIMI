@@ -43,11 +43,24 @@ ema:
 hyperparams:
   epochs: 100
   batch_size: 16
-  batch_size_test: 1
+  batch_size_test: 16
   lr: 2e-3
   # momentum: 0.9
   # l2regularization: 1e-5
-  # overfit: 
+  # overfit: 32
+metrics:
+  task: 
+    regression
+  main: 
+    structural_similarity:
+        win_size: 7
+        channel_axis: 0
+  logging:
+    mean_squared_error:
+    structural_similarity:
+        win_size: 7
+        channel_axis: 0
+    peak_signal_noise_ratio: 
 scheduler:
   type: reduceonplateau
   normalize_lr: False

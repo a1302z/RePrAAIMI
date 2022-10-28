@@ -1,6 +1,7 @@
 import wandb
 import time
 import contextlib
+from typing import Callable
 
 import numpy as np
 
@@ -233,11 +234,12 @@ def test(  # pylint:disable=too-many-arguments
     model_vars,
     parallel,
     dataset_split: str,
-    score_fn=metrics.accuracy_score,
+    metrics: tuple,
+    loss_fn: Callable,
 ):
     ctx_mngr = (model_vars).replicate() if parallel else contextlib.suppress()
     with ctx_mngr:
-        correct, predicted = [], []
+        correct, scores = [], []
         max_batches = (
             config["hyperparams"]["overfit"]
             if "overfit" in config["hyperparams"]
@@ -257,25 +259,42 @@ def test(  # pylint:disable=too-many-arguments
                 label = label[:max_samples]
             y_pred = predict_op(image)
             correct.append(label)
-            predicted.append(y_pred)
+            scores.append(y_pred)
             if i + 1 >= max_batches:
                 break
     correct = np.concatenate(correct)
-    predicted = np.concatenate(predicted).argmax(axis=1)
+    predicted = np.concatenate(scores)
+    loss = loss_fn(correct, predicted)
+    if config["metrics"]["task"] == "classification":
+        predicted = scores.argmax(axis=1)
+    correct, predicted = correct.squeeze(), predicted.squeeze()
+
+    main_metric_fn, logging_fns = metrics
+    main_metric = (
+        loss
+        if isinstance(main_metric_fn, str) and main_metric_fn == "loss"
+        else main_metric_fn(correct, predicted)
+    )
+    logging_metrics = {
+        f"{dataset_split}.{func_name}": lfn(correct, predicted)
+        for func_name, lfn in logging_fns.items()
+    }
+    logging_metrics[f"{dataset_split}.loss"] = loss
 
     if config["general"]["log_wandb"]:
-        wandb.log(
-            {
-                dataset_split: metrics.classification_report(
-                    correct, predicted, output_dict=True, zero_division=0
-                )
-            }
-        )
-    else:
-        print(f"{dataset_split} evaluation:")
-        print(
-            metrics.classification_report(
-                correct, predicted, output_dict=False, zero_division=0
-            )
-        )
-    return score_fn(correct, predicted)
+        #     wandb.log(
+        #         {
+        #             dataset_split: metrics.classification_report(
+        #                 correct, predicted, output_dict=True, zero_division=0
+        #             )
+        #         }
+        #     )
+        # else:
+        #     print(f"{dataset_split} evaluation:")
+        #     print(
+        #         metrics.classification_report(
+        #             correct, predicted, output_dict=False, zero_division=0
+        #         )
+        #     )
+        pass
+    return main_metric
