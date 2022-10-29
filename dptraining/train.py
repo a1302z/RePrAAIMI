@@ -167,8 +167,9 @@ def main(
             )
 
     loss_class = make_loss_from_config(config)
-    loss_fn = loss_class.create_loss_fn(model_vars, model)
-    loss_gv = create_loss_gradient(config, model_vars, loss_fn)
+    train_loss_fn = loss_class.create_train_loss_fn(model_vars, model)
+    test_loss_fn = loss_class.create_test_loss_fn()
+    loss_gv = create_loss_gradient(config, model_vars, train_loss_fn)
 
     metric_fns = make_metrics(config)
 
@@ -240,7 +241,7 @@ def main(
                 parallel,
                 "train",
                 metrics=metric_fns,
-                loss_fn=loss_fn,
+                loss_fn=test_loss_fn,
             )
         if val_loader is not None:
             metric = test(
@@ -251,6 +252,8 @@ def main(
                 model_vars,
                 parallel,
                 "val",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
             )
             scheduler.update_score(metric)
         else:
@@ -272,7 +275,15 @@ def main(
 
     # never do test parallel as this could emit some test samples and thus distort results
     metric = test(
-        config, test_loader, predict_op_jit, test_aug, model_vars, False, "test"
+        config,
+        test_loader,
+        predict_op_jit,
+        test_aug,
+        model_vars,
+        False,
+        "test",
+        metrics=metric_fns,
+        loss_fn=test_loss_fn,
     )
     if config["general"]["log_wandb"]:
         run.finish()

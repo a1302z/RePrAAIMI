@@ -140,16 +140,19 @@ def make_metrics(config):
     }  # torchmetrics of course leads to problems -.-
     if isinstance(metric_config["main"], str):
         if metric_config["main"] == "loss":
-            main_metric = "loss"
+            main_metric = ("loss", None)
         else:
-            main_metric = activate_fn(all_funcs[metric_config["main"]])
+            main_metric = (
+                metric_config["main"],
+                activate_fn(all_funcs[metric_config["main"]]),
+            )
     else:
         assert len(metric_config["main"]) == 1
         fn_name = list(metric_config["main"].keys())[0]
         args = list(metric_config["main"].values())[0]
         kwargs = args if isinstance(args, dict) else {}
         args = args if isinstance(args, list) else []
-        main_metric = activate_fn(all_funcs[fn_name], *args, **kwargs)
+        main_metric = (fn_name, activate_fn(all_funcs[fn_name], *args, **kwargs))
 
     logging_metrics = {}
     if isinstance(metric_config["logging"], list):

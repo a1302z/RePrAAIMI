@@ -53,14 +53,15 @@ metrics:
     regression
   main: 
     structural_similarity:
-        win_size: 7
-        channel_axis: 0
+      win_size: 7
+      channel_axis: 0
   logging:
     mean_squared_error:
     structural_similarity:
-        win_size: 7
-        channel_axis: 0
+      win_size: 7
+      channel_axis: 0
     peak_signal_noise_ratio: 
+      data_range: 7.3
 scheduler:
   type: reduceonplateau
   normalize_lr: False

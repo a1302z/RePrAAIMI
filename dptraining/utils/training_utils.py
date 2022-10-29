@@ -264,37 +264,35 @@ def test(  # pylint:disable=too-many-arguments
                 break
     correct = np.concatenate(correct)
     predicted = np.concatenate(scores)
-    loss = loss_fn(correct, predicted)
+    loss = loss_fn(correct, predicted).item()
     if config["metrics"]["task"] == "classification":
         predicted = scores.argmax(axis=1)
     correct, predicted = correct.squeeze(), predicted.squeeze()
 
     main_metric_fn, logging_fns = metrics
     main_metric = (
+        main_metric_fn[0],
         loss
-        if isinstance(main_metric_fn, str) and main_metric_fn == "loss"
-        else main_metric_fn(correct, predicted)
+        if main_metric_fn[0] == "loss" and main_metric_fn[1] is None
+        else main_metric_fn[1](correct, predicted),
     )
     logging_metrics = {
-        f"{dataset_split}.{func_name}": lfn(correct, predicted)
+        f"{func_name}": lfn(correct, predicted)
         for func_name, lfn in logging_fns.items()
     }
-    logging_metrics[f"{dataset_split}.loss"] = loss
+    if main_metric[0] != "loss":
+        logging_metrics["loss"] = loss
+    logging_metrics[f"{main_metric[0]}"] = main_metric[1]
 
     if config["general"]["log_wandb"]:
-        #     wandb.log(
-        #         {
-        #             dataset_split: metrics.classification_report(
-        #                 correct, predicted, output_dict=True, zero_division=0
-        #             )
-        #         }
-        #     )
-        # else:
-        #     print(f"{dataset_split} evaluation:")
-        #     print(
-        #         metrics.classification_report(
-        #             correct, predicted, output_dict=False, zero_division=0
-        #         )
-        #     )
-        pass
-    return main_metric
+        wandb.log({dataset_split: logging_metrics})
+    else:
+        print(f"{dataset_split} evaluation:")
+        for name, value in logging_metrics.items():
+            print(f"\t{name}: {value}")
+    #     print(
+    #         metrics.classification_report(
+    #             correct, predicted, output_dict=False, zero_division=0
+    #         )
+    #     )
+    return main_metric[1]
