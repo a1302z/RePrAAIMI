@@ -52,7 +52,7 @@ class CIFAR10Creator(DataLoaderCreator):
         transforms: Tuple,
         numpy_optimisation=True,
         normalize_by_default=True,
-    ) -> Tuple[Dataset, Dataset]:
+    ) -> Tuple[Dataset, Dataset, Dataset]:
         train_tf, val_tf, test_tf = transforms
         train_kwargs = {
             "root": config["dataset"]["root"],
@@ -120,7 +120,7 @@ class CIFAR10Creator(DataLoaderCreator):
         train_kwargs,
         val_kwargs,
         test_kwargs,
-    ) -> Tuple[DataLoader, DataLoader]:
+    ) -> Tuple[DataLoader, DataLoader, DataLoader]:
         train_dl = DataLoader(train_ds, **train_kwargs)
         val_dl = DataLoader(val_ds, **val_kwargs) if val_ds is not None else None
         test_dl = DataLoader(test_ds, **test_kwargs)
