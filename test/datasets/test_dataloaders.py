@@ -93,7 +93,7 @@ def test_no_val_set():
     assert val_dl is None
 
 
-def test_imagenet_from_config():
+def test_tiny_imagenet_from_config():
     train_dl, val_dl, test_dl = make_loader_from_config(
         {
             "hyperparams": {"batch_size": 4, "batch_size_test": 1},
