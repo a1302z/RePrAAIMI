@@ -4,6 +4,7 @@ general:
   parallel: False
   eval_train: True
 dataset: 
+  task: regression
   name: fastmri
   root: ./data/FastMRI/knee/data/
   train_val_split: 0.9
@@ -49,8 +50,6 @@ hyperparams:
   # l2regularization: 1e-5
   # overfit: 32
 metrics:
-  task: 
-    regression
   main: 
     structural_similarity:
       win_size: 7

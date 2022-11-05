@@ -101,16 +101,17 @@ def main(
         )
     opt = make_optim_from_config(config, model_vars)
 
+    predict_lambda = (
+        lambda x: objax.functional.softmax(model(x, training=False))
+        if config["dataset"]["task"] == "classification"
+        else model(x, training=False)
+    )
+
     predict_op_parallel = objax.Parallel(
-        lambda x: objax.functional.softmax(model(x, training=False)),
-        model_vars,
-        reduce=np.concatenate,
+        predict_lambda, model_vars, reduce=np.concatenate
     )
     predict_op_jit = objax.Jit(
-        lambda x: objax.functional.softmax(
-            model(x, training=False)  # pylint:disable=not-callable
-        ),
-        model_vars,
+        predict_lambda, model_vars  # pylint:disable=not-callable
     )
 
     if config["DP"]["disable_dp"]:

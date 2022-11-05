@@ -264,9 +264,9 @@ def test(  # pylint:disable=too-many-arguments
                 break
     correct = np.concatenate(correct)
     predicted = np.concatenate(scores)
-    loss = loss_fn(correct, predicted).item()
-    if config["metrics"]["task"] == "classification":
-        predicted = scores.argmax(axis=1)
+    loss = loss_fn(predicted, correct).item()
+    if config["dataset"]["task"] == "classification":
+        predicted = predicted.argmax(axis=1)
     correct, predicted = correct.squeeze(), predicted.squeeze()
 
     main_metric_fn, logging_fns = metrics
