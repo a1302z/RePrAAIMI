@@ -17,8 +17,8 @@ test_augmentations:
   # make_complex_both:
 model:
   complex: False
-  name: smoothnet
-  in_channels: 3
+  name: resnet9
+  in_channels: 1
   num_classes: 10
   conv: conv
   activation: mish
@@ -27,6 +27,9 @@ model:
   # scale_norm: True
 optim:
   name: nadam
+loss: 
+  type: cse
+  reduction: sum
 ema:
   use_ema: True
   decay: 0.995

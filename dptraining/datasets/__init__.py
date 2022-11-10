@@ -63,6 +63,7 @@ def make_dataset(config):
         train_ds, val_ds, test_ds = ImageNetCreator.make_datasets(
             config, (train_tf, val_tf, test_tf)
         )
+        # TODO: add pneumonia mnist
     return train_ds, val_ds, test_ds
 
 
