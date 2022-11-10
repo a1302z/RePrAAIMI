@@ -107,6 +107,7 @@ class FastMriDataModule(pl.LightningDataModule):
         batch_size: int = 1,
         num_workers: int = 4,
         distributed_sampler: bool = False,
+        split_train_dataset: Optional[float] = None,
     ):
         """
         Args:
@@ -184,6 +185,7 @@ class FastMriDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.distributed_sampler = distributed_sampler
+        # self.split_train = split_train_dataset
 
     def _create_data_loader(
         self,
@@ -193,6 +195,9 @@ class FastMriDataModule(pl.LightningDataModule):
         volume_sample_rate: Optional[float] = None,
         overfit: Optional[int] = None,
     ) -> torch.utils.data.DataLoader:
+        # original_data_partition = data_partition
+        # if self.split_train is not None and "split" in data_partition:
+        #     data_partition = "train"
         if data_partition == "train":
             is_train = True
             sample_rate = self.sample_rate if sample_rate is None else sample_rate
@@ -287,6 +292,16 @@ class FastMriDataModule(pl.LightningDataModule):
             else:
                 list_of_outputs = tuple(list_of_samples)
             return list_of_outputs
+
+        # if self.split_train is not None and "split" in original_data_partition:
+        #     L_train = int(round(self.split_train * len(dataset)))
+        #     L_val = len(dataset) - L_train
+        #     train_ds, val_ds = torch.utils.data.random_split(
+        #         dataset,
+        #         lengths=[L_train, L_val],
+        #         generator=torch.Generator().manual_seed(0),
+        #     )
+        #     dataset = train_ds if "train_split" in original_data_partition else val_ds
 
         dataloader = torch.utils.data.DataLoader(
             dataset=dataset,

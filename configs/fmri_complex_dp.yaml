@@ -16,7 +16,7 @@ dataset:
   accelerations:
     - 4
   challenge: "singlecoil"
-  resolution: 320
+  resolution: 64
 loader: 
   num_workers: 16
   prefetch_factor: 16
@@ -43,7 +43,7 @@ ema:
   decay: 0.999
 hyperparams:
   epochs: 10
-  batch_size: 16
+  batch_size: 256
   batch_size_test: 16
   lr: 2e-3
   # momentum: 0.9
@@ -72,4 +72,12 @@ scheduler:
 #   patience: 100
 #   min_delta: 0.01
 DP:
-  disable_dp: True
+  disable_dp: False
+  epsilon: 1
+  # sigma: 3
+  max_per_sample_grad_norm: 1.0
+  delta: 1e-5
+  norm_acc: False
+  grad_acc_steps: 1
+  rsqrt_noise_adapt: False
+  glrt_assumption: False

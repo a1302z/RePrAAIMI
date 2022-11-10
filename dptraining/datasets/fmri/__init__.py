@@ -32,13 +32,14 @@ def make_fmri_dataset(config):
         train_transform=train_transform,
         val_transform=val_transform,
         test_transform=test_transform,
-        test_split="test",
+        test_split="val",
         test_path=None,
         sample_rate=None,
         batch_size=config["hyperparams"]["batch_size"],
         num_workers=config["loader"]["num_workers"],
+        split_train_dataset=config["dataset"]["train_val_split"],
     )
-    train_loader, val_loader = (
+    train_loader, val_loader, test_loader = (
         data_module.train_dataloader(
             overfit=config["hyperparams"]["overfit"]
             if "overfit" in config["hyperparams"]
@@ -46,9 +47,9 @@ def make_fmri_dataset(config):
             else None
         ),
         data_module.val_dataloader(),
-        # data_module.test_dataloader(),
+        data_module.test_dataloader(),
     )
     # if config["hyperparams"]["overfit"] is not None:
     #     val_loader = train_loader
-    test_loader = val_loader  # TODO: make real test set
+    # test_loader = val_loader  # TODO: make real test set
     return train_loader, val_loader, test_loader
