@@ -36,6 +36,9 @@ hyperparams:
   batch_size_test: 512
   lr: 2e-3
   # momentum: 0.9
+loss: 
+  type: cse
+  reduction: sum
 scheduler:
   type: reduceonplateau
   normalize_lr: False
