@@ -86,7 +86,20 @@ def main(
         val_loader = train_loader
         test_loader = train_loader
     model: Callable = make_model_from_config(config)
+    if (
+        "use_pretrained_model" in config["general"]
+        and config["general"]["use_pretrained_model"] is not None
+    ):
+        print(f"Loading model from {config['general']['use_pretrained_model']}")
+        objax.io.load_var_collection(
+            config["general"]["use_pretrained_model"], model.vars()
+        )
     model_vars = model.vars()
+    ckpt = (
+        objax.io.Checkpoint(**config["ckpt"])
+        if "ckpt" in config and config["ckpt"] is not None
+        else None
+    )
 
     ema: Optional[ExponentialMovingAverage] = None
     use_ema: bool = "ema" in config and config["ema"]["use_ema"]
@@ -261,6 +274,8 @@ def main(
                 wandb.log({"epsilon": epsilon})
             else:
                 print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})")
+        if ckpt is not None:
+            ckpt.save(model.vars(), idx=epoch)
         if metric is not None and stopper(metric):
             print("Early Stopping was activated -> Stopping Training")
             break
@@ -269,6 +284,9 @@ def main(
     metric = test(
         config, test_loader, predict_op_jit, test_aug, model_vars, False, "test"
     )
+    if "save_path" in config["general"] and config["general"]["save_path"] is not None:
+        print(f"Saving model to {config['general']['save_path']}")
+        objax.io.save_var_collection(config["general"]["save_path"], model.vars())
     if config["general"]["log_wandb"]:
         run.finish()
     else:
