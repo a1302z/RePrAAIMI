@@ -3,7 +3,7 @@ from objax.typing import JaxArray, ConvPaddingInt
 from objax.constants import ConvPadding
 from objax import Module
 
-from objax.functional import max_pool_2d, average_pool_2d
+from objax.functional import max_pool_2d  # , average_pool_2d
 
 
 class ConjugatePool2D(Module):

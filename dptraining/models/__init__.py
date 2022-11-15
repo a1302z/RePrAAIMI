@@ -352,11 +352,25 @@ def make_complex_model_from_config(config: dict) -> Callable:
                 **kwargs,
             )
         case "unet":
+            already_defined = ("in_channels",)
+            kwargs = get_kwargs(Unet, already_defined, config["model"])
+            if not all(
+                (
+                    expected in kwargs.keys()
+                    for expected in (
+                        "out_channels",
+                        "channels",
+                    )
+                )
+            ):
+                warnings.warn(
+                    "We recommend to explicitly set values for [out_channels, channels]"
+                    "for a UNet architecture"
+                )
             return Unet(
-                1,
-                1,
-                config["model"]["channels"],
+                in_channels=config["model"]["in_channels"],
                 actv=make_complex_activation_from_config(config, init_layers=False),
+                **kwargs,
             )
         case _ as fail:
             raise ValueError(

@@ -40,7 +40,7 @@ def make_fmri_dataset(config):
         split_train_dataset=config["dataset"]["train_val_split"],
     )
     train_loader, val_loader, test_loader = (
-        data_module.train_dataloader(
+        data_module.train_dataloader(  # pylint:disable=unexpected-keyword-arg
             overfit=config["hyperparams"]["overfit"]
             if "overfit" in config["hyperparams"]
             and isinstance(config["hyperparams"]["overfit"], int)

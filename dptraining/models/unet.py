@@ -1,3 +1,4 @@
+# pylint: skip-file
 from functools import partial
 from objax import nn, Module
 from objax.functional import average_pool_2d, pad
@@ -29,9 +30,9 @@ class Unet(Module):
 
     def __init__(
         self,
-        in_chans: int,
-        out_chans: int,
-        chans: int = 32,
+        in_channels: int,
+        out_channels: int,
+        channels: int = 32,
         num_pool_layers: int = 4,
         actv=Cardioid,
     ):
@@ -45,13 +46,15 @@ class Unet(Module):
         """
         super().__init__()
 
-        self.in_chans = in_chans
-        self.out_chans = out_chans
-        self.chans = chans
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.channels = channels
         self.num_pool_layers = num_pool_layers
 
-        self.down_sample_layers = nn.Sequential([ConvBlock(in_chans, chans, actv)])
-        ch = chans
+        self.down_sample_layers = nn.Sequential(
+            [ConvBlock(in_channels, channels, actv)]
+        )
+        ch = channels
         for _ in range(num_pool_layers - 1):
             self.down_sample_layers.append(ConvBlock(ch, ch * 2, actv))
             ch *= 2
@@ -69,7 +72,7 @@ class Unet(Module):
             nn.Sequential(
                 [
                     ConvBlock(ch * 2, ch, actv),
-                    ComplexConv2D(ch, self.out_chans, k=1, strides=1, padding=0),
+                    ComplexConv2D(ch, self.out_channels, k=1, strides=1, padding=0),
                 ],
             )
         )
@@ -124,7 +127,7 @@ class ConvBlock(Module):
 
     def __init__(
         self,
-        in_chans: int,
+        in_channels: int,
         out_chans: int,
         actv: Module,
     ):
@@ -136,13 +139,13 @@ class ConvBlock(Module):
         """
         super().__init__()
 
-        self.in_chans = in_chans
+        self.in_channels = in_channels
         self.out_chans = out_chans
 
         self.layers = nn.Sequential(
             [
                 ComplexConv2D(
-                    in_chans,
+                    in_channels,
                     out_chans,
                     k=3,
                     padding=1,

@@ -54,6 +54,8 @@ class CombinedLoss(LossFunctionCreator):
         def loss_fn(predicted, correct):
             return sum((l(predicted, correct) for l in self._test_losses))
 
+        return loss_fn
+
 
 class CSELogitsSparse(LossFunctionCreator):
     def create_train_loss_fn(self, model_vars, model):
@@ -133,5 +135,5 @@ class L2Regularization(LossFunctionCreator):
 
         return loss_fn
 
-    def create_test_loss_fn(self, model_vars, model) -> Callable:
+    def create_test_loss_fn(self, _, __) -> Callable:
         return 0

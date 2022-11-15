@@ -10,7 +10,6 @@ import sys
 
 from jax import numpy as jn, local_device_count
 from pathlib import Path
-from sklearn import metrics
 from tqdm import tqdm
 
 sys.path.insert(0, str(Path.cwd()))

@@ -107,13 +107,13 @@ def make_stopper_from_config(config):
     return lambda _: False
 
 
-def activate_fn(fn, *args, **kwargs):
-    assert callable(fn)
-    if not isinstance(fn, FunctionType):
-        return fn(*args, **kwargs)
+def activate_fn(func, *args, **kwargs):
+    assert callable(func)
+    if not isinstance(func, FunctionType):
+        return func(*args, **kwargs)
     if len(args) > 0 or len(kwargs) > 0:
-        return partial(fn, *args, **kwargs)
-    return fn
+        return partial(func, *args, **kwargs)
+    return func
 
 
 # def seperate_args_kwargs(args: Union[dict, list]):
@@ -122,18 +122,19 @@ def activate_fn(fn, *args, **kwargs):
 #     return args, kwargs
 
 
+def retrieve_func_dict(func):
+    return {name: getattr(func, name) for name in dir(func) if name[0] != "_"}
+
+
 def make_metrics(config):
     if not "metrics" in config:
         warn("no metrics defined in config", category=UserWarning)
-        return metrics.accuracy_score, (metrics.classification_report,)
+        return sklearnmetrics.accuracy_score, (sklearnmetrics.classification_report,)
     metric_config = config["metrics"]
     assert "main" in metric_config and isinstance(metric_config["main"], (str, dict))
     assert "logging" in metric_config and isinstance(
         metric_config["logging"], (list, dict)
     )
-    retrieve_func_dict = lambda fn: {
-        name: getattr(fn, name) for name in dir(fn) if name[0] != "_"
-    }
     all_funcs = {
         **retrieve_func_dict(sklearnmetrics),
         **retrieve_func_dict(skimagemetrics),
@@ -156,8 +157,12 @@ def make_metrics(config):
 
     logging_metrics = {}
     if isinstance(metric_config["logging"], list):
-        for func_name in metric_config["logging"]:
-            logging_metrics[func_name] = activate_fn(all_funcs[func_name])
+        logging_metrics.update(
+            {
+                func_name: activate_fn(all_funcs[func_name])
+                for func_name in metric_config["logging"]
+            }
+        )
     else:
         for func_name, args in metric_config["logging"].items():
             # args, kwargs = seperate_args_kwargs(args) if args is not None else [], {}

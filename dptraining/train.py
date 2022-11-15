@@ -115,7 +115,9 @@ def main(
     opt = make_optim_from_config(config, model_vars)
 
     predict_lambda = (
-        lambda x: objax.functional.softmax(model(x, training=False))
+        lambda x: objax.functional.softmax(  # pylint:disable=unnecessary-lambda-assignment
+            model(x, training=False)
+        )
         if config["dataset"]["task"] == "classification"
         else model(x, training=False)
     )
