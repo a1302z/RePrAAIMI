@@ -1,7 +1,7 @@
 from objax import optimizer
 from dptraining.optim.nadam import NAdam
 
-SUPPORTED_OPTIMS = ("momentum", "adam", "nadam")
+SUPPORTED_OPTIMS = ("sgd", "momentum", "adam", "nadam")
 
 
 def make_optim_from_config(config, model_vars):
@@ -10,7 +10,9 @@ def make_optim_from_config(config, model_vars):
             f"{config['optim']['name']} not supported yet. "
             f"Currently supported normalizations: {SUPPORTED_OPTIMS}"
         )
-    if config["optim"]["name"] == "momentum":
+    if config["optim"]["name"] == "sgd":
+        opt = optimizer.SGD
+    elif config["optim"]["name"] == "momentum":
         opt = optimizer.Momentum
     elif config["optim"]["name"] == "adam":
         opt = optimizer.Adam

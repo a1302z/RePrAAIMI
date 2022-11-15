@@ -127,8 +127,12 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-data/
+
+# IDEs
 .vscode/
+.idea/
+
+data/
 outputs/
 wandb/
 prof/

@@ -3,6 +3,12 @@ general:
   log_wandb: False
   parallel: False
   eval_train: True
+  use_pretrained_model: 
+  save_path: cifar10dp.npz
+# ckpt:
+#   logdir: cifar10dpckpts
+#   keep_ckpts: 2
+#   makedir: True
 dataset: 
   task: classification
   name: CIFAR10
@@ -48,7 +54,7 @@ ema:
   use_ema: True
   decay: 0.04
 hyperparams:
-  # epochs: 200
+  epochs: 5
   batch_size: 512
   batch_size_test: 512
   lr: 2e-3
@@ -66,10 +72,10 @@ scheduler:
 DP:
   disable_dp: False
   epsilon: 8
-  sigma: 3
+  # sigma: 3
   max_per_sample_grad_norm: 1.0
   delta: 1e-5
   norm_acc: False
   grad_acc_steps: 8
-  rsqrt_noise_adapt: True
-  glrt_assumption: True
+  rsqrt_noise_adapt: False
+  glrt_assumption: False
