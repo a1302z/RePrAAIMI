@@ -212,7 +212,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                 log_dict = {
                     "train_loss": train_loss,
                     "total_grad_norm": jn.linalg.norm(
-                        [jn.linalg.norm(g) for g in grads]
+                        jn.concatenate([jn.linalg.norm(g).flatten() for g in grads])
                     ).item(),
                 }
                 wandb.log(
