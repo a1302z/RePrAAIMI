@@ -5,12 +5,13 @@ from deepee.dataloader import UniformWORSubsampler
 
 from dptraining.datasets.cifar10 import CIFAR10Creator
 from dptraining.datasets.imagenet import ImageNetCreator
+from dptraining.datasets.radimagenet import RadImageNetCreator
 from dptraining.datasets.tinyimagenet import TinyImageNetCreator
 from dptraining.datasets.utils import collate_np_arrays
 from dptraining.utils.augment import Transformation
 
 
-SUPPORTED_DATASETS = ("cifar10", "imagenet", "tinyimagenet")
+SUPPORTED_DATASETS = ("cifar10", "imagenet", "tinyimagenet", "radimagenet")
 
 SUPPORTED_FFT = ("cifar10",)
 SUPPORTED_NORMALIZATION = ("cifar10", "tinyimagenet")
@@ -51,18 +52,29 @@ def make_dataset(config):
         if "val_transforms" in config
         else test_tf
     )
-    if config["dataset"]["name"].lower() == "cifar10":
-        train_ds, val_ds, test_ds = CIFAR10Creator.make_datasets(
-            config, (train_tf, val_tf, test_tf), normalize_by_default=normalize
-        )
-    elif config["dataset"]["name"].lower() == "tinyimagenet":
-        train_ds, val_ds, test_ds = TinyImageNetCreator.make_datasets(
-            config, (train_tf, val_tf, test_tf)
-        )
-    elif config["dataset"]["name"].lower() == "imagenet":
-        train_ds, val_ds, test_ds = ImageNetCreator.make_datasets(
-            config, (train_tf, val_tf, test_tf)
-        )
+    match config["dataset"]["name"].lower():
+        case "cifar10":
+            train_ds, val_ds, test_ds = CIFAR10Creator.make_datasets(
+                config, (train_tf, val_tf, test_tf), normalize_by_default=normalize
+            )
+        case "tinyimagenet":
+            train_ds, val_ds, test_ds = TinyImageNetCreator.make_datasets(
+                config, (train_tf, val_tf, test_tf)
+            )
+        case "imagenet":
+            train_ds, val_ds, test_ds = ImageNetCreator.make_datasets(
+                config, (train_tf, val_tf, test_tf)
+            )
+        case "radimagenet":
+            train_ds, val_ds, test_ds = RadImageNetCreator.make_datasets(
+                config, (train_tf, val_tf, test_tf)
+            )
+        case other:
+            raise ValueError(
+                f"This shouldn't happen. "
+                f"{SUPPORTED_DATASETS} includes not supported datasets. "
+                f"Got {other}"
+            )
     return train_ds, val_ds, test_ds
 
 
@@ -108,36 +120,47 @@ def make_loader_from_config(config):
     test_loader_kwargs["shuffle"] = False
     val_loader_kwargs["shuffle"] = False
 
-    if config["dataset"]["name"].lower() == "cifar10":
-        train_loader, val_loader, test_loader = CIFAR10Creator.make_dataloader(
-            train_ds,
-            val_ds,
-            test_ds,
-            train_loader_kwargs,
-            val_loader_kwargs,
-            test_loader_kwargs,
-        )
-    elif config["dataset"]["name"].lower() == "tinyimagenet":
-        train_loader, val_loader, test_loader = TinyImageNetCreator.make_dataloader(
-            train_ds,
-            val_ds,
-            test_ds,
-            train_loader_kwargs,
-            val_loader_kwargs,
-            test_loader_kwargs,
-        )
-    elif config["dataset"]["name"].lower() == "imagenet":
-        train_loader, val_loader, test_loader = ImageNetCreator.make_dataloader(
-            train_ds,
-            val_ds,
-            test_ds,
-            train_loader_kwargs,
-            val_loader_kwargs,
-            test_loader_kwargs,
-        )
-    else:
-        raise ValueError(
-            f"This shouldn't happen. "
-            f"{SUPPORTED_DATASETS} includes not supported datasets."
-        )
+    match config["dataset"]["name"].lower():
+        case "cifar10":
+            train_loader, val_loader, test_loader = CIFAR10Creator.make_dataloader(
+                train_ds,
+                val_ds,
+                test_ds,
+                train_loader_kwargs,
+                val_loader_kwargs,
+                test_loader_kwargs,
+            )
+        case "tinyimagenet":
+            train_loader, val_loader, test_loader = TinyImageNetCreator.make_dataloader(
+                train_ds,
+                val_ds,
+                test_ds,
+                train_loader_kwargs,
+                val_loader_kwargs,
+                test_loader_kwargs,
+            )
+        case "imagenet":
+            train_loader, val_loader, test_loader = ImageNetCreator.make_dataloader(
+                train_ds,
+                val_ds,
+                test_ds,
+                train_loader_kwargs,
+                val_loader_kwargs,
+                test_loader_kwargs,
+            )
+        case "radimagenet":
+            train_loader, val_loader, test_loader = ImageNetCreator.make_dataloader(
+                train_ds,
+                val_ds,
+                test_ds,
+                train_loader_kwargs,
+                val_loader_kwargs,
+                test_loader_kwargs,
+            )
+        case other:
+            raise ValueError(
+                f"This shouldn't happen. "
+                f"{SUPPORTED_DATASETS} includes not supported datasets."
+                f"Got {other}"
+            )
     return train_loader, val_loader, test_loader

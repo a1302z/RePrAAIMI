@@ -24,3 +24,4 @@ dependencies:
     - perflint
     - pytest-profiling
     - deepee
+    - split-folders
