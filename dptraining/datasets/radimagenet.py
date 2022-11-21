@@ -1,12 +1,12 @@
 import numpy as np
 
-from torch.utils.data import Dataset, ConcatDataset
+from torch.utils.data import Dataset, ConcatDataset, DataLoader
 from torchvision.datasets import ImageFolder, DatasetFolder
 from torchvision.datasets.folder import IMG_EXTENSIONS, default_loader
 from typing import Tuple, Union, Callable, Optional, List, Dict, cast, Any
 from bisect import bisect_right
 from torch.utils.data import random_split
-from splitfolders import ratio
+from splitfolders import split_class_dir_ratio
 from warnings import warn
 
 from PIL import Image
@@ -23,12 +23,20 @@ sys.path.insert(0, str(Path.cwd()))
 
 
 from dptraining.datasets.base_creator import DataLoaderCreator
+from dptraining.utils.transform import NormalizeNumpyImg
 
 DATA_OUTPUT = Tuple[np.array, Union[int, np.array]]
 
 
 SUPPORTED_MODALITIES = ("mr", "ct", "us")
 SUPPORTED_TASKS = ("classification", "reconstruction")
+
+STATS = {
+    "all": ([0.22039941], [0.24865805]),
+    "ct": ([0.33009225], [0.32522697]),
+    "mr": ([0.21530229], [0.22644264]),
+    "us": ([0.1469403], [0.18063141]),
+}
 
 
 class Task(Enum):
@@ -72,6 +80,16 @@ class ExtendedImageFolder(ImageFolder):
         is_valid_file: Optional[Callable[[str], bool]] = None,
         is_valid_class: Optional[Callable[[str], bool]] = None,
     ):
+        """Extension of torchvision ImageFolder structure. Can handle deeper data structures.
+
+        Args:
+            root (str): Path to root folder.
+            transform (Optional[Callable], optional): Optional callable to be applied to images. Defaults to None.
+            target_transform (Optional[Callable], optional): Optional callable to be applied to labels. Defaults to None.
+            loader (Callable[[str], Any], optional): Function to load data from disc. Defaults to default_loader.
+            is_valid_file (Optional[Callable[[str], bool]], optional): Function to ensure a certain file fulfills some property. Defaults to None.
+            is_valid_class (Optional[Callable[[str], bool]], optional): Function to in-/exclude classes in the dataset. Defaults to None.
+        """
         super(DatasetFolder, self).__init__(
             root, transform=transform, target_transform=target_transform
         )
@@ -192,6 +210,11 @@ class ExtendedImageFolder(ImageFolder):
 
 
 class RadImageNet(Dataset):
+
+    NORMLIZATION_TRANSFORMS = {
+        modality: NormalizeNumpyImg(*stats) for modality, stats in STATS.items()
+    }
+
     def __init__(
         self,
         root_dir: Union[str, Path],
@@ -201,7 +224,27 @@ class RadImageNet(Dataset):
         modality: str = "all",
         allowed_body_regions: Union[str, List[str]] = "all",
         allowed_labels: Union[str, List[str]] = "all",
+        normalize_by_modality: bool = False,
     ) -> None:
+        """Wrapper for RadImageNet dataset structure.
+
+        Args:
+            root_dir (Union[str, Path]): Path to directory where RadImageNet is stored
+            task (str, optional): If set to reconstruction returns images also as labels. Defaults to "classification".
+            transform (Optional[Callable], optional): Callable to be applied to images. Defaults to None.
+            target_transform (Optional[Callable], optional): Callable to be applied to labels. Defaults to None.
+            modality (str, optional): Whether to use all radiological modalities (CT, MR, US). Defaults to "all".
+            allowed_body_regions (Union[str, List[str]], optional): Whether to restrict to certain body parts in the dataset. Defaults to "all".
+            allowed_labels (Union[str, List[str]], optional): Whether to restrict to certain diagnoses. Defaults to "all".
+            normalize_by_modality (bool, optional): Normalize images with stats of each modality for the cost of a slight performance loss. Defaults to False.
+
+        Raises:
+            ValueError: allowed_body_regions must be either a string or list of strings
+            ValueError: allowed_labels must be either a string or list of strings
+
+        Returns:
+            None: No return value
+        """
         assert modality.lower() in SUPPORTED_MODALITIES or modality.lower() in ("all",)
         assert task in SUPPORTED_TASKS
         super().__init__()
@@ -212,6 +255,7 @@ class RadImageNet(Dataset):
         self.target_transform = (
             target_transform if target_transform is not None else lambda x: x
         )
+        self.normalize_by_modality: bool = normalize_by_modality
         is_valid_class: Optional[Callable]
         if (
             isinstance(allowed_labels, str)
@@ -279,18 +323,24 @@ class RadImageNet(Dataset):
                 is_valid_class=is_valid_class,
                 loader=loader,
             )
+        self.idx_to_class = {
+            idx: class_name for class_name, idx in self.dataset.class_to_idx.items()
+        }
 
     def __len__(self) -> int:
         return len(self.dataset)
 
     def __getitem__(self, index: int) -> DATA_OUTPUT:
         image, label = self.dataset[index]
-        match self.task:
-            case Task.CLASSIFICATION:
-                return self.transform(image), self.target_transform(label)
-            case Task.RECONSTRUCTION:
-                return self.transform(image), self.target_transform(image)
-        raise ValueError("Task undefined")
+        if self.normalize_by_modality:
+            if self.modality == "all":
+                modality = self.idx_to_class[label].split("/")[0].lower()
+            else:
+                modality = self.modality
+            image = RadImageNet.NORMLIZATION_TRANSFORMS[modality.lower()](image)
+        if self.task == Task.RECONSTRUCTION:
+            label = image
+        return self.transform(image), self.target_transform(label)
 
 
 def mk_subdirectories(path: Path, subdirs: List[str]) -> List[Path]:
@@ -303,6 +353,28 @@ def mk_subdirectories(path: Path, subdirs: List[str]) -> List[Path]:
     return new_dirs
 
 
+def calc_mean_std(dataset: DataLoader):
+    mean = 0.0
+    for images, _ in tqdm(
+        dataset, total=len(dataset), desc="calculating mean", leave=False
+    ):
+        batch_samples = images.shape[0]
+        images = images.reshape((batch_samples, images.shape[1], -1))
+        mean += images.mean(2).sum(0)
+    mean = mean / len(dataset.dataset)
+
+    var = 0.0
+    reshaped_mean = mean[np.newaxis, ...]
+    for images, _ in tqdm(
+        dataset, total=len(dataset), desc="calculating std", leave=False
+    ):
+        batch_samples = images.shape[0]
+        images = images.reshape(batch_samples, images.shape[1], -1)
+        var += ((images - reshaped_mean) ** 2).sum(2).sum(0)
+    std = np.sqrt(var / (len(dataset.dataset) * 224 * 224))
+    return mean, std
+
+
 class RadImageNetCreator(DataLoaderCreator):
     @staticmethod
     def make_datasets(
@@ -313,209 +385,143 @@ class RadImageNetCreator(DataLoaderCreator):
             if "task" in config["dataset"]
             else "classification"
         )
-        match config["dataset"]["split"]:
-            case "random":
-                warn(
-                    f"We strongly recommend to use stratified split mode instead of random"
+        root_folder = Path(config["dataset"]["root"])
+        train_split, test_split = (
+            config["dataset"]["train_val_split"],
+            config["dataset"]["test_split"],
+        )
+        val_split = 1.0 - train_split - test_split
+        assert val_split > 0, f"Train and test split are combined larger than 1"
+        seed = (
+            config["dataset"]["datasplit_seed"]
+            if "datasplit_seed" in config["dataset"]
+            else config["general"]["seed"]
+        )
+        copy_folder = (
+            config["dataset"]["split_folder"]
+            if "split_folder" in config["dataset"]
+            else root_folder.parent
+            / (
+                f"{root_folder.name}_dataset_split_{train_split}_"
+                f"{val_split:.2f}_{test_split}_seed={seed}"
+            )
+        )
+        if copy_folder.is_dir():
+            train_val_test_dirs = [
+                copy_folder / subdir for subdir in ["train", "val", "test"]
+            ]
+            assert all([subdir.is_dir() for subdir in train_val_test_dirs])
+            print(
+                f"Folder {copy_folder} already exists and will not be rebuilt. "
+                "If changes happen which require a rebuild please delete manually."
+            )
+        else:
+            copy_folder.mkdir()
+            classes, _ = find_classes(root_folder)
+            out_class_paths = []
+            for _, class_path in tqdm(
+                classes.items(),
+                total=len(classes),
+                desc="building split copy of data",
+                leave=False,
+            ):
+                out_class_path = copy_folder
+                for subfolder in class_path.relative_to(root_folder).parts:
+                    out_class_path /= subfolder
+                split_class_dir_ratio(
+                    class_path,
+                    output=out_class_path,
+                    ratio=(train_split, val_split, test_split),
+                    seed=seed,
+                    prog_bar=None,
+                    group_prefix=None,
+                    move=False,
                 )
-                if any([tf is not None for tf in transforms]):
-                    raise ValueError(
-                        "No transforms supported for RadImageNet in random split mode. "
-                        "We recommend to use augmentations."
-                    )
-                total_dataset = RadImageNet(
-                    config["dataset"]["root"],
-                    task=task,
-                    transform=np.array,
-                    target_transform=np.array if task == "reconstruction" else None,
-                    modality=config["dataset"]["modality"]
-                    if "modality" in config["dataset"]
-                    else "all",
-                    allowed_body_regions=config["dataset"]["allowed_body_regions"]
-                    if "allowed_body_regions" in config["dataset"]
-                    else "all",
-                    allowed_labels=config["dataset"]["allowed_labels"]
-                    if "allowed_labels" in config["dataset"]
-                    else "all",
-                )
-                L_train_val = int(
-                    round(len(total_dataset) * config["dataset"]["test_split"])
-                )
-                train_val_set, test_set = random_split(
-                    total_dataset,
-                    lengths=[L_train_val, len(total_dataset) - L_train_val],
-                )
-                L_train = int(
-                    round(len(train_val_set) * config["dataset"]["train_val_split"])
-                )
-                train_set, val_set = random_split(
-                    train_val_set, lengths=[L_train, len(train_val_set) - L_train]
-                )
-            case "stratified":
-                root_folder = Path(config["dataset"]["root"])
-                train_split, test_split = (
-                    config["dataset"]["train_val_split"],
-                    config["dataset"]["test_split"],
-                )
-                val_split = 1.0 - train_split - test_split
-                assert val_split > 0, f"Train and test split are combined larger than 1"
-                seed = (
-                    config["dataset"]["datasplit_seed"]
-                    if "datasplit_seed" in config["dataset"]
-                    else config["general"]["seed"]
-                )
-                copy_folder = (
-                    config["dataset"]["split_folder"]
-                    if "split_folder" in config["dataset"]
-                    else root_folder.parent
-                    / f"{root_folder.name}_dataset_split_{train_split}_{val_split:.2f}_{test_split}_seed={seed}"
-                )
-                if copy_folder.is_dir():
-                    train_val_test_dirs = [
-                        copy_folder / subdir for subdir in ["train", "val", "test"]
-                    ]
-                    assert all([subdir.is_dir() for subdir in train_val_test_dirs])
-                    print(
-                        f"Folder {copy_folder} already exists and will not be rebuilt. "
-                        "If changes happen which require a rebuild please delete manually."
-                    )
-                else:
-                    copy_folder.mkdir()
-                    classes, _ = find_classes(root_folder)
-                    out_class_paths = []
-                    parent_paths = set()
-                    for class_name, class_path in tqdm(
-                        classes.items(),
-                        total=len(classes),
-                        desc="building split copy of data",
-                        leave=False,
+                out_class_paths.append(out_class_path)
+            train_val_test_dirs = mk_subdirectories(
+                copy_folder, ["train", "val", "test"]
+            )
+            for out_class_path in tqdm(
+                out_class_paths,
+                total=len(out_class_paths),
+                leave=False,
+                desc="moving classes",
+            ):
+                diff = out_class_path.relative_to(copy_folder)
+                for subdir in tqdm(
+                    train_val_test_dirs,
+                    total=len(train_val_test_dirs),
+                    leave=False,
+                    desc=f"moving {diff}",
+                ):
+                    new_dir = subdir / diff
+                    new_dir.mkdir(parents=True, exist_ok=False)
+                    data_dir = out_class_path / subdir.name
+                    data_dir.rename(new_dir)
+                diff_parts = diff.parts
+                for i in tqdm(
+                    range(len(diff_parts), 0, -1),
+                    total=len(diff_parts),
+                    desc="Delete empty dirs",
+                    leave=False,
+                ):
+                    del_folder = copy_folder
+                    for j in range(i):
+                        del_folder /= diff_parts[j]
+                    if (
+                        len([file for file in del_folder.rglob("*") if file.is_file()])
+                        == 0
                     ):
-                        parent_path = class_path.parent
-                        if parent_path in parent_paths:
-                            continue
-                        parent_paths.add(parent_path)
-                        out_class_path = copy_folder
-                        for subfolder in class_name.split("/")[:-1]:
-                            out_class_path /= subfolder
-                        ratio(
-                            parent_path,
-                            output=out_class_path,
-                            ratio=(train_split, val_split, test_split),
-                            seed=seed,
-                        )
-                        out_class_paths.append(out_class_path)
-                    train_val_test_dirs = mk_subdirectories(
-                        copy_folder, ["train", "val", "test"]
-                    )
-                    for out_class_path in tqdm(
-                        out_class_paths,
-                        total=len(out_class_paths),
-                        leave=False,
-                        desc="moving classes",
-                    ):
-                        diff = out_class_path.relative_to(copy_folder)
-                        for subdir in tqdm(
-                            train_val_test_dirs,
-                            total=len(train_val_test_dirs),
-                            leave=False,
-                            desc=f"moving {diff}",
-                        ):
-                            new_dir = subdir / diff
-                            new_dir.mkdir(parents=True, exist_ok=False)
-                            data_dir = out_class_path / subdir.name
-                            data_dir.rename(new_dir)
-                        diff_parts = diff.parts
-                        for i in tqdm(
-                            range(len(diff_parts), 0, -1),
-                            total=len(diff_parts),
-                            desc="Delete empty dirs",
-                            leave=False,
-                        ):
-                            del_folder = copy_folder
-                            for j in range(i):
-                                del_folder /= diff_parts[j]
-                            if (
-                                len(
-                                    [
-                                        file
-                                        for file in del_folder.rglob("*")
-                                        if file.is_file()
-                                    ]
-                                )
-                                == 0
-                            ):
-                                del_folder.rmdir()
-                            else:
-                                break
-                (train_set, val_set, test_set) = (
-                    RadImageNet(
-                        new_root,
-                        transform=tf,
-                        task=config["dataset"]["task"],
-                        modality=config["dataset"]["modality"]
-                        if "modality" in config["dataset"]
-                        else "all",
-                        allowed_body_regions=config["dataset"]["allowed_body_regions"]
-                        if "allowed_body_regions" in config["dataset"]
-                        else "all",
-                        allowed_labels=config["dataset"]["allowed_labels"]
-                        if "allowed_labels" in config["dataset"]
-                        else "all",
-                    )
-                    for (new_root, tf) in zip(train_val_test_dirs, transforms)
-                )
-
-            case other:
-                raise ValueError(
-                    f"Data split {other} not supported. "
-                    "Supported are [random, stratified]"
-                )
+                        del_folder.rmdir()
+                    else:
+                        break
+        (train_set, val_set, test_set) = (
+            RadImageNet(
+                new_root,
+                transform=tf,
+                task=config["dataset"]["task"],
+                modality=config["dataset"]["modality"]
+                if "modality" in config["dataset"]
+                else "all",
+                allowed_body_regions=config["dataset"]["allowed_body_regions"]
+                if "allowed_body_regions" in config["dataset"]
+                else "all",
+                allowed_labels=config["dataset"]["allowed_labels"]
+                if "allowed_labels" in config["dataset"]
+                else "all",
+                normalize_by_modality=config["dataset"]["normalize_by_modality"]
+                if "normalize_by_modality" in config["dataset"]
+                else False,
+            )
+            for (new_root, tf) in zip(train_val_test_dirs, transforms)
+        )
 
         return train_set, val_set, test_set
 
 
 if __name__ == "__main__":
-    from torch.utils.data import DataLoader
 
     from dptraining.datasets.utils import collate_np_arrays
 
-    def calc_mean_std(dataset: DataLoader):
-        mean = 0.0
-        for images, _ in tqdm(
-            dataset, total=len(dataset), desc="calculating mean", leave=False
-        ):
-            batch_samples = images.shape[0]
-            images = images.reshape((batch_samples, images.shape[1], -1))
-            mean += images.mean(2).sum(0)
-        mean = mean / len(dataset.dataset)
+    # ds1 = RadImageNet(
+    #     "/media/alex/NVME/radiology_ai",
+    #     task="classification",
+    #     transform=None,
+    #     normalize_by_modality=True,
+    # )
+    # ds1[0]
+    # print(len(ds1))
 
-        var = 0.0
-        reshaped_mean = mean[np.newaxis, ...]
-        for images, _ in tqdm(
-            dataset, total=len(dataset), desc="calculating std", leave=False
-        ):
-            batch_samples = images.shape[0]
-            images = images.reshape(batch_samples, images.shape[1], -1)
-            var += ((images - reshaped_mean) ** 2).sum(2).sum(0)
-        std = np.sqrt(var / (len(dataset.dataset) * 224 * 224))
-        return mean, std
-
-    ds1 = RadImageNet(
-        "/media/alex/NVME/radiology_ai", task="classification", transform=None
-    )
-    ds1[0]
-    print(len(ds1))
-
-    data_loader1 = DataLoader(
-        ds1,
-        batch_size=512,
-        shuffle=False,
-        collate_fn=collate_np_arrays,
-        num_workers=16,
-        prefetch_factor=8,
-    )
-    data_mean, data_std = calc_mean_std(data_loader1)
-    print(f"Total: Mean: {data_mean}\t Std: {data_std}")
+    # data_loader1 = DataLoader(
+    #     ds1,
+    #     batch_size=512,
+    #     shuffle=False,
+    #     collate_fn=collate_np_arrays,
+    #     num_workers=16,
+    #     prefetch_factor=8,
+    # )
+    # data_mean, data_std = calc_mean_std(data_loader1)
+    # print(f"Total: Mean: {data_mean}\t Std: {data_std}")
 
     for modality in ["CT", "MR", "US"]:
         ds2 = RadImageNet(
@@ -523,6 +529,7 @@ if __name__ == "__main__":
             task="classification",
             transform=None,
             modality=modality,
+            normalize_by_modality=True,
         )
         ds2[0]
         print(len(ds2))
