@@ -187,12 +187,23 @@ def main(
     augment_op = augmenter.create_vectorized_transform()
     if n_augmentations > 1:
         print(f"Augmentation multiplicity of {n_augmentations}")
-    # augment_op = augment_op.create_vectorized_transform()
+    if "label_augmentations" in config:
+        label_augmenter = Transformation.from_dict_list(config["label_augmentations"])
+        label_augment_op = label_augmenter.create_vectorized_transform()
+    else:
+        label_augment_op = lambda _: _
     if "test_augmentations" in config:
         test_augmenter = Transformation.from_dict_list(config["test_augmentations"])
         test_aug = test_augmenter.create_vectorized_transform()
     else:
         test_aug = lambda x: x  # pylint:disable=unnecessary-lambda-assignment
+    if "test_label_augmentations" in config:
+        test_label_augmenter = Transformation.from_dict_list(
+            config["test_label_augmentations"]
+        )
+        test_label_aug = test_label_augmenter.create_vectorized_transform()
+    else:
+        test_label_aug = test_aug  # pylint:disable=unnecessary-lambda-assignment
     scheduler = make_scheduler_from_config(config)
     stopper = make_stopper_from_config(config)
 
@@ -206,6 +217,7 @@ def main(
         loss_gv,
         opt,
         augment_op,
+        label_augment_op,
         grad_accumulation=grad_acc > 1,
         noise=total_noise,
         effective_batch_size=effective_batch_size,
@@ -246,6 +258,7 @@ def main(
                 train_loader,
                 predict_op_parallel if parallel else predict_op_jit,
                 test_aug,
+                test_label_aug,
                 model_vars,
                 parallel,
                 "train",
@@ -256,6 +269,7 @@ def main(
                 val_loader,
                 predict_op_parallel if parallel else predict_op_jit,
                 test_aug,
+                test_label_aug,
                 model_vars,
                 parallel,
                 "val",

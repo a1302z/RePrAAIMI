@@ -261,3 +261,12 @@ class JaxIFFT(Transform):
 
     def __call__(self, x):
         return jn.fft.ifft2(jn.fft.ifftshift(x, axes=self.axes), axes=self.axes).real
+
+
+class GaussianNoise(Transform):
+    def __init__(self, std=0.01) -> None:
+        super().__init__()
+        self._std = std
+
+    def __call__(self, x):
+        return x + np.random.randn(*x.shape) * self.std

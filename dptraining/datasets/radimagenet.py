@@ -226,7 +226,8 @@ class RadImageNet(Dataset):
         allowed_labels: Union[str, List[str]] = "all",
         normalize_by_modality: bool = False,
     ) -> None:
-        """Wrapper for RadImageNet dataset structure.
+        """
+        Wrapper for RadImageNet dataset structure.
 
         Args:
             root_dir (Union[str, Path]): Path to directory where RadImageNet is stored
