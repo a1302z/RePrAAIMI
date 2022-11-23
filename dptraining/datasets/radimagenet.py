@@ -1,23 +1,16 @@
-import numpy as np
-
-from torch.utils.data import Dataset, ConcatDataset, DataLoader
-from torchvision.datasets import ImageFolder, DatasetFolder
-from torchvision.datasets.folder import IMG_EXTENSIONS, default_loader
-from typing import Tuple, Union, Callable, Optional, List, Dict, cast, Any
-from bisect import bisect_right
-from torch.utils.data import random_split
-from splitfolders import split_class_dir_ratio
-from warnings import warn
-
-from PIL import Image
-
-
-from enum import Enum
-from tqdm import tqdm
-
-from pathlib import Path
-
 import sys
+from bisect import bisect_right
+from enum import Enum
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
+
+import numpy as np
+from PIL import Image
+from splitfolders import split_class_dir_ratio
+from torch.utils.data import ConcatDataset, DataLoader, Dataset
+from torchvision.datasets import DatasetFolder, ImageFolder
+from torchvision.datasets.folder import IMG_EXTENSIONS, default_loader
+from tqdm import tqdm
 
 sys.path.insert(0, str(Path.cwd()))
 
@@ -25,7 +18,7 @@ sys.path.insert(0, str(Path.cwd()))
 from dptraining.datasets.base_creator import DataLoaderCreator
 from dptraining.utils.transform import NormalizeNumpyImg
 
-DATA_OUTPUT = Tuple[np.array, Union[int, np.array]]
+DATA_OUTPUT_TYPE = Tuple[np.array, Union[int, np.array]]  # pylint:disable=invalid-name
 
 
 SUPPORTED_MODALITIES = ("mr", "ct", "us")
@@ -80,15 +73,23 @@ class ExtendedImageFolder(ImageFolder):
         is_valid_file: Optional[Callable[[str], bool]] = None,
         is_valid_class: Optional[Callable[[str], bool]] = None,
     ):
-        """Extension of torchvision ImageFolder structure. Can handle deeper data structures.
+        """Extension of torchvision ImageFolder structure.
+        Can handle deeper data structures.
 
         Args:
             root (str): Path to root folder.
-            transform (Optional[Callable], optional): Optional callable to be applied to images. Defaults to None.
-            target_transform (Optional[Callable], optional): Optional callable to be applied to labels. Defaults to None.
-            loader (Callable[[str], Any], optional): Function to load data from disc. Defaults to default_loader.
-            is_valid_file (Optional[Callable[[str], bool]], optional): Function to ensure a certain file fulfills some property. Defaults to None.
-            is_valid_class (Optional[Callable[[str], bool]], optional): Function to in-/exclude classes in the dataset. Defaults to None.
+            transform (Optional[Callable], optional):
+                Optional callable to be applied to images. Defaults to None.
+            target_transform (Optional[Callable], optional):
+                Optional callable to be applied to labels. Defaults to None.
+            loader (Callable[[str], Any], optional):
+                Function to load data from disc. Defaults to default_loader.
+            is_valid_file (Optional[Callable[[str], bool]], optional):
+                Function to ensure a certain file fulfills some property.
+                Defaults to None.
+            is_valid_class (Optional[Callable[[str], bool]], optional):
+                Function to in-/exclude classes in the dataset.
+                Defaults to None.
         """
         super(DatasetFolder, self).__init__(
             root, transform=transform, target_transform=target_transform
@@ -121,7 +122,7 @@ class ExtendedImageFolder(ImageFolder):
     def find_classes(self, directory: str) -> Tuple[List[str], Dict[str, int]]:
         return find_classes(directory)
 
-    def make_dataset(
+    def make_dataset(  # pylint:disable=arguments-renamed
         self,
         directory: str,
         extensions: Optional[Tuple[str, ...]] = None,
@@ -139,8 +140,8 @@ class ExtendedImageFolder(ImageFolder):
 
         if extensions is not None:
 
-            def is_valid_file(x: Path) -> bool:
-                return x.is_file() and x.suffix in extensions
+            def is_valid_file(file: Path) -> bool:  # pylint:disable=function-redefined
+                return file.is_file() and file.suffix in extensions
 
         is_valid_file = cast(Callable[[Path], bool], is_valid_file)
 
@@ -167,46 +168,49 @@ class ExtendedImageFolder(ImageFolder):
         if empty_classes:
             msg = f"Found no valid file for the classes {', '.join(sorted(empty_classes))}. "
             if extensions is not None:
-                msg += f"Supported extensions are: {extensions if isinstance(extensions, str) else ', '.join(extensions)}"
+                msg += (
+                    "Supported extensions are: "
+                    f"{extensions if isinstance(extensions, str) else ', '.join(extensions)}"
+                )
             raise FileNotFoundError(msg)
 
         return instances
 
 
-# class ConcatExtendedImageFolder(ConcatDataset):
-#     def __init__(self, datasets: List[ExtendedImageFolder]) -> None:
-#         super().__init__(datasets)
-#         self.classes: Dict[str, Path] = {
-#             f"{Path(d.root).name}/{class_name}": class_path
-#             for d in datasets
-#             for class_name, class_path in d.classes.items()
-#         }
-#         self.class_to_idx: Dict[str, int] = {}
-#         base_index: int = 0
-#         self.dataset_label_base: List[int] = []
-#         for dataset in self.datasets:
-#             for name, idx in dataset.class_to_idx.items():
-#                 self.class_to_idx[f"{Path(dataset.root).name}/{name}"] = (
-#                     idx + base_index
-#                 )
-#             base_index = len(self.class_to_idx)
-#             self.dataset_label_base.append(base_index)
+class ConcatExtendedImageFolder(ConcatDataset):
+    def __init__(self, datasets: List[ExtendedImageFolder]) -> None:
+        super().__init__(datasets)
+        self.classes: Dict[str, Path] = {
+            f"{Path(d.root).name}/{class_name}": class_path
+            for d in datasets
+            for class_name, class_path in d.classes.items()
+        }
+        self.class_to_idx: Dict[str, int] = {}
+        base_index: int = 0
+        self.dataset_label_base: List[int] = []
+        for dataset in self.datasets:
+            for name, idx in dataset.class_to_idx.items():
+                self.class_to_idx[f"{Path(dataset.root).name}/{name}"] = (
+                    idx + base_index
+                )
+            base_index = len(self.class_to_idx)
+            self.dataset_label_base.append(base_index)
 
-#     def __getitem__(self, index: int) -> DATA_OUTPUT:
-#         if index < 0:
-#             if -index > len(self):
-#                 raise ValueError(
-#                     "absolute value of index should not exceed dataset length"
-#                 )
-#             index = len(self) + index
-#         dataset_idx = bisect_right(self.cumulative_sizes, index)
-#         if dataset_idx == 0:
-#             sample_idx = index
-#         else:
-#             sample_idx = index - self.cumulative_sizes[dataset_idx - 1]
-#         img, label = self.datasets[dataset_idx][sample_idx]
-#         label += self.dataset_label_base[dataset_idx - 1] if dataset_idx > 0 else 0
-#         return img, label
+    def __getitem__(self, index: int) -> DATA_OUTPUT_TYPE:
+        if index < 0:
+            if -index > len(self):
+                raise ValueError(
+                    "absolute value of index should not exceed dataset length"
+                )
+            index = len(self) + index
+        dataset_idx = bisect_right(self.cumulative_sizes, index)
+        if dataset_idx == 0:
+            sample_idx = index
+        else:
+            sample_idx = index - self.cumulative_sizes[dataset_idx - 1]
+        img, label = self.datasets[dataset_idx][sample_idx]
+        label += self.dataset_label_base[dataset_idx - 1] if dataset_idx > 0 else 0
+        return img, label
 
 
 class RadImageNet(Dataset):
@@ -230,14 +234,26 @@ class RadImageNet(Dataset):
         Wrapper for RadImageNet dataset structure.
 
         Args:
-            root_dir (Union[str, Path]): Path to directory where RadImageNet is stored
-            task (str, optional): If set to reconstruction returns images also as labels. Defaults to "classification".
-            transform (Optional[Callable], optional): Callable to be applied to images. Defaults to None.
-            target_transform (Optional[Callable], optional): Callable to be applied to labels. Defaults to None.
-            modality (str, optional): Whether to use all radiological modalities (CT, MR, US). Defaults to "all".
-            allowed_body_regions (Union[str, List[str]], optional): Whether to restrict to certain body parts in the dataset. Defaults to "all".
-            allowed_labels (Union[str, List[str]], optional): Whether to restrict to certain diagnoses. Defaults to "all".
-            normalize_by_modality (bool, optional): Normalize images with stats of each modality for the cost of a slight performance loss. Defaults to False.
+            root_dir (Union[str, Path]):
+                Path to directory where RadImageNet is stored
+            task (str, optional):
+                If set to reconstruction returns images also as labels.
+                Defaults to "classification".
+            transform (Optional[Callable], optional):
+                Callable to be applied to images. Defaults to None.
+            target_transform (Optional[Callable], optional):
+                Callable to be applied to labels. Defaults to None.
+            modality (str, optional):
+                Whether to use all radiological modalities (CT, MR, US).
+                Defaults to "all".
+            allowed_body_regions (Union[str, List[str]], optional):
+                Whether to restrict to certain body parts in the dataset.
+                Defaults to "all".
+            allowed_labels (Union[str, List[str]], optional):
+                Whether to restrict to certain diagnoses. Defaults to "all".
+            normalize_by_modality (bool, optional):
+                Normalize images with stats of each modality for the cost of
+                a slight performance loss. Defaults to False.
 
         Raises:
             ValueError: allowed_body_regions must be either a string or list of strings
@@ -268,17 +284,19 @@ class RadImageNet(Dataset):
         else:
             is_valid_label: Callable
             if allowed_labels == "all":
-                is_valid_label = lambda x: True
+                is_valid_label = (
+                    lambda _: True  # pylint:disable=unnecessary-lambda-assignment
+                )
             else:
                 if isinstance(allowed_labels, str):
 
-                    def is_valid_label(x: Path) -> bool:
-                        return allowed_labels == x.name
+                    def is_valid_label(file: Path) -> bool:
+                        return allowed_labels == file.name
 
                 elif isinstance(allowed_labels, list):
 
-                    def is_valid_label(x: Path) -> bool:
-                        return x.name in allowed_labels
+                    def is_valid_label(file: Path) -> bool:
+                        return file.name in allowed_labels
 
                 else:
                     raise ValueError(
@@ -287,29 +305,31 @@ class RadImageNet(Dataset):
 
             is_valid_region: Callable
             if allowed_body_regions == "all":
-                is_valid_region = lambda x: True
+                is_valid_region = (
+                    lambda _: True  # pylint:disable=unnecessary-lambda-assignment
+                )
             else:
                 if isinstance(allowed_body_regions, str):
 
-                    def is_valid_region(x: Path) -> bool:
-                        return allowed_body_regions == x.parent.name
+                    def is_valid_region(file: Path) -> bool:
+                        return allowed_body_regions == file.parent.name
 
                 elif isinstance(allowed_body_regions, list):
 
-                    def is_valid_region(x: Path) -> bool:
-                        return x.parent.name in allowed_body_regions
+                    def is_valid_region(file: Path) -> bool:
+                        return file.parent.name in allowed_body_regions
 
                 else:
                     raise ValueError(
                         f"Subclass {allowed_body_regions} must either be str or list[str]"
                     )
 
-            def is_valid_class(x: Path) -> bool:
-                return is_valid_label(x) and is_valid_region(x)
+            def is_valid_class(file: Path) -> bool:
+                return is_valid_label(file) and is_valid_region(file)
 
         def loader(path: Path):
-            with open(path, "rb") as f:
-                img = Image.open(f)
+            with open(path, "rb") as file:
+                img = Image.open(file)
                 img = img.convert("L")
                 img = np.array(img).astype(np.float32) / 255.0
                 return img[np.newaxis, ...]
@@ -331,7 +351,7 @@ class RadImageNet(Dataset):
     def __len__(self) -> int:
         return len(self.dataset)
 
-    def __getitem__(self, index: int) -> DATA_OUTPUT:
+    def __getitem__(self, index: int) -> DATA_OUTPUT_TYPE:
         image, label = self.dataset[index]
         if self.normalize_by_modality:
             if self.modality == "all":
@@ -392,7 +412,7 @@ class RadImageNetCreator(DataLoaderCreator):
             config["dataset"]["test_split"],
         )
         val_split = 1.0 - train_split - test_split
-        assert val_split > 0, f"Train and test split are combined larger than 1"
+        assert val_split > 0, "Train and test split are combined larger than 1"
         seed = (
             config["dataset"]["datasplit_seed"]
             if "datasplit_seed" in config["dataset"]
@@ -411,7 +431,7 @@ class RadImageNetCreator(DataLoaderCreator):
             train_val_test_dirs = [
                 copy_folder / subdir for subdir in ["train", "val", "test"]
             ]
-            assert all([subdir.is_dir() for subdir in train_val_test_dirs])
+            assert all((subdir.is_dir() for subdir in train_val_test_dirs))
             print(
                 f"Folder {copy_folder} already exists and will not be rebuilt. "
                 "If changes happen which require a rebuild please delete manually."
@@ -480,7 +500,7 @@ class RadImageNetCreator(DataLoaderCreator):
             RadImageNet(
                 new_root,
                 transform=tf,
-                task=config["dataset"]["task"],
+                task=task,
                 modality=config["dataset"]["modality"]
                 if "modality" in config["dataset"]
                 else "all",
@@ -502,31 +522,56 @@ class RadImageNetCreator(DataLoaderCreator):
 
 if __name__ == "__main__":
 
+    from collections import Counter
+
     from dptraining.datasets.utils import collate_np_arrays
 
-    # ds1 = RadImageNet(
-    #     "/media/alex/NVME/radiology_ai",
-    #     task="classification",
-    #     transform=None,
-    #     normalize_by_modality=True,
-    # )
-    # ds1[0]
-    # print(len(ds1))
+    ds1 = ExtendedImageFolder("./data/radiology_ai/CT")
+    ds2 = ExtendedImageFolder("./data/radiology_ai/MR")
 
-    # data_loader1 = DataLoader(
-    #     ds1,
-    #     batch_size=512,
-    #     shuffle=False,
-    #     collate_fn=collate_np_arrays,
-    #     num_workers=16,
-    #     prefetch_factor=8,
-    # )
+    ds = ConcatExtendedImageFolder([ds1, ds2])
+    print(ds.classes)
+    print(ds.class_to_idx)
+    all_labels = {f"CT/{k}" for k in ds1.classes.keys()}.union(
+        {f"MR/{k}" for k in ds2.classes.keys()}
+    )
+    concat_labels = set(ds.classes.keys())
+    label_idcs = set(ds.class_to_idx.values())
+    assert len(all_labels - concat_labels) == 0
+    assert len(concat_labels - all_labels) == 0
+    assert len(set(range(len(ds1.classes) + len(ds2.classes))) - label_idcs) == 0
+    assert len(label_idcs - set(range(len(ds1.classes) + len(ds2.classes)))) == 0
+    # labels = [
+    #     label
+    #     for _, label in tqdm(
+    #         ds, total=len(ds), leave=False, desc="iterate concat dataset"
+    #     )
+    # ]
+    # print(Counter(labels))
+
+    ds1 = RadImageNet(
+        "./data/radiology_ai",
+        task="classification",
+        transform=None,
+        normalize_by_modality=True,
+    )
+    ds1[0]
+    print(len(ds1))
+
+    data_loader1 = DataLoader(
+        ds1,
+        batch_size=512,
+        shuffle=False,
+        collate_fn=collate_np_arrays,
+        num_workers=16,
+        prefetch_factor=8,
+    )
     # data_mean, data_std = calc_mean_std(data_loader1)
     # print(f"Total: Mean: {data_mean}\t Std: {data_std}")
 
     for modality in ["CT", "MR", "US"]:
         ds2 = RadImageNet(
-            "/media/alex/NVME/radiology_ai",
+            "./data/radiology_ai",
             task="classification",
             transform=None,
             modality=modality,
@@ -542,11 +587,10 @@ if __name__ == "__main__":
             num_workers=16,
             prefetch_factor=8,
         )
-        data_mean, data_std = calc_mean_std(data_loader2)
-        print(f"{modality}: Mean: {data_mean}\t Std: {data_std}")
-    exit()
+        # data_mean, data_std = calc_mean_std(data_loader2)
+        # print(f"{modality}: Mean: {data_mean}\t Std: {data_std}")
     ds3 = RadImageNet(
-        "/media/alex/NVME/radiology_ai",
+        "./data/radiology_ai",
         task="reconstruction",
         transform=None,
         target_transform=None,
@@ -555,7 +599,7 @@ if __name__ == "__main__":
     ds3[0]
     print(len(ds3))
     ds4 = RadImageNet(
-        "/media/alex/NVME/radiology_ai",
+        "./data/radiology_ai",
         task="reconstruction",
         transform=None,
         target_transform=None,
@@ -564,7 +608,7 @@ if __name__ == "__main__":
     ds4[0]
     print(len(ds4))
     ds5 = RadImageNet(
-        "/media/alex/NVME/radiology_ai",
+        "./data/radiology_ai",
         task="reconstruction",
         transform=None,
         target_transform=None,
