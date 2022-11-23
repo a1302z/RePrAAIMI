@@ -4,11 +4,19 @@ general:
   parallel: False
   eval_train: True
 dataset: 
+  task: classification
   name: CIFAR10
   root: ./data
   train_val_split: 0.9
   normalization: True
   fft: False
+metrics:
+  main: 
+    accuracy_score: 
+  logging:
+    classification_report:
+      output_dict: True
+      zero_division: 0
 loader: 
   num_workers: 16
   prefetch_factor: 16

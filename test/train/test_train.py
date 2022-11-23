@@ -20,7 +20,12 @@ def test_train_cifar_one_batch():
             "random_horizontal_flips": None,
             "random_img_shift": None,
         },
-        "dataset": {"name": "CIFAR10", "root": "./data", "train_val_split": 0.9},
+        "dataset": {
+            "name": "CIFAR10",
+            "root": "./data",
+            "train_val_split": 0.9,
+            "task": "classification",
+        },
         "optim": {"name": "momentum", "momentum": 0.5},
         "loss": {"type": "cse", "reduction": "mean"},
         "hyperparams": {
@@ -39,5 +44,12 @@ def test_train_cifar_one_batch():
             "delta": 1e-5,
             "norm_acc": False,
         },
+        "metrics": {
+            "main": {"accuracy_score": None},
+            "logging": {
+                "classification_report": {"output_dict": True, "zero_division": 0}
+            },
+        },
     }
+
     main(config)

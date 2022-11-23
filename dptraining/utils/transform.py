@@ -269,4 +269,4 @@ class GaussianNoise(Transform):
         self._std = std
 
     def __call__(self, x):
-        return x + np.random.randn(*x.shape) * self.std
+        return x + np.random.randn(*x.shape) * self._std

@@ -1,0 +1,29 @@
+program: dptraining/train.py
+project: fmri
+method: grid
+metric: 
+  name: val.structural_similarity
+  goal: maximize
+parameters: 
+  DP.grad_acc_steps:
+    values:
+      - 1
+      - 16
+  hyperparams.batch_size:
+    values: 
+      - 8
+      - 64
+      - 256
+  hyperparams.epochs:
+    values:
+      - 10 
+      - 100
+command:
+  - ${env}
+  - python
+  - ${program}
+  - -cn 
+  - fmri_complex_dp.yaml
+  - general.log_wandb=True
+  - general.parallel=False
+  - ${args_no_hyphens}

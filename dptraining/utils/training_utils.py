@@ -1,6 +1,7 @@
 import wandb
 import time
 import contextlib
+from typing import Callable
 
 import numpy as np
 
@@ -9,7 +10,6 @@ import sys
 
 from jax import numpy as jn, local_device_count
 from pathlib import Path
-from sklearn import metrics
 from tqdm import tqdm
 
 sys.path.insert(0, str(Path.cwd()))
@@ -237,11 +237,12 @@ def test(  # pylint:disable=too-many-arguments
     model_vars,
     parallel,
     dataset_split: str,
-    score_fn=metrics.accuracy_score,
+    metrics: tuple,
+    loss_fn: Callable,
 ):
     ctx_mngr = (model_vars).replicate() if parallel else contextlib.suppress()
     with ctx_mngr:
-        correct, predicted = [], []
+        correct, scores = [], []
         max_batches = (
             config["hyperparams"]["overfit"]
             if "overfit" in config["hyperparams"]
@@ -262,25 +263,40 @@ def test(  # pylint:disable=too-many-arguments
                 label = label[:max_samples]
             y_pred = predict_op(image)
             correct.append(label)
-            predicted.append(y_pred)
+            scores.append(y_pred)
             if i + 1 >= max_batches:
                 break
     correct = np.concatenate(correct)
-    predicted = np.concatenate(predicted).argmax(axis=1)
+    predicted = np.concatenate(scores)
+    loss = loss_fn(predicted, correct).item()
+    if config["dataset"]["task"] == "classification":
+        predicted = predicted.argmax(axis=1)
+    correct, predicted = correct.squeeze(), predicted.squeeze()
+
+    main_metric_fn, logging_fns = metrics
+    main_metric = (
+        main_metric_fn[0],
+        loss
+        if main_metric_fn[0] == "loss" and main_metric_fn[1] is None
+        else main_metric_fn[1](correct, predicted),
+    )
+    logging_metrics = {
+        f"{func_name}": lfn(correct, predicted)
+        for func_name, lfn in logging_fns.items()
+    }
+    if main_metric[0] != "loss":
+        logging_metrics["loss"] = loss
+    logging_metrics[f"{main_metric[0]}"] = main_metric[1]
 
     if config["general"]["log_wandb"]:
-        wandb.log(
-            {
-                dataset_split: metrics.classification_report(
-                    correct, predicted, output_dict=True, zero_division=0
-                )
-            }
-        )
+        wandb.log({dataset_split: logging_metrics})
     else:
         print(f"{dataset_split} evaluation:")
-        print(
-            metrics.classification_report(
-                correct, predicted, output_dict=False, zero_division=0
-            )
-        )
-    return score_fn(correct, predicted)
+        for name, value in logging_metrics.items():
+            print(f"\t{name}: {value}")
+    #     print(
+    #         metrics.classification_report(
+    #             correct, predicted, output_dict=False, zero_division=0
+    #         )
+    #     )
+    return main_metric[1]

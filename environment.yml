@@ -1,4 +1,4 @@
-name: objaxdp
+name: objaxdp-fmri
 channels: 
   - conda-forge
   - pytorch
@@ -11,9 +11,13 @@ dependencies:
   - conda-forge::cudnn==8.2.1.32
   - conda-forge::wandb
   - conda-forge::scikit-learn
+  - conda-forge::scikit-image
   - nvidia::cuda-nvcc
   - ipykernel
   - matplotlib
+  - conda-forge::h5py
+  - conda-forge::pytorch-lightning
+  - conda-forge::pandas
   - black
   - pytest
   - pylint
@@ -25,3 +29,4 @@ dependencies:
     - pytest-profiling
     - deepee
     - split-folders
+    - pyyaml

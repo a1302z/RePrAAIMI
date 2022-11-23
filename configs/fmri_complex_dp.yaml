@@ -1,0 +1,84 @@
+project: fmri
+general:
+  log_wandb: False
+  parallel: False
+  eval_train: False
+dataset: 
+  task: regression
+  name: fastmri
+  root: ./data/FastMRI/knee/data/
+  train_val_split: 0.9
+  fft: False
+  normalization: True
+  mask_type: random
+  center_fractions:
+    - 0.08
+  accelerations:
+    - 4
+  challenge: "singlecoil"
+  resolution: 64
+loader: 
+  num_workers: 16
+  prefetch_factor: 16
+  collate_fn: numpy
+augmentations:
+test_augmentations:
+model:
+  complex: True
+  name: unet
+  in_channels: 1
+  out_channels: 1
+  channels: 16
+  # conv: convws_nw
+  # normalization: bn
+  activation: cardioid
+  # pooling: avgpool
+  # scale_norm: True
+optim:
+  name: nadam
+loss: 
+  type: l1
+  reduction: mean
+ema:
+  use_ema: False
+  decay: 0.999
+hyperparams:
+  epochs: 10
+  batch_size: 256
+  batch_size_test: 16
+  lr: 2e-3
+  # momentum: 0.9
+  # l2regularization: 1e-5
+  # overfit: 32
+metrics:
+  main: 
+    structural_similarity:
+      win_size: 7
+      channel_axis: 0
+  logging:
+    mean_squared_error:
+    structural_similarity:
+      win_size: 7
+      channel_axis: 0
+    peak_signal_noise_ratio: 
+      data_range: 7.3
+scheduler:
+  type: reduceonplateau
+  normalize_lr: False
+  patience: 20
+  min_delta: 0.01
+  factor: 0.5
+# earlystopping:
+#   mode: maximize
+#   patience: 100
+#   min_delta: 0.01
+DP:
+  disable_dp: False
+  epsilon: 1
+  # sigma: 3
+  max_per_sample_grad_norm: 1.0
+  delta: 1e-5
+  norm_acc: False
+  grad_acc_steps: 1
+  rsqrt_noise_adapt: False
+  glrt_assumption: False

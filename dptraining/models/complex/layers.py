@@ -3,10 +3,10 @@ from typing import Callable
 from warnings import warn
 
 from jax import numpy as jnp
-from jax.lax import conv_general_dilated
+from jax.lax import conv_general_dilated, conv_transpose
 from objax import Module, TrainVar
 from objax.constants import ConvPadding
-from objax.nn import Conv2D
+from objax.nn import Conv2D, ConvTranspose2D
 from objax.nn.init import kaiming_normal, xavier_normal
 from objax.typing import ConvPaddingInt, JaxArray
 from objax.util import class_name
@@ -54,6 +54,61 @@ class ComplexConv2D(Module):
             strides=strides,
             dilations=dilations,
             groups=groups,
+            padding=padding,
+            use_bias=False,
+            w_init=w_init,
+        )
+
+    def __call__(self, x: JaxArray) -> JaxArray:
+        return conjugate_apply(self.convr, self.convi, x)
+
+    def __repr__(self):
+        args = dict(
+            nin=self.convr.w.value.shape[2] * self.convr.groups,
+            nout=self.convr.w.value.shape[3],
+            k=self.convr.w.value.shape[:2],
+            strides=self.convr.strides,
+            dilations=self.convr.dilations,
+            groups=self.convr.groups,
+            padding=self.convr.padding,
+            use_bias=self.convr.b is not None,
+        )
+        args = ", ".join(f"{k}={repr(v)}" for k, v in args.items())
+        return f"{class_name(self)}({args})"
+
+
+class ComplexConv2DTranspose(Module):
+    def __init__(
+        self,
+        nin: int,
+        nout: int,
+        k: tuple[int, int] | int,
+        strides: tuple[int, int] | int = 1,
+        dilations: tuple[int, int] | int = 1,
+        padding: ConvPaddingInt | ConvPadding | str = ConvPadding.SAME,
+        w_init: Callable = kaiming_normal,
+        use_bias=False,
+    ) -> None:
+        super().__init__()
+        if use_bias:
+            warn("Bias is not supported.")
+            use_bias = False
+        self.convr = ConvTranspose2D(
+            nin=nin,
+            nout=nout,
+            k=k,
+            strides=strides,
+            dilations=dilations,
+            padding=padding,
+            use_bias=False,
+            w_init=w_init,
+        )
+        self.convi = ConvTranspose2D(
+            nin=nin,
+            nout=nout,
+            k=k,
+            strides=strides,
+            dilations=dilations,
             padding=padding,
             use_bias=False,
             w_init=w_init,
@@ -164,6 +219,45 @@ class ComplexWSConv2DNoWhiten(ComplexConv2D):
         # )
 
 
+class ComplexWSConv2DTranspose(ComplexConv2D):
+    def __call__(self, x: JaxArray) -> JaxArray:
+        weight_r, weight_i = complex_ws_whiten(self.convr.w.value, self.convi.w.value)
+        return conjugate_apply(
+            partial(
+                conv_transpose,
+                rhs=weight_r,
+                strides=self.convr.strides,
+                padding=self.convr.padding,
+                rhs_dilation=self.convr.dilations,
+                feature_group_count=self.convr.groups,
+                dimension_numbers=("NCHW", "HWIO", "NCHW"),
+            ),
+            partial(
+                conv_transpose,
+                rhs=weight_i,
+                strides=self.convi.strides,
+                padding=self.convi.padding,
+                rhs_dilation=self.convi.dilations,
+                feature_group_count=self.convi.groups,
+                dimension_numbers=("NCHW", "HWIO", "NCHW"),
+            ),
+            x,
+        )
+
+
+class ComplexWSConv2DNoWhitenTranspose(ComplexConv2D):
+    def __call__(self, x: JaxArray) -> JaxArray:
+        weight_r, weight_i = complex_ws_nowhiten(self.convr.w.value, self.convi.w.value)
+        return fast_conv_transpose(
+            x,
+            weight_r,
+            weight_i,
+            stride=self.convr.strides,
+            padding=self.convr.padding,
+            dilation=self.convr.dilations,
+        )
+
+
 class ComplexLinear(Module):
     def __init__(
         self,
@@ -209,6 +303,32 @@ def fast_conv(inp, weight_r, weight_i, stride=(1, 1), padding="same", dilation=(
         inp.imag,
         concat_weights,
         window_strides=stride,
+        padding=padding,
+        rhs_dilation=dilation,
+        dimension_numbers=("NCHW", "HWIO", "NCHW"),
+    )
+    rwr, iwr = weight_real[:, :n_out], weight_real[:, n_out:]
+    rwi, iwi = weight_imag[:, :n_out], weight_imag[:, n_out:]
+    return (rwr - iwi) + 1j * (iwr + rwi)
+
+
+def fast_conv_transpose(
+    inp, weight_r, weight_i, stride=(1, 1), padding="same", dilation=(1, 1)
+):
+    n_out = weight_r.shape[-1]
+    concat_weights = jnp.concatenate((weight_r, weight_i), axis=-1)
+    weight_real = conv_transpose(
+        inp.real,
+        concat_weights,
+        strides=stride,
+        padding=padding,
+        rhs_dilation=dilation,
+        dimension_numbers=("NCHW", "HWIO", "NCHW"),
+    )
+    weight_imag = conv_transpose(
+        inp.imag,
+        concat_weights,
+        strides=stride,
         padding=padding,
         rhs_dilation=dilation,
         dimension_numbers=("NCHW", "HWIO", "NCHW"),

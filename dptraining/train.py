@@ -47,6 +47,7 @@ def main(
         make_loss_from_config,
         make_scheduler_from_config,
         make_stopper_from_config,
+        make_metrics,
     )
     from dptraining.utils.augment import Transformation
     from dptraining.utils.training_utils import (
@@ -113,16 +114,19 @@ def main(
         )
     opt = make_optim_from_config(config, model_vars)
 
+    predict_lambda = (
+        lambda x: objax.functional.softmax(  # pylint:disable=unnecessary-lambda-assignment
+            model(x, training=False)
+        )
+        if config["dataset"]["task"] == "classification"
+        else model(x, training=False)
+    )
+
     predict_op_parallel = objax.Parallel(
-        lambda x: objax.functional.softmax(model(x, training=False)),
-        model_vars,
-        reduce=np.concatenate,
+        predict_lambda, model_vars, reduce=np.concatenate
     )
     predict_op_jit = objax.Jit(
-        lambda x: objax.functional.softmax(
-            model(x, training=False)  # pylint:disable=not-callable
-        ),
-        model_vars,
+        predict_lambda, model_vars  # pylint:disable=not-callable
     )
 
     if config["DP"]["disable_dp"]:
@@ -179,8 +183,11 @@ def main(
             )
 
     loss_class = make_loss_from_config(config)
-    loss_fn = loss_class.create_loss_fn(model_vars, model)
-    loss_gv = create_loss_gradient(config, model_vars, loss_fn)
+    train_loss_fn = loss_class.create_train_loss_fn(model_vars, model)
+    test_loss_fn = loss_class.create_test_loss_fn()
+    loss_gv = create_loss_gradient(config, model_vars, train_loss_fn)
+
+    metric_fns = make_metrics(config)
 
     augmenter = Transformation.from_dict_list(config["augmentations"])
     n_augmentations = augmenter.get_n_augmentations()
@@ -262,6 +269,8 @@ def main(
                 model_vars,
                 parallel,
                 "train",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
             )
         if val_loader is not None:
             metric = test(
@@ -273,6 +282,8 @@ def main(
                 model_vars,
                 parallel,
                 "val",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
             )
             scheduler.update_score(metric)
         else:
@@ -296,7 +307,15 @@ def main(
 
     # never do test parallel as this could emit some test samples and thus distort results
     metric = test(
-        config, test_loader, predict_op_jit, test_aug, model_vars, False, "test"
+        config,
+        test_loader,
+        predict_op_jit,
+        test_aug,
+        model_vars,
+        False,
+        "test",
+        metrics=metric_fns,
+        loss_fn=test_loss_fn,
     )
     if "save_path" in config["general"] and config["general"]["save_path"] is not None:
         print(f"Saving model to {config['general']['save_path']}")
