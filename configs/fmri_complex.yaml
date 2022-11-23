@@ -49,19 +49,21 @@ hyperparams:
   lr: 2e-3
   # momentum: 0.9
   # l2regularization: 1e-5
-  # overfit: 32
+  overfit: 32
 metrics:
   main: 
     structural_similarity:
       win_size: 7
       channel_axis: 0
+      data_range: 8.48
   logging:
     mean_squared_error:
     structural_similarity:
       win_size: 7
       channel_axis: 0
+      data_range: 8.48
     peak_signal_noise_ratio: 
-      data_range: 7.3
+      data_range: 8.48
 scheduler:
   type: reduceonplateau
   normalize_lr: False

@@ -272,6 +272,10 @@ def test(  # pylint:disable=too-many-arguments
     if config["dataset"]["task"] == "classification":
         predicted = predicted.argmax(axis=1)
     correct, predicted = correct.squeeze(), predicted.squeeze()
+    if np.iscomplexobj(correct):
+        correct = np.abs(correct)
+    if np.iscomplexobj(predicted):
+        predicted = np.abs(predicted)
 
     main_metric_fn, logging_fns = metrics
     main_metric = (

@@ -1,5 +1,4 @@
 # pylint: skip-file
-from functools import partial
 from objax import nn, Module
 from objax.functional import average_pool_2d, pad
 from jax import numpy as jn
@@ -116,7 +115,7 @@ class Unet(Module):
             output = jn.concatenate([output, downsample_layer], axis=1)
             output = conv(output)
 
-        return jn.abs(output)
+        return output
 
 
 class ConvBlock(Module):
