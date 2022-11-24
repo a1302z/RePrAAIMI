@@ -49,7 +49,7 @@ hyperparams:
   lr: 2e-3
   # momentum: 0.9
   # l2regularization: 1e-5
-  overfit: 32
+  # overfit: 32
 metrics:
   main: 
     structural_similarity:

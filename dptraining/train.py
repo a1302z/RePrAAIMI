@@ -311,6 +311,7 @@ def main(
         test_loader,
         predict_op_jit,
         test_aug,
+        test_label_aug,
         model_vars,
         False,
         "test",

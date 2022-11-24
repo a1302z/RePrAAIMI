@@ -57,6 +57,13 @@ hyperparams:
   lr: 2e-3
   # overfit: 10
   # momentum: 0.9
+metrics:
+  main: 
+    accuracy_score: 
+  logging:
+    classification_report:
+      output_dict: True
+      zero_division: 0
 loss: 
   type: cse
   reduction: sum
