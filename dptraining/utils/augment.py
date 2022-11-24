@@ -25,6 +25,8 @@ from dptraining.utils.transform import (
     JaxFFT,
     JaxIFFT,
     GaussianNoise,
+    AddRandomPhase,
+    AddRandomPhaseJAX,
 )
 from omegaconf import DictConfig
 from torchvision import transforms
@@ -188,6 +190,8 @@ class Transformation:
         "jaxfft": JaxFFT,
         "jaxifft": JaxIFFT,
         "gaussiannoise": GaussianNoise,
+        "randomphase": AddRandomPhase,
+        "randomphasejax": AddRandomPhaseJAX,
         **torchvision_transforms,
     }
 

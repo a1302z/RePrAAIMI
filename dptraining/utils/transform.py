@@ -4,6 +4,7 @@ import objax
 import jax
 import jax.numpy as jn
 import numpy as np
+from PIL import Image
 
 
 class Transform(ABC):
@@ -270,3 +271,49 @@ class GaussianNoise(Transform):
 
     def __call__(self, x):
         return x + np.random.randn(*x.shape) * self._std
+
+
+class AddRandomPhase(Transform):
+    def __init__(self, control_points=4) -> None:
+        super().__init__()
+        self._control_points = control_points
+
+    def __call__(self, x):
+        img_shape = (x.shape[-2], x.shape[-1])
+        assert self._control_points <= min(img_shape)
+        control_points_2D = np.float32(
+            np.random.uniform(0, 1, (self._control_points, self._control_points))
+        )
+        bias_field_2D = np.array(
+            Image.fromarray(control_points_2D, mode="L").resize(
+                img_shape, resample=Image.BICUBIC
+            ),
+            dtype=x.dtype,
+        )
+        bias_field_2D /= np.max(bias_field_2D)
+        bias_field_2D *= 2 * np.pi * 0.999
+        bias_field_2D -= np.pi
+        return np.maximum(x, 1e-6) * np.exp(1j * bias_field_2D)
+
+
+class AddRandomPhaseJAX(Transform):
+    def __init__(self, control_points=4) -> None:
+        super().__init__()
+        self._control_points = control_points
+
+    def __call__(self, x):
+        img_shape = (x.shape[-2], x.shape[-1])
+        assert self._control_points <= min(img_shape)
+        control_points_2D = np.float32(
+            np.random.uniform(0, 1, (self._control_points, self._control_points))
+        )
+        bias_field_2D = jn.array(
+            Image.fromarray(control_points_2D, mode="L").resize(
+                img_shape, resample=Image.BICUBIC
+            ),
+            dtype=x.dtype,
+        )
+        bias_field_2D /= jn.max(bias_field_2D)
+        bias_field_2D *= 2 * jn.pi * 0.999
+        bias_field_2D -= jn.pi
+        return jn.maximum(x, 1e-6) * jn.exp(1j * bias_field_2D)
