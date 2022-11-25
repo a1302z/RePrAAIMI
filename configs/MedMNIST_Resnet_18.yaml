@@ -1,0 +1,56 @@
+project: MedMNIST
+general:
+  log_wandb: True
+  parallel: False
+  cpu: True
+dataset: 
+  name: pneumoniamnist
+  root: ./data/
+  normalization: True
+loader: 
+  num_workers: 16
+  prefetch_factor: 16
+  collate_fn: numpy
+augmentations:
+  # make_complex_both:
+test_augmentations:
+  # make_complex_both:
+model:
+  complex: False
+  name: resnet18
+  in_channels: 1
+  num_classes: 2
+  conv: conv
+  activation: mish
+  normalization: gn
+  pooling: maxpool
+  # scale_norm: True
+optim:
+  name: nadam
+loss: 
+  type: cse
+  reduction: sum
+ema:
+  use_ema: True
+  decay: 0.995
+hyperparams:
+  epochs: 50
+  batch_size: 512
+  loss: 
+  type: cse
+  reduction: sum
+  batch_size_test: 512
+  lr: 2e-3
+  # momentum: 0.9
+scheduler:
+  type: reduceonplateau
+  normalize_lr: False
+  patience: 5
+  min_delta: 0.01
+  factor: 0.9
+earlystopping:
+  mode: maximize
+  patience: 10
+  min_delta: 0.01
+DP:
+  disable_dp: True
