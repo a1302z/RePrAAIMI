@@ -17,7 +17,7 @@ test_augmentations:
   # make_complex_both:
 model:
   complex: False
-  name: resnet18
+  name: resnet_v2
   in_channels: 1
   num_classes: 2
   conv: conv
