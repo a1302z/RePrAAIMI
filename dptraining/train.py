@@ -210,7 +210,7 @@ def main(
         )
         test_label_aug = test_label_augmenter.create_vectorized_transform()
     else:
-        test_label_aug = test_aug  # pylint:disable=unnecessary-lambda-assignment
+        test_label_aug = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
     scheduler = make_scheduler_from_config(config)
     stopper = make_stopper_from_config(config)
 
