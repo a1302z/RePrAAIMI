@@ -1,12 +1,11 @@
-project: cifar-DP
+project: MedMNIST-DP
 general:
   log_wandb: True
   parallel: False
   eval_train: True
 dataset: 
-  name: CIFAR10
-  root: ./data
-  train_val_split: 0.9
+  name: pneumoniamnist
+  root: ./data/
   normalization: True
   fft: False
 loader: 
@@ -23,8 +22,8 @@ augmentations:
         flip_prob: 0.5
 model:
   name: resnet9
-  in_channels: 3
-  num_classes: 10
+  in_channels: 1
+  num_classes: 2
   conv: convws_nw
   activation: mish
   normalization: gn

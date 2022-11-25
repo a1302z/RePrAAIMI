@@ -203,7 +203,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
             add_args = {}
             if grad_acc > 1:
                 add_args["apply_norm_acc"] = (i + 1) % grad_acc == 0
-            train_result = train_op(img, label, np.array(learning_rate), **add_args)
+            train_result = train_op(img, label.squeeze(), np.array(learning_rate), **add_args)
             if train_result is not None:
                 train_loss, grads = train_result
                 train_loss = train_loss.item()

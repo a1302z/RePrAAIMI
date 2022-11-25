@@ -3,6 +3,7 @@ from warnings import warn
 
 from deepee.dataloader import UniformWORSubsampler
 
+from dptraining.datasets.pneumoniamnist import pneumoniamnistCreator
 from dptraining.datasets.cifar10 import CIFAR10Creator
 from dptraining.datasets.imagenet import ImageNetCreator
 from dptraining.datasets.tinyimagenet import TinyImageNetCreator
@@ -10,10 +11,10 @@ from dptraining.datasets.utils import collate_np_arrays
 from dptraining.utils.augment import Transformation
 
 
-SUPPORTED_DATASETS = ("cifar10", "imagenet", "tinyimagenet")
+SUPPORTED_DATASETS = ("cifar10", "imagenet", "tinyimagenet", 'pneumoniamnist')
 
 SUPPORTED_FFT = ("cifar10",)
-SUPPORTED_NORMALIZATION = ("cifar10", "tinyimagenet")
+SUPPORTED_NORMALIZATION = ("cifar10", "tinyimagenet", 'pneumoniamnist')
 
 
 def modify_collate_fn_config(config):
@@ -63,7 +64,12 @@ def make_dataset(config):
         train_ds, val_ds, test_ds = ImageNetCreator.make_datasets(
             config, (train_tf, val_tf, test_tf)
         )
-        # TODO: add pneumonia mnist
+        # add pneumonia mnist
+    elif config["dataset"]["name"].lower() == "pneumoniamnist":
+        train_ds, val_ds, test_ds = pneumoniamnistCreator.make_datasets(
+            config, (train_tf, val_tf, test_tf)
+        )
+        
     return train_ds, val_ds, test_ds
 
 
@@ -129,6 +135,15 @@ def make_loader_from_config(config):
         )
     elif config["dataset"]["name"].lower() == "imagenet":
         train_loader, val_loader, test_loader = ImageNetCreator.make_dataloader(
+            train_ds,
+            val_ds,
+            test_ds,
+            train_loader_kwargs,
+            val_loader_kwargs,
+            test_loader_kwargs,
+        )
+    elif config["dataset"]["name"].lower() == "pneumoniamnist":
+        train_loader, val_loader, test_loader = pneumoniamnistCreator.make_dataloader(
             train_ds,
             val_ds,
             test_ds,
