@@ -198,7 +198,7 @@ def main(
         label_augmenter = Transformation.from_dict_list(config["label_augmentations"])
         label_augment_op = label_augmenter.create_vectorized_transform()
     else:
-        label_augment_op = lambda _: _
+        label_augment_op = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
     if "test_augmentations" in config:
         test_augmenter = Transformation.from_dict_list(config["test_augmentations"])
         test_aug = test_augmenter.create_vectorized_transform()

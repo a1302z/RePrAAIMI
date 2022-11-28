@@ -225,7 +225,7 @@ class RadImageNet(Dataset):
         task: str = "classification",
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
-        modality: str = "all",
+        modality: str = "all",  # pylint:disable=redefined-outer-name
         allowed_body_regions: Union[str, List[str]] = "all",
         allowed_labels: Union[str, List[str]] = "all",
         normalize_by_modality: bool = False,
@@ -355,7 +355,9 @@ class RadImageNet(Dataset):
         image, label = self.dataset[index]
         if self.normalize_by_modality:
             if self.modality == "all":
-                modality = self.idx_to_class[label].split("/")[0].lower()
+                modality = (  # pylint:disable=redefined-outer-name
+                    self.idx_to_class[label].split("/")[0].lower()
+                )
             else:
                 modality = self.modality
             image = RadImageNet.NORMLIZATION_TRANSFORMS[modality.lower()](image)
@@ -522,7 +524,7 @@ class RadImageNetCreator(DataLoaderCreator):
 
 if __name__ == "__main__":
 
-    from collections import Counter
+    # from collections import Counter
 
     from dptraining.datasets.utils import collate_np_arrays
 
@@ -555,7 +557,7 @@ if __name__ == "__main__":
         transform=None,
         normalize_by_modality=True,
     )
-    ds1[0]
+    _ = ds1[0]
     print(len(ds1))
 
     data_loader1 = DataLoader(
@@ -577,7 +579,7 @@ if __name__ == "__main__":
             modality=modality,
             normalize_by_modality=True,
         )
-        ds2[0]
+        _ = ds2[0]
         print(len(ds2))
         data_loader2 = DataLoader(
             ds2,
@@ -596,7 +598,7 @@ if __name__ == "__main__":
         target_transform=None,
         allowed_body_regions="knee",
     )
-    ds3[0]
+    _ = ds3[0]
     print(len(ds3))
     ds4 = RadImageNet(
         "./data/radiology_ai",
@@ -605,7 +607,7 @@ if __name__ == "__main__":
         target_transform=None,
         allowed_labels="normal",
     )
-    ds4[0]
+    _ = ds4[0]
     print(len(ds4))
     ds5 = RadImageNet(
         "./data/radiology_ai",
@@ -615,5 +617,5 @@ if __name__ == "__main__":
         allowed_labels="normal",
         allowed_body_regions="knee",
     )
-    ds5[0]
+    _ = ds5[0]
     print(len(ds5))
