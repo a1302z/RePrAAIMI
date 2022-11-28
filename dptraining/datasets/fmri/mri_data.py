@@ -348,6 +348,7 @@ class SliceDataset(torch.utils.data.Dataset):
             ]
 
     def _retrieve_metadata(self, fname):
+        fname = self.resolve_symlinks(fname)
         with h5py.File(fname, "r") as hf:
             et_root = etree.fromstring(hf["ismrmrd_header"][()])
 
@@ -383,12 +384,17 @@ class SliceDataset(torch.utils.data.Dataset):
 
         return metadata, num_slices
 
+    def resolve_symlinks(self, fname):
+        if isinstance(fname, Path) and fname.is_symlink():
+            fname = fname.readlink()
+        return fname
+
     def __len__(self):
         return len(self.raw_samples) if self.overfit is None else self.overfit
 
     def __getitem__(self, i: int):
         fname, dataslice, metadata = self.raw_samples[i]
-
+        fname = self.resolve_symlinks(fname)
         with h5py.File(fname, "r") as hf:
             kspace = hf["kspace"][dataslice]
 
@@ -503,6 +509,7 @@ class AnnotatedSliceDataset(SliceDataset):
 
         for raw_sample in self.raw_samples:
             fname, slice_ind, metadata = raw_sample
+            fname = self.resolve_symlinks(fname)
 
             # using filename and slice to find desired annotation
             annotations_df = annotations_csv[

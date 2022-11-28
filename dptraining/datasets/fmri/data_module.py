@@ -11,11 +11,12 @@ from typing import Callable, Optional, Union
 
 import torch
 from numpy import stack
-from random import shuffle
+from random import shuffle, seed as seed_fn
 
 
 from dptraining.datasets.fmri.mri_data import CombinedSliceDataset, SliceDataset
-from dptraining.datasets.fmri.volume_sampler import VolumeSampler
+
+from tqdm import tqdm
 
 
 def _check_both_not_none(val1, val2):
@@ -50,6 +51,7 @@ class FastMriDataModule:
         num_workers: int = 4,
         distributed_sampler: bool = False,
         split_train_dataset: Optional[float] = None,
+        seed: int = 0,
     ):
         """
         Args:
@@ -126,10 +128,12 @@ class FastMriDataModule:
         self.num_workers = num_workers
         self.distributed_sampler = distributed_sampler
         self.split_train = split_train_dataset
+        self.seed = seed
 
+        train_folder = self.data_path / f"{self.challenge}_train"
+        val_folder = self.data_path / f"{self.challenge}_val"
         if self.split_train is not None:
-            train_folder = self.data_path / f"{self.challenge}_train"
-            val_folder = self.data_path / f"{self.challenge}_val"
+            seed_fn(seed)
             train_files = [f for f in train_folder.rglob("*.h5") if f.is_file()]
             shuffle(train_files)
             L_train = int(round(self.split_train * len(train_files)))
@@ -137,6 +141,45 @@ class FastMriDataModule:
                 train_files[:L_train],
                 train_files[L_train:],
             )
+            new_train_folder = (
+                self.data_path
+                / f"{self.challenge}_seed={seed}_split={self.split_train}_train"
+            )
+            new_val_folder = (
+                self.data_path
+                / f"{self.challenge}_seed={seed}_split={self.split_train}_val"
+            )
+            if not new_train_folder.is_dir():
+                new_train_folder.mkdir(exist_ok=True)
+            if not new_val_folder.is_dir():
+                new_val_folder.mkdir(exist_ok=True)
+            for f in tqdm(
+                train_split_files,
+                total=len(train_split_files),
+                desc="symlinking train files",
+                leave=False,
+            ):
+                new_file = new_train_folder / f"{f.stem}_symlink"
+                if not (new_file.is_file() or new_file.is_symlink()):
+                    new_file.symlink_to(f)
+            for f in tqdm(
+                val_split_files,
+                total=len(train_split_files),
+                desc="symlinking train files",
+                leave=False,
+            ):
+                new_file = new_val_folder / f"{f.stem}_symlink"
+                if not (new_file.is_file() or new_file.is_symlink()):
+                    new_file.symlink_to(f)
+
+            self.train_path = new_train_folder
+            self.val_path = new_val_folder
+            self.test_path = val_folder
+        else:
+            self.train_path = train_folder
+            self.val_path = val_folder
+            if self.test_path is None:
+                self.test_path = self.data_path / f"{self.challenge}_test"
 
     def _create_data_loader(
         self,
@@ -146,9 +189,6 @@ class FastMriDataModule:
         volume_sample_rate: Optional[float] = None,
         overfit: Optional[int] = None,
     ) -> torch.utils.data.DataLoader:
-        # original_data_partition = data_partition
-        # if self.split_train is not None and "split" in data_partition:
-        #     data_partition = "train"
         if data_partition == "train":
             is_train = True
             sample_rate = self.sample_rate if sample_rate is None else sample_rate
@@ -185,8 +225,8 @@ class FastMriDataModule:
         dataset: Union[SliceDataset, CombinedSliceDataset]
         if is_train and self.combine_train_val:
             data_paths = [
-                self.data_path / f"{self.challenge}_train",
-                self.data_path / f"{self.challenge}_val",
+                self.train_path,
+                self.val_path,
             ]
             data_transforms = [data_transform, data_transform]
             challenges = [self.challenge, self.challenge]
@@ -208,8 +248,10 @@ class FastMriDataModule:
         else:
             if data_partition in ("test", "challenge") and self.test_path is not None:
                 data_path = self.test_path
-            else:
-                data_path = self.data_path / f"{self.challenge}_{data_partition}"
+            elif data_partition == "train":
+                data_path = self.train_path
+            elif data_partition == "val":
+                data_path = self.val_path
 
             dataset = SliceDataset(
                 root=data_path,
@@ -266,14 +308,11 @@ class FastMriDataModule:
         # call dataset for each split one time to make sure the cache is set up on the
         # rank 0 ddp process. if not using cache, don't do this
         if self.use_dataset_cache_file:
-            if self.test_path is not None:
-                test_path = self.test_path
-            else:
-                test_path = self.data_path / f"{self.challenge}_test"
+            assert self.test_path is not None
             data_paths = [
-                self.data_path / f"{self.challenge}_train",
-                self.data_path / f"{self.challenge}_val",
-                test_path,
+                self.train_path,
+                self.val_path,
+                self.test_path,
             ]
             data_transforms = [
                 self.train_transform,
@@ -294,3 +333,14 @@ class FastMriDataModule:
                     challenge=self.challenge,
                     use_dataset_cache=self.use_dataset_cache_file,
                 )
+
+    def train_dataloader(self, overfit: Optional[int] = None):
+        return self._create_data_loader(
+            self.train_transform, data_partition="train", overfit=overfit
+        )
+
+    def val_dataloader(self):
+        return self._create_data_loader(self.val_transform, data_partition="val")
+
+    def test_dataloader(self):
+        return self._create_data_loader(self.test_transform, data_partition="test")
