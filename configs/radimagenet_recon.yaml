@@ -1,11 +1,11 @@
-project: radimagenet
+project: radimagenet_recon
 general:
   log_wandb: False
   parallel: False
   eval_train: True
-  save_path: radimagenet_resnet9.npz
+  save_path: radimagenet_unet.npz
 ckpt:
-  logdir: radimagenet_resnet9_ckpt
+  logdir: radimagenet_unet_ckpt
   keep_ckpts: 10
   makedir: True
 dataset: 
@@ -88,6 +88,7 @@ metrics:
       data_range: 8.48
     peak_signal_noise_ratio: 
       data_range: 8.48
+  per_batch_metrics: True
 scheduler:
   type: reduceonplateau
   normalize_lr: False

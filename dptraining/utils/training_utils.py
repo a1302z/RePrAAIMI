@@ -223,9 +223,35 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                     commit=i % 10 == 0,
                 )
 
-            if i + 1 >= max_batches:
-                break
+            # if i + 1 >= max_batches:
+            break
     return time.time() - start_time
+
+
+def calculate_metrics(task, metrics, loss_fn, correct, predicted):
+    loss = loss_fn(predicted, correct).item()
+    if task == "classification":
+        predicted = predicted.argmax(axis=1)
+    correct, predicted = correct.squeeze(), predicted.squeeze()
+    if np.iscomplexobj(correct):
+        correct = np.abs(correct)
+    if np.iscomplexobj(predicted):
+        predicted = np.abs(predicted)
+
+    main_metric_fn, logging_fns = metrics
+    main_metric = (
+        main_metric_fn[0],
+        loss
+        if main_metric_fn[0] == "loss" and main_metric_fn[1] is None
+        else main_metric_fn[1](correct, predicted),
+    )
+    logging_metrics = {
+        func_name: lfn(correct, predicted) for func_name, lfn in logging_fns.items()
+    }
+    if main_metric[0] != "loss":
+        logging_metrics["loss"] = loss
+    logging_metrics[f"{main_metric[0]}"] = main_metric[1]
+    return main_metric, logging_metrics
 
 
 def test(  # pylint:disable=too-many-arguments
@@ -241,8 +267,17 @@ def test(  # pylint:disable=too-many-arguments
     loss_fn: Callable,
 ):
     ctx_mngr = (model_vars).replicate() if parallel else contextlib.suppress()
-    with ctx_mngr:
+    per_batch_metrics = (
+        config["metrics"]["per_batch_metrics"]
+        if "metrics" in config and "per_batch_metrics" in config["metrics"]
+        else False
+    )
+    task = config["dataset"]["task"]
+    if per_batch_metrics:
+        main_metric_list, logging_metric_list = [], []
+    else:
         correct, scores = [], []
+    with ctx_mngr:
         max_batches = (
             config["hyperparams"]["overfit"]
             if "overfit" in config["hyperparams"]
@@ -262,35 +297,32 @@ def test(  # pylint:disable=too-many-arguments
                 image = image[:max_samples]
                 label = label[:max_samples]
             y_pred = predict_op(image)
-            correct.append(label)
-            scores.append(y_pred)
+            y_pred, label = np.array(y_pred), np.array(label)
+            if per_batch_metrics:
+                main_metric_batch, logging_metric_batch = calculate_metrics(
+                    task, metrics, loss_fn, label, y_pred
+                )
+                main_metric_list.append(main_metric_batch)
+                logging_metric_list.append(logging_metric_batch)
+            else:
+                correct.append(label)
+                scores.append(y_pred)
             if i + 1 >= max_batches:
                 break
-    correct = np.concatenate(correct)
-    predicted = np.concatenate(scores)
-    loss = loss_fn(predicted, correct).item()
-    if config["dataset"]["task"] == "classification":
-        predicted = predicted.argmax(axis=1)
-    correct, predicted = correct.squeeze(), predicted.squeeze()
-    if np.iscomplexobj(correct):
-        correct = np.abs(correct)
-    if np.iscomplexobj(predicted):
-        predicted = np.abs(predicted)
-
-    main_metric_fn, logging_fns = metrics
-    main_metric = (
-        main_metric_fn[0],
-        loss
-        if main_metric_fn[0] == "loss" and main_metric_fn[1] is None
-        else main_metric_fn[1](correct, predicted),
-    )
-    logging_metrics = {
-        f"{func_name}": lfn(correct, predicted)
-        for func_name, lfn in logging_fns.items()
-    }
-    if main_metric[0] != "loss":
-        logging_metrics["loss"] = loss
-    logging_metrics[f"{main_metric[0]}"] = main_metric[1]
+    if per_batch_metrics:
+        main_metric = (
+            metrics[0][0],
+            np.mean([batch_metric[1] for batch_metric in main_metric_list]),
+        )
+        logging_metrics = summarise_batch_metrics(
+            metrics[1].keys(), logging_metric_list
+        )
+    else:
+        correct = np.concatenate(correct)
+        predicted = np.concatenate(scores)
+        main_metric, logging_metrics = calculate_metrics(
+            task, metrics, loss_fn, correct, predicted
+        )
 
     if config["general"]["log_wandb"]:
         wandb.log({dataset_split: logging_metrics})
@@ -298,9 +330,11 @@ def test(  # pylint:disable=too-many-arguments
         print(f"{dataset_split} evaluation:")
         for name, value in logging_metrics.items():
             print(f"\t{name}: {value}")
-    #     print(
-    #         metrics.classification_report(
-    #             correct, predicted, output_dict=False, zero_division=0
-    #         )
-    #     )
     return main_metric[1]
+
+
+def summarise_batch_metrics(metric_names, metric_list):
+    return {
+        func_name: np.mean([metric[func_name] for metric in metric_list])
+        for func_name in metric_names
+    }
