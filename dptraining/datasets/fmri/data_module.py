@@ -6,62 +6,17 @@ LICENSE file in the root directory of this source tree.
 """
 # pylint: skip-file
 
-from argparse import ArgumentParser
 from pathlib import Path
 from typing import Callable, Optional, Union
 
-import pytorch_lightning as pl
 import torch
 from numpy import stack
+from random import shuffle, seed as seed_fn
+
 
 from dptraining.datasets.fmri.mri_data import CombinedSliceDataset, SliceDataset
-from dptraining.datasets.fmri.volume_sampler import VolumeSampler
 
-
-def worker_init_fn(worker_id):
-    """Handle random seeding for all mask_func."""
-    worker_info = torch.utils.data.get_worker_info()
-    data: Union[
-        SliceDataset, CombinedSliceDataset
-    ] = worker_info.dataset  # pylint: disable=no-member
-
-    # Check if we are using DDP
-    is_ddp = False
-    if torch.distributed.is_available():
-        if torch.distributed.is_initialized():
-            is_ddp = True
-
-    # for NumPy random seed we need it to be in this range
-    base_seed = worker_info.seed  # pylint: disable=no-member
-
-    if isinstance(data, CombinedSliceDataset):
-        for i, dataset in enumerate(data.datasets):
-            if dataset.transform.mask_func is not None:
-                if (
-                    is_ddp
-                ):  # DDP training: unique seed is determined by worker, device, dataset
-                    seed_i = (
-                        base_seed
-                        - worker_info.id
-                        + torch.distributed.get_rank()
-                        * (worker_info.num_workers * len(data.datasets))
-                        + worker_info.id * len(data.datasets)
-                        + i
-                    )
-                else:
-                    seed_i = (
-                        base_seed
-                        - worker_info.id
-                        + worker_info.id * len(data.datasets)
-                        + i
-                    )
-                dataset.transform.mask_func.rng.seed(seed_i % (2**32 - 1))
-    elif data.transform.mask_func is not None:
-        if is_ddp:  # DDP training: unique seed is determined by worker and device
-            seed = base_seed + torch.distributed.get_rank() * worker_info.num_workers
-        else:
-            seed = base_seed
-        data.transform.mask_func.rng.seed(seed % (2**32 - 1))
+from tqdm import tqdm
 
 
 def _check_both_not_none(val1, val2):
@@ -71,20 +26,7 @@ def _check_both_not_none(val1, val2):
     return False
 
 
-class FastMriDataModule(pl.LightningDataModule):
-    """
-    Data module class for fastMRI data sets.
-
-    This class handles configurations for training on fastMRI data. It is set
-    up to process configurations independently of training modules.
-
-    Note that subsampling mask and transform configurations are expected to be
-    done by the main client training scripts and passed into this data module.
-
-    For training with ddp be sure to set distributed_sampler=True to make sure
-    that volumes are dispatched to the same GPU for the validation loop.
-    """
-
+class FastMriDataModule:
     def __init__(
         self,
         data_path: Path,
@@ -109,6 +51,7 @@ class FastMriDataModule(pl.LightningDataModule):
         num_workers: int = 4,
         distributed_sampler: bool = False,
         split_train_dataset: Optional[float] = None,
+        seed: int = 0,
     ):
         """
         Args:
@@ -149,8 +92,6 @@ class FastMriDataModule(pl.LightningDataModule):
                 very useful for large datasets like the brain data.
             batch_size: Batch size.
             num_workers: Number of workers for PyTorch dataloader.
-            distributed_sampler: Whether to use a distributed sampler. This
-                should be set to True if training with ddp.
         """
         super().__init__()
 
@@ -186,7 +127,59 @@ class FastMriDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.distributed_sampler = distributed_sampler
-        # self.split_train = split_train_dataset
+        self.split_train = split_train_dataset
+        self.seed = seed
+
+        train_folder = self.data_path / f"{self.challenge}_train"
+        val_folder = self.data_path / f"{self.challenge}_val"
+        if self.split_train is not None:
+            seed_fn(seed)
+            train_files = [f for f in train_folder.rglob("*.h5") if f.is_file()]
+            shuffle(train_files)
+            L_train = int(round(self.split_train * len(train_files)))
+            train_split_files, val_split_files = (
+                train_files[:L_train],
+                train_files[L_train:],
+            )
+            new_train_folder = (
+                self.data_path
+                / f"{self.challenge}_seed={seed}_split={self.split_train}_train"
+            )
+            new_val_folder = (
+                self.data_path
+                / f"{self.challenge}_seed={seed}_split={self.split_train}_val"
+            )
+            if not new_train_folder.is_dir():
+                new_train_folder.mkdir(exist_ok=True)
+            if not new_val_folder.is_dir():
+                new_val_folder.mkdir(exist_ok=True)
+            for f in tqdm(
+                train_split_files,
+                total=len(train_split_files),
+                desc="symlinking train files",
+                leave=False,
+            ):
+                new_file = new_train_folder / f"{f.stem}_symlink"
+                if not (new_file.is_file() or new_file.is_symlink()):
+                    new_file.symlink_to(f)
+            for f in tqdm(
+                val_split_files,
+                total=len(train_split_files),
+                desc="symlinking train files",
+                leave=False,
+            ):
+                new_file = new_val_folder / f"{f.stem}_symlink"
+                if not (new_file.is_file() or new_file.is_symlink()):
+                    new_file.symlink_to(f)
+
+            self.train_path = new_train_folder
+            self.val_path = new_val_folder
+            self.test_path = val_folder
+        else:
+            self.train_path = train_folder
+            self.val_path = val_folder
+            if self.test_path is None:
+                self.test_path = self.data_path / f"{self.challenge}_test"
 
     def _create_data_loader(
         self,
@@ -196,9 +189,6 @@ class FastMriDataModule(pl.LightningDataModule):
         volume_sample_rate: Optional[float] = None,
         overfit: Optional[int] = None,
     ) -> torch.utils.data.DataLoader:
-        # original_data_partition = data_partition
-        # if self.split_train is not None and "split" in data_partition:
-        #     data_partition = "train"
         if data_partition == "train":
             is_train = True
             sample_rate = self.sample_rate if sample_rate is None else sample_rate
@@ -235,8 +225,8 @@ class FastMriDataModule(pl.LightningDataModule):
         dataset: Union[SliceDataset, CombinedSliceDataset]
         if is_train and self.combine_train_val:
             data_paths = [
-                self.data_path / f"{self.challenge}_train",
-                self.data_path / f"{self.challenge}_val",
+                self.train_path,
+                self.val_path,
             ]
             data_transforms = [data_transform, data_transform]
             challenges = [self.challenge, self.challenge]
@@ -258,8 +248,10 @@ class FastMriDataModule(pl.LightningDataModule):
         else:
             if data_partition in ("test", "challenge") and self.test_path is not None:
                 data_path = self.test_path
-            else:
-                data_path = self.data_path / f"{self.challenge}_{data_partition}"
+            elif data_partition == "train":
+                data_path = self.train_path
+            elif data_partition == "val":
+                data_path = self.val_path
 
             dataset = SliceDataset(
                 root=data_path,
@@ -273,12 +265,6 @@ class FastMriDataModule(pl.LightningDataModule):
             )
         # ensure that entire volumes go to the same GPU in the ddp setting
         sampler = None
-
-        if self.distributed_sampler:
-            if is_train:
-                sampler = torch.utils.data.DistributedSampler(dataset)
-            else:
-                sampler = VolumeSampler(dataset, shuffle=False)
 
         add_kwargs = {}
         if self.num_workers > 0:
@@ -308,7 +294,7 @@ class FastMriDataModule(pl.LightningDataModule):
             dataset=dataset,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            worker_init_fn=worker_init_fn,
+            # worker_init_fn=worker_init_fn,
             sampler=sampler,
             shuffle=is_train if sampler is None else False,
             pin_memory=True,
@@ -322,14 +308,11 @@ class FastMriDataModule(pl.LightningDataModule):
         # call dataset for each split one time to make sure the cache is set up on the
         # rank 0 ddp process. if not using cache, don't do this
         if self.use_dataset_cache_file:
-            if self.test_path is not None:
-                test_path = self.test_path
-            else:
-                test_path = self.data_path / f"{self.challenge}_test"
+            assert self.test_path is not None
             data_paths = [
-                self.data_path / f"{self.challenge}_train",
-                self.data_path / f"{self.challenge}_val",
-                test_path,
+                self.train_path,
+                self.val_path,
+                self.test_path,
             ]
             data_transforms = [
                 self.train_transform,
@@ -360,120 +343,4 @@ class FastMriDataModule(pl.LightningDataModule):
         return self._create_data_loader(self.val_transform, data_partition="val")
 
     def test_dataloader(self):
-        return self._create_data_loader(
-            self.test_transform, data_partition=self.test_split
-        )
-
-    @staticmethod
-    def add_data_specific_args(parent_parser):  # pragma: no-cover
-        """
-        Define parameters that only apply to this model
-        """
-        parser = ArgumentParser(parents=[parent_parser], add_help=False)
-
-        # dataset arguments
-        parser.add_argument(
-            "--data_path",
-            default=None,
-            type=Path,
-            help="Path to fastMRI data root",
-        )
-        parser.add_argument(
-            "--test_path",
-            default=None,
-            type=Path,
-            help="Path to data for test mode. This overwrites data_path and test_split",
-        )
-        parser.add_argument(
-            "--challenge",
-            choices=("singlecoil", "multicoil"),
-            default="singlecoil",
-            type=str,
-            help="Which challenge to preprocess for",
-        )
-        parser.add_argument(
-            "--test_split",
-            choices=("val", "test", "challenge"),
-            default="test",
-            type=str,
-            help="Which data split to use as test split",
-        )
-        parser.add_argument(
-            "--sample_rate",
-            default=None,
-            type=float,
-            help=(
-                "Fraction of slices in the dataset to use (train split only). If not "
-                "given all will be used. Cannot set together with volume_sample_rate."
-            ),
-        )
-        parser.add_argument(
-            "--val_sample_rate",
-            default=None,
-            type=float,
-            help=(
-                "Fraction of slices in the dataset to use (val split only). If not "
-                "given all will be used. Cannot set together with volume_sample_rate."
-            ),
-        )
-        parser.add_argument(
-            "--test_sample_rate",
-            default=None,
-            type=float,
-            help=(
-                "Fraction of slices in the dataset to use (test split only). If not "
-                "given all will be used. Cannot set together with volume_sample_rate."
-            ),
-        )
-        parser.add_argument(
-            "--volume_sample_rate",
-            default=None,
-            type=float,
-            help=(
-                "Fraction of volumes of the dataset to use (train split only). If not "
-                "given all will be used. Cannot set together with sample_rate."
-            ),
-        )
-        parser.add_argument(
-            "--val_volume_sample_rate",
-            default=None,
-            type=float,
-            help=(
-                "Fraction of volumes of the dataset to use (val split only). If not "
-                "given all will be used. Cannot set together with val_sample_rate."
-            ),
-        )
-        parser.add_argument(
-            "--test_volume_sample_rate",
-            default=None,
-            type=float,
-            help=(
-                "Fraction of volumes of the dataset to use (test split only). If not "
-                "given all will be used. Cannot set together with test_sample_rate."
-            ),
-        )
-        parser.add_argument(
-            "--use_dataset_cache_file",
-            default=True,
-            type=bool,
-            help="Whether to cache dataset metadata in a pkl file",
-        )
-        parser.add_argument(
-            "--combine_train_val",
-            default=False,
-            type=bool,
-            help="Whether to combine train and val splits for training",
-        )
-
-        # data loader arguments
-        parser.add_argument(
-            "--batch_size", default=1, type=int, help="Data loader batch size"
-        )
-        parser.add_argument(
-            "--num_workers",
-            default=4,
-            type=int,
-            help="Number of workers to use in data loader",
-        )
-
-        return parser
+        return self._create_data_loader(self.test_transform, data_partition="test")
