@@ -16,7 +16,7 @@ class FMRICreator(DataLoaderCreator):
     ) -> Tuple[Dataset, Dataset, Dataset]:
         if not (
             transforms is None
-            or (isinstance(transforms, tuple) and all([t is None for t in transforms]))
+            or (isinstance(transforms, tuple) and all((t is None for t in transforms)))
         ):
             raise ValueError(
                 "No direct specification of transforms for fastmri supported"
