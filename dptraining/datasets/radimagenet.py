@@ -526,7 +526,7 @@ if __name__ == "__main__":
 
     # from collections import Counter
 
-    from dptraining.datasets.utils import collate_np_arrays
+    from dptraining.datasets.utils import collate_np_classification
 
     ds1 = ExtendedImageFolder("./data/radiology_ai/CT")
     ds2 = ExtendedImageFolder("./data/radiology_ai/MR")
@@ -564,7 +564,7 @@ if __name__ == "__main__":
         ds1,
         batch_size=512,
         shuffle=False,
-        collate_fn=collate_np_arrays,
+        collate_fn=collate_np_classification,
         num_workers=16,
         prefetch_factor=8,
     )
@@ -585,7 +585,7 @@ if __name__ == "__main__":
             ds2,
             batch_size=512,
             shuffle=False,
-            collate_fn=collate_np_arrays,
+            collate_fn=collate_np_classification,
             num_workers=16,
             prefetch_factor=8,
         )

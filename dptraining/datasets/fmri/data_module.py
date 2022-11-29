@@ -10,9 +10,8 @@ from pathlib import Path
 from typing import Callable, Optional, Union
 
 import torch
-from numpy import stack
 from random import shuffle, seed as seed_fn
-
+from warnings import warn
 
 from dptraining.datasets.fmri.mri_data import CombinedSliceDataset, SliceDataset
 
@@ -52,6 +51,7 @@ class FastMriDataModule:
         distributed_sampler: bool = False,
         split_train_dataset: Optional[float] = None,
         seed: int = 0,
+        new_data_root: Optional[Path] = None,
     ):
         """
         Args:
@@ -141,12 +141,15 @@ class FastMriDataModule:
                 train_files[:L_train],
                 train_files[L_train:],
             )
+            new_root_folder = (
+                new_data_root if new_data_root is not None else self.data_path
+            )
             new_train_folder = (
-                self.data_path
+                new_root_folder
                 / f"{self.challenge}_seed={seed}_split={self.split_train}_train"
             )
             new_val_folder = (
-                self.data_path
+                new_root_folder
                 / f"{self.challenge}_seed={seed}_split={self.split_train}_val"
             )
             if not new_train_folder.is_dir():
@@ -179,9 +182,13 @@ class FastMriDataModule:
             self.train_path = train_folder
             self.val_path = val_folder
             if self.test_path is None:
-                self.test_path = self.data_path / f"{self.challenge}_test"
+                warn(
+                    "Using validation set as test as "
+                    "set as no data split is provided"
+                )
+                self.test_path = self.val_path
 
-    def _create_data_loader(
+    def _create_dataset(
         self,
         data_transform: Callable,
         data_partition: str,
@@ -263,22 +270,20 @@ class FastMriDataModule:
                 raw_sample_filter=raw_sample_filter,
                 overfit=overfit,
             )
-        # ensure that entire volumes go to the same GPU in the ddp setting
-        sampler = None
 
         add_kwargs = {}
         if self.num_workers > 0:
             add_kwargs["prefetch_factor"] = 10
 
-        def numpy_collate_fn(list_of_samples):
-            if len(list_of_samples) > 1:
-                list_of_outputs = tuple(
-                    stack([s[i] for s in list_of_samples], axis=0)
-                    for i in range(len(list_of_samples[0]))
-                )
-            else:
-                list_of_outputs = tuple(list_of_samples)
-            return list_of_outputs
+        # def numpy_collate_fn(list_of_samples):
+        #     if len(list_of_samples) > 1:
+        #         list_of_outputs = tuple(
+        #             stack([s[i] for s in list_of_samples], axis=0)
+        #             for i in range(len(list_of_samples[0]))
+        #         )
+        #     else:
+        #         list_of_outputs = tuple(list_of_samples)
+        #     return list_of_outputs
 
         # if self.split_train is not None and "split" in original_data_partition:
         #     L_train = int(round(self.split_train * len(dataset)))
@@ -290,19 +295,7 @@ class FastMriDataModule:
         #     )
         #     dataset = train_ds if "train_split" in original_data_partition else val_ds
 
-        dataloader = torch.utils.data.DataLoader(
-            dataset=dataset,
-            batch_size=self.batch_size,
-            num_workers=self.num_workers,
-            # worker_init_fn=worker_init_fn,
-            sampler=sampler,
-            shuffle=is_train if sampler is None else False,
-            pin_memory=True,
-            collate_fn=numpy_collate_fn,
-            **add_kwargs,
-        )
-
-        return dataloader
+        return dataset
 
     def prepare_data(self):
         # call dataset for each split one time to make sure the cache is set up on the
@@ -334,13 +327,13 @@ class FastMriDataModule:
                     use_dataset_cache=self.use_dataset_cache_file,
                 )
 
-    def train_dataloader(self, overfit: Optional[int] = None):
-        return self._create_data_loader(
+    def train_dataset(self, overfit: Optional[int] = None):
+        return self._create_dataset(
             self.train_transform, data_partition="train", overfit=overfit
         )
 
     def val_dataloader(self):
-        return self._create_data_loader(self.val_transform, data_partition="val")
+        return self._create_dataset(self.val_transform, data_partition="val")
 
     def test_dataloader(self):
-        return self._create_data_loader(self.test_transform, data_partition="test")
+        return self._create_dataset(self.test_transform, data_partition="test")

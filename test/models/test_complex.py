@@ -47,7 +47,7 @@ def test_complex_model_options_classification():
             raise type(e)(f"Error for conf: {conf}\n{str(e)}")
 
 
-def test_complex_model_options_regression():
+def test_complex_model_options_reconstruction():
     fake_data = np.random.randn(4, 3, 64, 64).astype(np.complex128)
     for act, model in product(
         SUPPORTED_COMPLEX_ACTIVATION,

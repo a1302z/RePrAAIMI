@@ -3,13 +3,17 @@ general:
   log_wandb: False
   parallel: False
   eval_train: False
+# ckpt:
+#   logdir: fmri_ckpts
+#   keep_ckpts: 2
+#   makedir: True
 dataset: 
-  task: regression
+  task: reconstruction
   name: fastmri
   root: ./data/FastMRI/knee/data/
+  new_data_root: ./data
   train_val_split: 0.9
   fft: False
-  normalization: True
   mask_type: random
   center_fractions:
     - 0.08
@@ -64,6 +68,7 @@ metrics:
       data_range: 8.48
     peak_signal_noise_ratio: 
       data_range: 8.48
+  per_batch_metrics: True
 scheduler:
   type: reduceonplateau
   normalize_lr: False

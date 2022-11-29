@@ -6,9 +6,12 @@ from deepee.dataloader import UniformWORSubsampler
 from dptraining.datasets.cifar10 import CIFAR10Creator
 from dptraining.datasets.imagenet import ImageNetCreator
 from dptraining.datasets.radimagenet import RadImageNetCreator
-from dptraining.datasets.fmri import make_fmri_dataset
+from dptraining.datasets.fmri import FMRICreator
 from dptraining.datasets.tinyimagenet import TinyImageNetCreator
-from dptraining.datasets.utils import collate_np_arrays
+from dptraining.datasets.utils import (
+    collate_np_classification,
+    collate_np_reconstruction,
+)
 from dptraining.utils.augment import Transformation
 
 
@@ -18,10 +21,41 @@ SUPPORTED_FFT = ("cifar10",)
 SUPPORTED_NORMALIZATION = ("cifar10", "tinyimagenet")
 
 
+def select_creator(config):
+    match config["dataset"]["name"].lower():
+        case "cifar10":
+            creator = CIFAR10Creator
+        case "tinyimagenet":
+            creator = TinyImageNetCreator
+        case "imagenet":
+            creator = ImageNetCreator
+        case "fastmri":
+            creator = FMRICreator
+        case "radimagenet":
+            creator = RadImageNetCreator
+        case other:
+            raise ValueError(
+                f"This shouldn't happen. "
+                f"{SUPPORTED_DATASETS} includes not supported datasets. "
+                f"Got {other}"
+            )
+
+    return creator
+
+
 def modify_collate_fn_config(config):
-    if "collate_fn" in config:
-        if config["collate_fn"] == "numpy":
-            config["collate_fn"] = collate_np_arrays
+
+    if "collate_fn" in config["loader"]:
+        if (
+            config["loader"]["collate_fn"] == "numpy"
+            and config["dataset"]["task"] == "classification"
+        ):
+            config["loader"]["collate_fn"] = collate_np_classification
+        elif (
+            config["loader"]["collate_fn"] == "numpy"
+            and config["dataset"]["task"] == "reconstruction"
+        ):
+            config["loader"]["collate_fn"] = collate_np_reconstruction
         else:
             raise ValueError(f"collate_fn {config['collate_fn']} not supported.")
 
@@ -53,29 +87,14 @@ def make_dataset(config):
         if "val_transforms" in config
         else test_tf
     )
+    add_kwargs = {}
     match config["dataset"]["name"].lower():
         case "cifar10":
-            train_ds, val_ds, test_ds = CIFAR10Creator.make_datasets(
-                config, (train_tf, val_tf, test_tf), normalize_by_default=normalize
-            )
-        case "tinyimagenet":
-            train_ds, val_ds, test_ds = TinyImageNetCreator.make_datasets(
-                config, (train_tf, val_tf, test_tf)
-            )
-        case "imagenet":
-            train_ds, val_ds, test_ds = ImageNetCreator.make_datasets(
-                config, (train_tf, val_tf, test_tf)
-            )
-        case "radimagenet":
-            train_ds, val_ds, test_ds = RadImageNetCreator.make_datasets(
-                config, (train_tf, val_tf, test_tf)
-            )
-        case other:
-            raise ValueError(
-                f"This shouldn't happen. "
-                f"{SUPPORTED_DATASETS} includes not supported datasets. "
-                f"Got {other}"
-            )
+            add_kwargs["normalize_by_default"] = normalize
+    creator = select_creator(config)
+    train_ds, val_ds, test_ds = creator.make_datasets(
+        config, (train_tf, val_tf, test_tf), **add_kwargs
+    )
     return train_ds, val_ds, test_ds
 
 
@@ -86,11 +105,10 @@ def make_loader_from_config(config):
             f"Dataset {config['dataset']['name']} not supported yet. "
             f"Currently supported datasets: {SUPPORTED_DATASETS}"
         )
-    if dataset_name == "fastmri":
-        return make_fmri_dataset(config)
     train_ds, val_ds, test_ds = make_dataset(config)
-    loader_kwargs = deepcopy(config["loader"])
+    loader_kwargs = deepcopy(config)
     modify_collate_fn_config(loader_kwargs)
+    loader_kwargs = loader_kwargs["loader"]
     if "train_loader" in loader_kwargs and "test_loader" in loader_kwargs:
         train_loader_kwargs = loader_kwargs["train_loader"]
         test_loader_kwargs = loader_kwargs["test_loader"]
@@ -124,47 +142,13 @@ def make_loader_from_config(config):
     test_loader_kwargs["shuffle"] = False
     val_loader_kwargs["shuffle"] = False
 
-    match config["dataset"]["name"].lower():
-        case "cifar10":
-            train_loader, val_loader, test_loader = CIFAR10Creator.make_dataloader(
-                train_ds,
-                val_ds,
-                test_ds,
-                train_loader_kwargs,
-                val_loader_kwargs,
-                test_loader_kwargs,
-            )
-        case "tinyimagenet":
-            train_loader, val_loader, test_loader = TinyImageNetCreator.make_dataloader(
-                train_ds,
-                val_ds,
-                test_ds,
-                train_loader_kwargs,
-                val_loader_kwargs,
-                test_loader_kwargs,
-            )
-        case "imagenet":
-            train_loader, val_loader, test_loader = ImageNetCreator.make_dataloader(
-                train_ds,
-                val_ds,
-                test_ds,
-                train_loader_kwargs,
-                val_loader_kwargs,
-                test_loader_kwargs,
-            )
-        case "radimagenet":
-            train_loader, val_loader, test_loader = ImageNetCreator.make_dataloader(
-                train_ds,
-                val_ds,
-                test_ds,
-                train_loader_kwargs,
-                val_loader_kwargs,
-                test_loader_kwargs,
-            )
-        case other:
-            raise ValueError(
-                f"This shouldn't happen. "
-                f"{SUPPORTED_DATASETS} includes not supported datasets."
-                f"Got {other}"
-            )
+    creator = select_creator(config)
+    train_loader, val_loader, test_loader = creator.make_dataloader(
+        train_ds,
+        val_ds,
+        test_ds,
+        train_loader_kwargs,
+        val_loader_kwargs,
+        test_loader_kwargs,
+    )
     return train_loader, val_loader, test_loader

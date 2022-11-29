@@ -3,11 +3,10 @@ general:
   log_wandb: False
   parallel: False
   eval_train: True
-  save_path: radimagenet_resnet9.npz
-ckpt:
-  logdir: radimagenet_resnet9_ckpt
-  keep_ckpts: 10
-  makedir: True
+# ckpt:
+#   logdir: radimagenet_resnet9_ckpt
+#   keep_ckpts: 10
+#   makedir: True
 dataset: 
   name: radimagenet
   task: classification
@@ -25,24 +24,24 @@ loader:
   collate_fn: numpy
   pin_memory: True
 augmentations:
-  # normalize_jax:
-  #     mean:
-  #       - 0.22039941
-  #     std:
-  #       - 0.24865805
+  normalize_jax:
+      mean:
+        - 0.22039941
+      std:
+        - 0.24865805
 test_augmentations:
-  # normalize_jax:
-  #     mean:
-  #       - 0.22039941
-  #     std:
-  #       - 0.24865805
+  normalize_jax:
+      mean:
+        - 0.22039941
+      std:
+        - 0.24865805
 model:
   name: resnet9
   in_channels: 1
   num_classes: 165
   conv: conv
   activation: mish
-  normalization: bn
+  normalization: gn
   pooling: maxpool
   # scale_norm: True
 optim:
@@ -55,7 +54,7 @@ hyperparams:
   batch_size: 60
   batch_size_test: 128
   lr: 2e-3
-  # overfit: 10
+  overfit: 10
   # momentum: 0.9
 metrics:
   main: 
