@@ -1,4 +1,4 @@
-name: objaxdp-fmri
+name: objaxdp
 channels: 
   - conda-forge
   - pytorch
@@ -16,7 +16,6 @@ dependencies:
   - ipykernel
   - matplotlib
   - conda-forge::h5py
-  - conda-forge::pytorch-lightning
   - conda-forge::pandas
   - black
   - pytest
