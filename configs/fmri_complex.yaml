@@ -3,6 +3,7 @@ general:
   log_wandb: False
   parallel: False
   eval_train: False
+  make_save_str_unique: True
 # ckpt:
 #   logdir: fmri_ckpts
 #   keep_ckpts: 2

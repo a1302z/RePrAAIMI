@@ -4,6 +4,7 @@ general:
   parallel: False
   eval_train: True
   save_path: radimagenet_unet.npz
+  make_save_str_unique: True
 ckpt:
   logdir: radimagenet_unet_ckpt
   keep_ckpts: 10

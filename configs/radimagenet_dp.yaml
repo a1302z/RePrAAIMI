@@ -3,6 +3,7 @@ general:
   log_wandb: False
   parallel: False
   eval_train: True
+  make_save_str_unique: True
 # ckpt:
 #   logdir: radimagenet_resnet9_ckpt
 #   keep_ckpts: 10

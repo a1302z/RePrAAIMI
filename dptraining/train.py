@@ -9,6 +9,7 @@ import omegaconf
 import wandb
 from omegaconf import OmegaConf
 from tqdm import tqdm
+from datetime import datetime
 
 sys.path.insert(0, str(Path.cwd()))
 
@@ -96,11 +97,24 @@ def main(
             config["general"]["use_pretrained_model"], model.vars()
         )
     model_vars = model.vars()
-    ckpt = (
-        objax.io.Checkpoint(**config["ckpt"])
-        if "ckpt" in config and config["ckpt"] is not None
-        else None
-    )
+
+    identifying_model_str = ""
+    if (
+        "make_save_str_unique" in config["general"]
+        and config["general"]["make_save_str_unique"]
+    ):
+        if "log_wandb" in config["general"] and config["general"]["log_wandb"]:
+            identifying_model_str += (
+                f"_{wandb.run.name}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
+            )
+        else:
+            identifying_model_str += f"_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+
+    if "ckpt" in config and config["ckpt"] is not None:
+        config["ckpt"]["logdir"] += identifying_model_str
+        ckpt = objax.io.Checkpoint(**config["ckpt"])
+    else:
+        ckpt = None
 
     ema: Optional[ExponentialMovingAverage] = None
     use_ema: bool = "ema" in config and config["ema"]["use_ema"]
@@ -320,7 +334,9 @@ def main(
     )
     if "save_path" in config["general"] and config["general"]["save_path"] is not None:
         print(f"Saving model to {config['general']['save_path']}")
-        objax.io.save_var_collection(config["general"]["save_path"], model.vars())
+        objax.io.save_var_collection(
+            config["general"]["save_path"] + identifying_model_str, model.vars()
+        )
     if config["general"]["log_wandb"]:
         run.finish()
     else:
