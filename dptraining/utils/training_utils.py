@@ -223,8 +223,8 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                     commit=i % 10 == 0,
                 )
 
-            # if i + 1 >= max_batches:
-            break
+            if i + 1 >= max_batches:
+                break
     return time.time() - start_time
 
 

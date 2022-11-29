@@ -51,7 +51,7 @@ ema:
   decay: 0.995
 hyperparams:
   epochs: 10
-  batch_size: 32
+  batch_size: 60
   batch_size_test: 128
   lr: 2e-3
   # overfit: 256
