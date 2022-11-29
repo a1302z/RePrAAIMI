@@ -32,7 +32,7 @@ from dptraining.models import resnet_v2, wide_resnet
 from dptraining.models.complex.converter import ComplexModelConverter
 
 
-SUPPORTED_MODELS = ("cifar10model", "resnet18", "resnet9", "smoothnet", "wide_resnet")
+SUPPORTED_MODELS = ("cifar10model", "resnet18", "resnet9", "smoothnet", "wide_resnet",'resnet50')
 SUPPORTED_NORMALIZATION = ("bn", "gn")
 SUPPORTED_CONV = ("conv", "convws", "convws_nw")
 SUPPORTED_ACTIVATION = ("relu", "selu", "leakyrelu", "mish")
@@ -283,6 +283,26 @@ def make_normal_model_from_config(config: dict) -> Callable:
                 pool_func=partial(
                     make_pooling_from_config(config), size=3, strides=1, padding=1
                 ),
+                **kwargs,
+            )
+        case "resnet50":
+            kwargs = get_kwargs(
+                resnet_v2.ResNet50,
+                [
+                    "in_channels",
+                    "num_classes",
+                    "conv_layer",
+                    "normalization_fn",
+                    "activation_fn",
+                ],
+                config["model"],
+            )
+            return resnet_v2.ResNet50(
+                config["model"]["in_channels"],
+                config["model"]["num_classes"],
+                conv_layer=make_conv_from_config(config),
+                normalization_fn=make_normalization_from_config(config),
+                activation_fn=make_activation_from_config(config),
                 **kwargs,
             )
         case _ as fail:
