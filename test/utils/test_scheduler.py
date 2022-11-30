@@ -34,7 +34,7 @@ def test_cosine_scheduler():
 
 
 def test_reduce_on_plateau():
-    sched = ReduceOnPlateau(1.0, 5, 0.5, min_delta=0.01)
+    sched = ReduceOnPlateau(base_lr=1.0, patience=5, factor=0.5, min_delta=0.01)
     scores = [0.1, 0.2, 0.3, 0.25, 0.28, 0.27, 0.29, 0.305]
     for s, lr in zip(scores, sched):
         sched.update_score(s)

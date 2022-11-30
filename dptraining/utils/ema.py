@@ -4,7 +4,7 @@ from __future__ import unicode_literals
 import numpy as np
 from jax import numpy as jnp, lax
 
-from typing import Optional, Dict
+from typing import Dict
 from objax import TrainVar, Module, StateVar, ModuleList, TrainRef
 
 # import torch

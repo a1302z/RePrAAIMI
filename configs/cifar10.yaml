@@ -1,7 +1,11 @@
+defaults:
+  - base_config
+  - _self_
 project: cifar
 general:
   log_wandb: False
   parallel: False
+  eval_train: True
 dataset: 
   name: CIFAR10
   root: ./data
@@ -11,10 +15,8 @@ loader:
   num_workers: 16
   prefetch_factor: 16
   collate_fn: numpy
-augmentations:
-  # make_complex_both:
-test_augmentations:
-  # make_complex_both:
+# augmentations:
+# test_augmentations:
 model:
   complex: False
   name: smoothnet
@@ -24,7 +26,8 @@ model:
   activation: mish
   normalization: gn
   pooling: avgpool
-  # scale_norm: True
+  extra_args:
+    scale_norm: True
 optim:
   name: nadam
 ema:
@@ -49,5 +52,3 @@ earlystopping:
   mode: maximize
   patience: 100
   min_delta: 0.01
-DP:
-  disable_dp: True
