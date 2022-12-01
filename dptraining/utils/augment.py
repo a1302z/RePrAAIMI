@@ -1,5 +1,5 @@
 from math import prod
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import objax
 from jax import numpy as jnp
@@ -244,7 +244,7 @@ class Transformation:
 
     @classmethod
     def from_dict_list(  # pylint:disable=too-many-branches
-        cls, transformations: Optional[dict[dict[str, Any]]]
+        cls, transformations: dict[dict[str, Any]]
     ):
         if transformations is None:
             return cls([])

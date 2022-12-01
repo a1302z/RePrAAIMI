@@ -1,3 +1,6 @@
+defaults:
+  - base_config
+  - _self_
 project: imagenet-dp
 general:
   log_wandb: False
@@ -89,7 +92,6 @@ scheduler:
   min_delta: 0.01
   factor: 0.5
 DP:
-  disable_dp: False
   epsilon: 8.0
   max_per_sample_grad_norm: 1.0
   delta: 8e-7

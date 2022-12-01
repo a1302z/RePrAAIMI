@@ -14,6 +14,7 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path.cwd()))
 
+from dptraining.config import Config, DatasetTask
 from dptraining.privacy import ClipAndAccumulateGrads
 
 N_DEVICES = local_device_count()
@@ -151,26 +152,24 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
     return train_op
 
 
-def create_loss_gradient(config, model_vars, loss_fn):
-    if config["DP"]["disable_dp"]:
+def create_loss_gradient(config: Config, model_vars, loss_fn):
+    if not config.DP:
         loss_gv = objax.GradValues(loss_fn, model_vars)
     else:
         loss_gv = ClipAndAccumulateGrads(
             loss_fn,
             model_vars,
-            config["DP"]["max_per_sample_grad_norm"],
+            config.DP.max_per_sample_grad_norm,
             batch_axis=(0, 0),
-            use_norm_accumulation=config["DP"]["norm_acc"],
-            gradient_accumulation_steps=config["DP"]["grad_acc_steps"]
-            if "grad_acc_steps" in config["DP"]
-            else 1,
+            use_norm_accumulation=config.DP.norm_acc,
+            gradient_accumulation_steps=config.DP.grad_acc_steps,
         )
 
     return loss_gv
 
 
 def train(  # pylint:disable=too-many-arguments,duplicate-code
-    config,
+    config: Config,
     train_loader,
     train_op,
     learning_rate,
@@ -178,14 +177,13 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
     parallel,
     grad_acc: int,
 ):
-
     start_time = time.time()
     max_batches = (
-        config["hyperparams"]["overfit"]
-        if "overfit" in config["hyperparams"]
+        config.hyperparams.overfit
+        if config.hyperparams.overfit is not None
         else len(train_loader)
     )
-    if not config["DP"]["disable_dp"] and max_batches % grad_acc != 0:
+    if config.DP and max_batches % grad_acc != 0:
         # here we ensure that if a train loader is not evenly divisible
         # by the number of gradient accumulation steps we stop after
         # the maximum amount of batches that can be accmulated
@@ -211,7 +209,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                 train_loss, grads = train_result
                 train_loss = train_loss.item()
                 pbar.set_description(f"Train_loss: {train_loss:.2f}")
-            if config["general"]["log_wandb"] and train_result is not None:
+            if config.general.log_wandb and train_result is not None:
                 log_dict = {
                     "train_loss": train_loss,
                     "total_grad_norm": jn.linalg.norm(
@@ -230,7 +228,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
 
 def calculate_metrics(task, metrics, loss_fn, correct, predicted):
     loss = loss_fn(predicted, correct).item()
-    if task == "classification":
+    if task == DatasetTask.classification:
         predicted = predicted.argmax(axis=1)
     correct, predicted = correct.squeeze(), predicted.squeeze()
     if np.iscomplexobj(correct):
@@ -254,8 +252,8 @@ def calculate_metrics(task, metrics, loss_fn, correct, predicted):
     return main_metric, logging_metrics
 
 
-def test(  # pylint:disable=too-many-arguments
-    config,
+def test(  # pylint:disable=too-many-arguments,too-many-branches
+    config: Config,
     test_loader,
     predict_op,
     test_aug,
@@ -268,19 +266,18 @@ def test(  # pylint:disable=too-many-arguments
 ):
     ctx_mngr = (model_vars).replicate() if parallel else contextlib.suppress()
     per_batch_metrics = (
-        config["metrics"]["per_batch_metrics"]
-        if "metrics" in config and "per_batch_metrics" in config["metrics"]
+        config.metrics.per_batch_metrics
+        if "per_batch_metrics" in config.metrics
         else False
     )
-    task = config["dataset"]["task"]
     if per_batch_metrics:
         main_metric_list, logging_metric_list = [], []
     else:
         correct, scores = [], []
     with ctx_mngr:
         max_batches = (
-            config["hyperparams"]["overfit"]
-            if "overfit" in config["hyperparams"]
+            config.hyperparams.overfit
+            if config.hyperparams.overfit is not None
             else len(test_loader)
         )
         for i, (image, label) in tqdm(
@@ -300,7 +297,7 @@ def test(  # pylint:disable=too-many-arguments
             y_pred, label = np.array(y_pred), np.array(label)
             if per_batch_metrics:
                 main_metric_batch, logging_metric_batch = calculate_metrics(
-                    task, metrics, loss_fn, label, y_pred
+                    config.dataset.task, metrics, loss_fn, label, y_pred
                 )
                 main_metric_list.append(main_metric_batch)
                 logging_metric_list.append(logging_metric_batch)
@@ -321,11 +318,12 @@ def test(  # pylint:disable=too-many-arguments
         correct = np.concatenate(correct)
         predicted = np.concatenate(scores)
         main_metric, logging_metrics = calculate_metrics(
-            task, metrics, loss_fn, correct, predicted
+            config.dataset.task, metrics, loss_fn, correct, predicted
         )
 
-    if config["general"]["log_wandb"]:
-        wandb.log({dataset_split: logging_metrics})
+    if config.general.log_wandb:
+        if config.general.log_wandb:
+            wandb.log({dataset_split: logging_metrics})
     else:
         print(f"{dataset_split} evaluation:")
         for name, value in logging_metrics.items():

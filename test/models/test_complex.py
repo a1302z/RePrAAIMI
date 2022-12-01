@@ -9,62 +9,65 @@ from itertools import product
 
 sys.path.insert(0, str(Path.cwd()))
 
-from dptraining.models import (
-    make_complex_model_from_config,
-    SUPPORTED_COMPLEX_ACTIVATION,
-    SUPPORTED_COMPLEX_POOLING,
-    SUPPORTED_COMPLEX_NORMALIZATION,
-    SUPPORTED_COMPLEX_MODELS,
-    SUPPORTED_COMPLEX_CONV,
+from dptraining.models import make_complex_model_from_config
+from dptraining.config.model import (
+    ComplexModelName,
+    ComplexConv,
+    ComplexActivation,
+    ComplexNormalization,
+    ComplexPooling,
 )
+from dptraining.config.utils import get_allowed_names
 
 
-def test_complex_model_options_classification():
+def test_complex_model_options(utils):
     fake_data = np.random.randn(4, 3, 47, 47).astype(np.complex128)
-    for conv, act, norm, pool, model in product(
-        SUPPORTED_COMPLEX_CONV,
-        SUPPORTED_COMPLEX_ACTIVATION,
-        SUPPORTED_COMPLEX_NORMALIZATION,
-        SUPPORTED_COMPLEX_POOLING,
-        ("resnet9", "smoothnet"),
+    for model, conv, act, norm, pool in product(
+        (ComplexModelName.resnet9.name, ComplexModelName.smoothnet.name),
+        get_allowed_names(ComplexConv),
+        get_allowed_names(ComplexActivation),
+        get_allowed_names(ComplexNormalization),
+        get_allowed_names(ComplexPooling),
     ):
-        try:
-            conf = {
-                "model": {
-                    "name": model,
-                    "in_channels": 3,  # TODO: changing that to 2 breaks it
-                    "num_classes": 7,
-                    "conv": conv,
-                    "activation": act,
-                    "normalization": norm,
-                    "pooling": pool,
-                }
+        config_dict = {
+            "model": {
+                "complex": True,
+                "name": model,
+                "in_channels": 3,  # TODO: changing that to 2 breaks it
+                "num_classes": 7,
+                "conv": conv,
+                "activation": act,
+                "normalization": norm,
+                "pooling": pool,
             }
-            model = make_complex_model_from_config(conf)
+        }
+        config = utils.extend_base_config(config_dict)
+        try:
+            model = make_complex_model_from_config(config)
             pred = model(fake_data)
             assert pred.shape[1] == 7
         except Exception as e:
-            raise type(e)(f"Error for conf: {conf}\n{str(e)}")
+            raise type(e)(f"Error for conf: {config_dict}\n{str(e)}")
 
 
-def test_complex_model_options_reconstruction():
+def test_complex_model_options_reconstruction(utils):
     fake_data = np.random.randn(4, 3, 64, 64).astype(np.complex128)
-    for act, model in product(
-        SUPPORTED_COMPLEX_ACTIVATION,
-        ("unet",),
-    ):
-        try:
-            conf = {
-                "model": {
-                    "name": model,
-                    "in_channels": 3,
+    for act in get_allowed_names(ComplexActivation):
+        config_dict = {
+            "model": {
+                "name": ComplexModelName.unet.name,
+                "in_channels": 3,
+                "activation": act,
+                "extra_args": {
                     "out_channels": 3,
                     "channels": 16,
-                    "activation": act,
-                }
+                },
             }
-            model = make_complex_model_from_config(conf)
+        }
+        config = utils.extend_base_config(config_dict)
+        try:
+            model = make_complex_model_from_config(config)
             pred = model(fake_data)
             assert all([pred.shape[i] == fake_data.shape[i] for i in range(4)])
         except Exception as e:
-            raise type(e)(f"Error for conf: {conf}\n{str(e)}")
+            raise type(e)(f"Error for conf: {config_dict}\n{str(e)}")

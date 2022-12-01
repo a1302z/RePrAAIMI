@@ -1,3 +1,6 @@
+defaults:
+  - base_config
+  - _self_
 project: radimagenet
 general:
   log_wandb: False

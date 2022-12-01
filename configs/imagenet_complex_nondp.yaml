@@ -1,3 +1,6 @@
+defaults:
+  - base_config
+  - _self_
 project: imagenet-complex
 general:
   log_wandb: False
@@ -87,5 +90,3 @@ scheduler:
 #   mode: maximize
 #   patience: 100
 #   min_delta: 0.01
-DP:
-  disable_dp: True

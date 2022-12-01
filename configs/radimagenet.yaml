@@ -1,3 +1,6 @@
+defaults:
+  - base_config
+  - _self_
 project: radimagenet
 general:
   log_wandb: False
@@ -78,5 +81,3 @@ earlystopping:
   mode: maximize
   patience: 100
   min_delta: 0.01
-DP:
-  disable_dp: True

@@ -1,62 +1,73 @@
 import inspect
-from typing import Callable
 import warnings
 from copy import deepcopy
 from functools import partial
-from objax import nn, functional
-from dptraining.models.cifar10models import Cifar10ConvNet
-from dptraining.models.ensemble import Ensemble
-from dptraining.models.resnet9 import ResNet9
-from dptraining.models.smoothnet import get_smoothnet
+from typing import Callable
+
+from objax import functional, nn
+from omegaconf import OmegaConf
+
+from dptraining.config import Config, ModelConfig, get_allowed_values
+from dptraining.config.model import (
+    Activation,
+    ComplexActivation,
+    ComplexConv,
+    ComplexModelName,
+    ComplexNormalization,
+    ComplexPooling,
+    Conv,
+    Normalization,
+    Pooling,
+    RealActivation,
+    RealConv,
+    RealModelName,
+    RealNormalization,
+    RealPooling,
+)
+from dptraining.models import resnet_v2, wide_resnet
 from dptraining.models.activations import mish
-from dptraining.models.layers import ConvWS2D, ConvCentering2D
+from dptraining.models.cifar10models import Cifar10ConvNet
 from dptraining.models.complex.activations import (
-    IGaussian,
-    SeparableMish,
+    Cardioid,
     ComplexMish,
     ConjugateMish,
-    Cardioid,
+    IGaussian,
+    SeparableMish,
 )
-from dptraining.models.complex.normalization import (
-    ComplexGroupNorm2DWhitening,
-    ComplexBatchNorm2D,
-)  # pylint:disable=duplicate-code
+from dptraining.models.complex.converter import ComplexModelConverter
 from dptraining.models.complex.layers import (
     ComplexConv2D,
-    ComplexWSConv2D,
     ComplexLinear,
     ComplexToReal,
+    ComplexWSConv2D,
     ComplexWSConv2DNoWhiten,
 )
+from dptraining.models.complex.normalization import (  # pylint:disable=duplicate-code
+    ComplexBatchNorm2D,
+    ComplexGroupNorm2DWhitening,
+)
 from dptraining.models.complex.pooling import ConjugatePool2D, SeparablePool2D
-from dptraining.models import resnet_v2, wide_resnet
-from dptraining.models.complex.converter import ComplexModelConverter
+from dptraining.models.ensemble import Ensemble
+from dptraining.models.layers import ConvCentering2D, ConvWS2D
 from dptraining.models.unet import Unet
+from dptraining.models.resnet9 import ResNet9
+from dptraining.models.smoothnet import get_smoothnet
 
 
-SUPPORTED_MODELS = ("cifar10model", "resnet18", "resnet9", "smoothnet", "wide_resnet")
-SUPPORTED_NORMALIZATION = ("bn", "gn")
-SUPPORTED_CONV = ("conv", "convws", "convws_nw")
-SUPPORTED_ACTIVATION = ("relu", "selu", "leakyrelu", "mish")
-SUPPORTED_POOLING = ("maxpool", "avgpool")
-
-SUPPORTED_COMPLEX_MODELS = ("resnet9", "smoothnet", "unet")
-SUPPORTED_COMPLEX_CONV = ("conv", "convws", "convws_nw")
-SUPPORTED_COMPLEX_NORMALIZATION = ("gnw", "bn")
-SUPPORTED_COMPLEX_ACTIVATION = ("mish", "sepmish", "conjmish", "igaussian", "cardioid")
-SUPPORTED_COMPLEX_POOLING = ("conjmaxpool", "sepmaxpool", "avgpool")
-
-
-def get_kwargs(func: Callable, already_defined: list[str], original_kwargs: dict):
+def get_kwargs(func: Callable, already_defined: list[str], model_config: ModelConfig):
+    model_config_dict = deepcopy(OmegaConf.to_container(model_config))
+    # Pull extra args into the root level of the model config container
+    extra_args = model_config_dict.pop("extra_args", None)
+    model_config_dict |= extra_args if extra_args else {}
     signature = inspect.getfullargspec(func)
     kwargs = {
         k: v
-        for k, v in original_kwargs.items()
+        for k, v in model_config_dict.items()
         if k in signature[0] and k not in already_defined
     }
     ignoring = {
         k: v
-        for k, v in original_kwargs.items()
+        for k, v in model_config_dict.items()
         if k not in signature[0]
         and k
         not in [
@@ -75,145 +86,177 @@ def get_kwargs(func: Callable, already_defined: list[str], original_kwargs: dict
     return kwargs
 
 
-def make_normalization_from_config(config: dict) -> Callable:
-    match config["model"]["normalization"]:
-        case "bn":
+def make_normalization_from_config(config: Config) -> Callable:
+    match config.model.normalization.value:
+        case RealNormalization.bn.value:
             return nn.BatchNorm2D
-        case "gn":
+        case RealNormalization.gn.value:
             return nn.GroupNorm2D
-        case _ as fail:
+        case None:
+            raise ValueError("No normalization layer specified (required)")
+        case _:
             raise ValueError(
-                f"Unsupported normalization layer '{fail}'. "
-                f"Legal options are: {SUPPORTED_NORMALIZATION}"
+                f"Unsupported normalization layer '{config.model.normalization}'"
             )
 
 
-def make_complex_normalization_from_config(config: dict) -> Callable:
-    match config["model"]["normalization"]:
-        case "gnw":
-            return ComplexGroupNorm2DWhitening
-        case "bn":
+def make_complex_normalization_from_config(config: Config) -> Callable:
+    match config.model.normalization.value:
+        case ComplexNormalization.bn.value:
             return ComplexBatchNorm2D
-        case _ as fail:
+        case ComplexNormalization.gnw.value:
+            return ComplexGroupNorm2DWhitening
+        case None:
+            raise ValueError("No normalization layer specified (required)")
+        case _:
             raise ValueError(
-                f"Unsupported normalization layer '{fail}'. "
-                f"Legal options are: {SUPPORTED_COMPLEX_NORMALIZATION}"
+                f"Unsupported normalization layer '{config.model.normalization}'"
             )
 
 
-def make_conv_from_config(config: dict) -> Callable:
-    match config["model"]["conv"]:
-        case "conv":
+def make_conv_from_config(config: Config) -> Callable:
+    match config.model.conv.value:
+        case RealConv.conv.value:
             return nn.Conv2D
-        case "convws":
+        case RealConv.convws.value:
             return ConvWS2D
-        case "convws_nw":
+        case RealConv.convws_nw.value:
             return ConvCentering2D
-        case _ as fail:
-            raise ValueError(
-                f"Unsupported convolutional layer '{fail}'. "
-                f"Legal options are: {SUPPORTED_CONV}"
-            )
+        case _:
+            raise ValueError(f"Unsupported convolutional layer '{config.model.conv}'")
 
 
-def make_complex_conv_from_config(config: dict) -> Callable:
-    match config["model"]["conv"]:
-        case "conv":
+def make_complex_conv_from_config(config: Config) -> Callable:
+    match config.model.conv.value:
+        case ComplexConv.conv.value:
             return ComplexConv2D
-        case "convws":
+        case ComplexConv.convws.value:
             return ComplexWSConv2D
-        case "convws_nw":
+        case ComplexConv.convws_nw.value:
             return ComplexWSConv2DNoWhiten
-        case _ as fail:
-            raise ValueError(
-                f"Unsupported convolutional layer '{fail}'. "
-                f"Legal options are: {SUPPORTED_COMPLEX_CONV}"
-            )
+        case _:
+            raise ValueError(f"Unsupported convolutional layer '{config.model.conv}'")
 
 
-def make_activation_from_config(config: dict) -> Callable:
-    match config["model"]["activation"]:
-        case "relu":
+def make_activation_from_config(config: Config) -> Callable:
+    match config.model.activation.value:
+        case RealActivation.relu.value:
             return functional.relu
-        case "selu":
+        case RealActivation.selu.value:
             return functional.selu
-        case "leakyrelu":
+        case RealActivation.leakyrelu.value:
             return functional.leaky_relu
-        case "mish":
+        case RealActivation.mish.value:
             return mish
-        case _ as fail:
+        case None:
+            raise ValueError("No activation layer specified (required)")
+        case _:
             raise ValueError(
-                f"Unsupported activation layer '{fail}'. Legal options are: {SUPPORTED_ACTIVATION}"
+                f"Unsupported activation layer '{config.model.activation}'"
             )
 
 
-def make_complex_activation_from_config(config: dict, init_layers: bool) -> Callable:
-    match config["model"]["activation"]:
-        case "mish":
+def make_complex_activation_from_config(config: Config, init_layers: bool) -> Callable:
+    match config.model.activation.value:
+        case ComplexActivation.mish.value:
             act = ComplexMish
-        case "sepmish":
+        case ComplexActivation.sepmish.value:
             act = SeparableMish
-        case "conjmish":
+        case ComplexActivation.conjmish.value:
             act = ConjugateMish
-        case "igaussian":
+        case ComplexActivation.igaussian.value:
             act = IGaussian
-        case "cardioid":
+        case ComplexActivation.cardioid.value:
             act = Cardioid
-        case _ as fail:
+        case None:
+            raise ValueError("No activation layer specified (required)")
+        case _:
             raise ValueError(
-                f"Unsupported activation layer '{fail}'. "
-                f"Legal options are: {SUPPORTED_COMPLEX_NORMALIZATION}"
+                f"Unsupported activation layer '{config.model.activation}'"
             )
     if init_layers:
         return act()
     return act
 
 
-def make_pooling_from_config(config: dict) -> Callable:
-    match config["model"]["pooling"]:
-        case "maxpool":
+def make_pooling_from_config(config: Config) -> Callable:
+    match config.model.pooling.value:
+        case RealPooling.maxpool.value:
             return functional.max_pool_2d
-        case "avgpool":
+        case RealPooling.avgpool.value:
             return functional.average_pool_2d
-        case _ as fail:
-            raise ValueError(
-                f"Unsupported pooling layer '{fail}'. "
-                f"Legal options are: {SUPPORTED_COMPLEX_POOLING}"
-            )
+        case _:
+            raise ValueError(f"Unsupported pooling layer '{config.model.pooling}'")
 
 
 def make_complex_pooling_from_config(
-    config: dict, init_layers: bool, **kwargs
+    config: Config, init_layers: bool, **kwargs
 ) -> Callable:
-    match config["model"]["pooling"]:
-        case "conjmaxpool":
+    match config.model.pooling.value:
+        case ComplexPooling.conjmaxpool.value:
             layer = ConjugatePool2D
-        case "sepmaxpool":
+        case ComplexPooling.sepmaxpool.value:
             layer = SeparablePool2D
-        case "avgpool":
+        case ComplexPooling.avgpool.value:
             if len(kwargs) == 0:
                 return functional.average_pool_2d
             return partial(functional.average_pool_2d, **kwargs)
-        case _ as fail:
-            raise ValueError(
-                f"Unsupported pooling layer '{fail}'. "
-                f"Legal options are: {SUPPORTED_COMPLEX_POOLING}"
-            )
+        case _:
+            raise ValueError(f"Unsupported pooling layer '{config.model.pooling}'")
     if init_layers:
         return layer(**kwargs)
     else:
         return layer
 
 
-def make_normal_model_from_config(config: dict) -> Callable:
-    match config["model"]["name"]:
-        case "cifar10model":
-            if "activation" in config["model"]:
+def make_model_from_config(config: Config) -> Callable:
+    num_replicas = config.model.ensemble if config.model.ensemble else 1
+    if num_replicas > 1:
+        ensemble = [
+            make_single_model_instance_from_config(config) for _ in range(num_replicas)
+        ]
+        return Ensemble(ensemble)
+    else:
+        return make_single_model_instance_from_config(config)
+
+
+def make_single_model_instance_from_config(config: Config) -> Callable:
+    if config.model.complex:
+        if config.model.name.value in get_allowed_values(ComplexModelName):
+            model = make_complex_model_from_config(config)
+            return model
+        elif config.model.name.value in get_allowed_values(RealModelName):
+            fake_config = deepcopy(config)
+            fake_config.model.conv = Conv.conv
+            fake_config.model.normalization = Normalization.gn
+            fake_config.model.activation = Activation.relu
+            fake_config.model.pooling = Pooling.avgpool
+            model = make_normal_model_from_config(fake_config)
+            converter = ComplexModelConverter(
+                new_conv_class=make_complex_conv_from_config(config),
+                new_norm_class=make_complex_normalization_from_config(config),
+                new_linear_class=ComplexLinear,
+                new_activation=make_complex_activation_from_config(
+                    config, init_layers=False
+                ),
+                new_pooling=make_complex_pooling_from_config(config, init_layers=False),
+            )
+            return nn.Sequential([converter(model), ComplexToReal()])
+        else:
+            raise ValueError(f"{config.model.name} unknown")
+    else:
+        return make_normal_model_from_config(config)
+
+
+def make_normal_model_from_config(config: Config) -> Callable:
+    match config.model.name.value:
+        case RealModelName.cifar10model.value:
+            if config.model.activation is not None:
                 warnings.warn("No choice of activations supported for cifar 10 model")
-            if "normalization" in config["model"]:
+            if config.model.normalization is not None:
                 warnings.warn("No choice of normalization supported for cifar 10 model")
-            return Cifar10ConvNet(nclass=config["model"]["num_classes"])
-        case "resnet18":
+            return Cifar10ConvNet(nclass=config.model.num_classes)
+        case RealModelName.resnet18.value:
             kwargs = get_kwargs(
                 resnet_v2.ResNet18,
                 [
@@ -223,31 +266,31 @@ def make_normal_model_from_config(config: dict) -> Callable:
                     "normalization_fn",
                     "activation_fn",
                 ],
-                config["model"],
+                config.model,
             )
             return resnet_v2.ResNet18(
-                config["model"]["in_channels"],
-                config["model"]["num_classes"],
+                config.model.in_channels,
+                config.model.num_classes,
                 conv_layer=make_conv_from_config(config),
                 normalization_fn=make_normalization_from_config(config),
                 activation_fn=make_activation_from_config(config),
                 **kwargs,
             )
-        case "wide_resnet":
+        case RealModelName.wide_resnet.value:
             kwargs = get_kwargs(
                 wide_resnet.WideResNet,
                 ["nin", "nclass", "conv_layer", "bn", "act"],
-                config["model"],
+                config.model,
             )
             return wide_resnet.WideResNet(
-                config["model"]["in_channels"],
-                config["model"]["num_classes"],
+                config.model.in_channels,
+                config.model.num_classes,
                 conv_layer=make_conv_from_config(config),
                 bn=make_normalization_from_config(config),
                 act=make_activation_from_config(config),
                 **kwargs,
             )
-        case "resnet9":
+        case RealModelName.resnet9.value:
             already_defined = (
                 "in_channels",
                 "num_classes",
@@ -256,17 +299,17 @@ def make_normal_model_from_config(config: dict) -> Callable:
                 "act_func",
                 "pool_func",
             )
-            kwargs = get_kwargs(ResNet9, already_defined, config["model"])
+            kwargs = get_kwargs(ResNet9, already_defined, config.model)
             return ResNet9(
-                config["model"]["in_channels"],
-                config["model"]["num_classes"],
+                config.model.in_channels,
+                config.model.num_classes,
                 conv_cls=make_conv_from_config(config),
                 norm_cls=make_normalization_from_config(config),
                 act_func=make_activation_from_config(config),
                 pool_func=partial(make_pooling_from_config(config), size=2),
                 **kwargs,
             )
-        case "smoothnet":
+        case RealModelName.smoothnet.value:
             already_defined = (
                 "in_channels",
                 "num_classes",
@@ -275,10 +318,10 @@ def make_normal_model_from_config(config: dict) -> Callable:
                 "act_func",
                 "pool_func",
             )
-            kwargs = get_kwargs(get_smoothnet, already_defined, config["model"])
+            kwargs = get_kwargs(get_smoothnet, already_defined, config.model)
             return get_smoothnet(
-                in_channels=config["model"]["in_channels"],
-                num_classes=config["model"]["num_classes"],
+                in_channels=config.model.in_channels,
+                num_classes=config.model.num_classes,
                 conv_cls=make_conv_from_config(config),
                 norm_cls=make_normalization_from_config(config),
                 act_func=make_activation_from_config(config),
@@ -287,15 +330,13 @@ def make_normal_model_from_config(config: dict) -> Callable:
                 ),
                 **kwargs,
             )
-        case _ as fail:
-            raise ValueError(
-                f"Unsupported model '{fail}'. Legal options are: {SUPPORTED_MODELS}"
-            )
+        case _:
+            raise ValueError(f"Unsupported model '{config.model.name}'")
 
 
-def make_complex_model_from_config(config: dict) -> Callable:
-    match config["model"]["name"]:
-        case "resnet9":
+def make_complex_model_from_config(config: Config) -> Callable:
+    match config.model.name.value:
+        case ComplexModelName.resnet9.value:
             already_defined = (
                 "in_channels",
                 "num_classes",
@@ -306,10 +347,10 @@ def make_complex_model_from_config(config: dict) -> Callable:
                 "linear_cls",
                 "out_func",
             )
-            kwargs = get_kwargs(ResNet9, already_defined, config["model"])
+            kwargs = get_kwargs(ResNet9, already_defined, config.model)
             return ResNet9(
-                config["model"]["in_channels"],
-                config["model"]["num_classes"],
+                config.model.in_channels,
+                config.model.num_classes,
                 conv_cls=make_complex_conv_from_config(config),
                 norm_cls=make_complex_normalization_from_config(config),
                 act_func=make_complex_activation_from_config(config, init_layers=True),
@@ -322,7 +363,7 @@ def make_complex_model_from_config(config: dict) -> Callable:
                 out_func=ComplexToReal(),
                 **kwargs,
             )
-        case "smoothnet":
+        case ComplexModelName.smoothnet.value:
             already_defined = (
                 "in_channels",
                 "num_classes",
@@ -333,10 +374,10 @@ def make_complex_model_from_config(config: dict) -> Callable:
                 "linear_cls",
                 "out_func",
             )
-            kwargs = get_kwargs(get_smoothnet, already_defined, config["model"])
+            kwargs = get_kwargs(get_smoothnet, already_defined, config.model)
             return get_smoothnet(
-                in_channels=config["model"]["in_channels"],
-                num_classes=config["model"]["num_classes"],
+                in_channels=config.model.in_channels,
+                num_classes=config.model.num_classes,
                 conv_cls=make_complex_conv_from_config(config),
                 norm_cls=make_complex_normalization_from_config(config),
                 act_func=make_complex_activation_from_config(config, init_layers=True),
@@ -351,9 +392,9 @@ def make_complex_model_from_config(config: dict) -> Callable:
                 out_func=ComplexToReal(),
                 **kwargs,
             )
-        case "unet":
+        case ComplexModelName.unet.value:
             already_defined = ("in_channels",)
-            kwargs = get_kwargs(Unet, already_defined, config["model"])
+            kwargs = get_kwargs(Unet, already_defined, config.model)
             if not all(
                 (
                     expected in kwargs.keys()
@@ -368,52 +409,9 @@ def make_complex_model_from_config(config: dict) -> Callable:
                     "for a UNet architecture"
                 )
             return Unet(
-                in_channels=config["model"]["in_channels"],
+                in_channels=config.model.in_channels,
                 actv=make_complex_activation_from_config(config, init_layers=False),
                 **kwargs,
             )
-        case _ as fail:
-            raise ValueError(
-                f"Unsupported model '{fail}'. Legal options are: {SUPPORTED_COMPLEX_MODELS}"
-            )
-
-
-def make_model_from_config(config: dict) -> Callable:
-    num_replicas = config["model"]["ensemble"] if "ensemble" in config["model"] else 1
-    ensemble = []
-    for _ in range(num_replicas):
-        if "complex" in config["model"] and config["model"]["complex"]:
-            if config["model"]["name"] in SUPPORTED_COMPLEX_MODELS:
-                model = make_complex_model_from_config(config)
-            elif config["model"]["name"] in SUPPORTED_MODELS:
-                fake_config = deepcopy(config)
-                fake_config["model"].update(
-                    {
-                        "conv": "conv",
-                        "normalization": "gn",
-                        "activation": "relu",
-                        "pooling": "avgpool",
-                    }
-                )
-                model = make_normal_model_from_config(fake_config)
-                converter = ComplexModelConverter(
-                    new_conv_class=make_complex_conv_from_config(config),
-                    new_norm_class=make_complex_normalization_from_config(config),
-                    new_linear_class=ComplexLinear,
-                    new_activation=make_complex_activation_from_config(
-                        config, init_layers=False
-                    ),
-                    new_pooling=make_complex_pooling_from_config(
-                        config, init_layers=False
-                    ),
-                )
-                model = nn.Sequential([converter(model), ComplexToReal()])
-            else:
-                raise ValueError(f"{config['model']['name']} unknown")
-        else:
-            model = make_normal_model_from_config(config)
-        if "ensemble" in config["model"] and config["model"]["ensemble"] > 1:
-            ensemble.append(model)
-    if "ensemble" in config["model"] and config["model"]["ensemble"] > 1:
-        model = Ensemble(ensemble)
-    return model
+        case _:
+            raise ValueError(f"Unsupported model '{config.model.name}'.")

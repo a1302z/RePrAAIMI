@@ -1,6 +1,5 @@
 import sys
 from bisect import bisect_right
-from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
 
@@ -17,12 +16,12 @@ sys.path.insert(0, str(Path.cwd()))
 
 from dptraining.datasets.base_creator import DataLoaderCreator
 from dptraining.utils.transform import NormalizeNumpyImg
+from dptraining.config import DatasetTask
 
 DATA_OUTPUT_TYPE = Tuple[np.array, Union[int, np.array]]  # pylint:disable=invalid-name
 
 
 SUPPORTED_MODALITIES = ("mr", "ct", "us")
-SUPPORTED_TASKS = ("classification", "reconstruction")
 
 STATS = {
     "all": ([0.22039941], [0.24865805]),
@@ -30,11 +29,6 @@ STATS = {
     "mr": ([0.21530229], [0.22644264]),
     "us": ([0.1469403], [0.18063141]),
 }
-
-
-class Task(Enum):
-    CLASSIFICATION = 1
-    RECONSTRUCTION = 2
 
 
 def find_classes(directory: str) -> Tuple[Dict[str, Path], Dict[str, int]]:
@@ -222,7 +216,7 @@ class RadImageNet(Dataset):
     def __init__(
         self,
         root_dir: Union[str, Path],
-        task: str = "classification",
+        task: DatasetTask = DatasetTask.classification,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
         modality: str = "all",  # pylint:disable=redefined-outer-name
@@ -236,9 +230,9 @@ class RadImageNet(Dataset):
         Args:
             root_dir (Union[str, Path]):
                 Path to directory where RadImageNet is stored
-            task (str, optional):
+            task DatasetTask:
                 If set to reconstruction returns images also as labels.
-                Defaults to "classification".
+                Defaults to DatasetTask.classification,.
             transform (Optional[Callable], optional):
                 Callable to be applied to images. Defaults to None.
             target_transform (Optional[Callable], optional):
@@ -263,10 +257,9 @@ class RadImageNet(Dataset):
             None: No return value
         """
         assert modality.lower() in SUPPORTED_MODALITIES or modality.lower() in ("all",)
-        assert task in SUPPORTED_TASKS
         super().__init__()
         self.root_dir: Path = root_dir if isinstance(root_dir, Path) else Path(root_dir)
-        self.task: Task = Task[task.upper()]
+        self.task: DatasetTask = task
         self.modality: str = modality
         self.transform = transform if transform is not None else lambda x: x
         self.target_transform = (
@@ -361,7 +354,7 @@ class RadImageNet(Dataset):
             else:
                 modality = self.modality
             image = RadImageNet.NORMLIZATION_TRANSFORMS[modality.lower()](image)
-        if self.task == Task.RECONSTRUCTION:
+        if self.task == DatasetTask.reconstruction:
             label = image
         return self.transform(image), self.target_transform(label)
 
@@ -403,26 +396,22 @@ class RadImageNetCreator(DataLoaderCreator):
     def make_datasets(
         config: dict, transforms: Tuple
     ) -> Tuple[Dataset, Dataset, Dataset]:
-        task = (
-            config["dataset"]["task"]
-            if "task" in config["dataset"]
-            else "classification"
-        )
-        root_folder = Path(config["dataset"]["root"])
+        task = config.dataset.task
+        root_folder = Path(config.dataset.root)
         train_split, test_split = (
-            config["dataset"]["train_val_split"],
-            config["dataset"]["test_split"],
+            config.dataset.train_val_split,
+            config.dataset.test_split,
         )
         val_split = 1.0 - train_split - test_split
         assert val_split > 0, "Train and test split are combined larger than 1"
         seed = (
-            config["dataset"]["datasplit_seed"]
-            if "datasplit_seed" in config["dataset"]
-            else config["general"]["seed"]
+            config.dataset.datasplit_seed
+            if config.dataset.datasplit_seed
+            else config.general.seed
         )
         copy_folder = (
-            config["dataset"]["split_folder"]
-            if "split_folder" in config["dataset"]
+            config.dataset.split_folder
+            if config.dataset.split_folder
             else root_folder.parent
             / (
                 f"{root_folder.name}_dataset_split_{train_split}_"
@@ -503,18 +492,10 @@ class RadImageNetCreator(DataLoaderCreator):
                 new_root,
                 transform=tf,
                 task=task,
-                modality=config["dataset"]["modality"]
-                if "modality" in config["dataset"]
-                else "all",
-                allowed_body_regions=config["dataset"]["allowed_body_regions"]
-                if "allowed_body_regions" in config["dataset"]
-                else "all",
-                allowed_labels=config["dataset"]["allowed_labels"]
-                if "allowed_labels" in config["dataset"]
-                else "all",
-                normalize_by_modality=config["dataset"]["normalize_by_modality"]
-                if "normalize_by_modality" in config["dataset"]
-                else False,
+                modality=config.dataset.modality,
+                allowed_body_regions=config.dataset.allowed_body_regions,
+                allowed_labels=config.dataset.allowed_labels,
+                normalize_by_modality=config.dataset.normalize_by_modality,
             )
             for (new_root, tf) in zip(train_val_test_dirs, transforms)
         )
