@@ -16,36 +16,41 @@ def access_dataset(*args):
         ds[len(ds) - 1]
 
 
-def test_cifar10():
-    train_ds, val_ds, test_ds = CIFAR10Creator.make_datasets(
-        {"dataset": {"root": "./data", "download": True, "train_val_split": 0.9}},
-        (None, None, None),
-    )
+def test_cifar10(utils):
+    config_dict = {"dataset": {"root": "./data", "train_val_split": 0.9}}
+    config = utils.extend_base_config(config_dict)
+    train_ds, val_ds, test_ds = CIFAR10Creator.make_datasets(config, (None, None, None))
     access_dataset(train_ds, val_ds, test_ds)
 
 
-def test_cifar10_unnormalized():
+def test_cifar10_unnormalized(utils):
+    config_dict = {"dataset": {"root": "./data", "train_val_split": 0.9}}
+    config = utils.extend_base_config(config_dict)
     train_ds, val_ds, test_ds = CIFAR10Creator.make_datasets(
-        {"dataset": {"root": "./data", "download": True, "train_val_split": 0.9}},
+        config,
         (None, None, None),
         normalize_by_default=False,
     )
     access_dataset(train_ds, val_ds, test_ds)
 
 
-def test_cifar10_invalid_args():
+def test_cifar10_invalid_args(utils):
+    config_dict = {"dataset": {"root": "./data", "train_val_split": 0.9}}
+    config = utils.extend_base_config(config_dict)
     with pytest.raises(ValueError):
         train_ds, val_ds, test_ds = CIFAR10Creator.make_datasets(
-            {"dataset": {"root": "./data", "download": True, "train_val_split": 0.9}},
+            config,
             (None, None, None),
+            normalize_by_default=True,
             numpy_optimisation=False,
         )
-        access_dataset(train_ds, val_ds, test_ds)
 
 
-def test_cifar10_standard_torchvision():
+def test_cifar10_standard_torchvision(utils):
+    config_dict = {"dataset": {"root": "./data", "train_val_split": 0.9}}
+    config = utils.extend_base_config(config_dict)
     train_ds, val_ds, test_ds = CIFAR10Creator.make_datasets(
-        {"dataset": {"root": "./data", "download": True, "train_val_split": 0.9}},
+        config,
         (None, None, None),
         normalize_by_default=False,
         numpy_optimisation=False,
@@ -53,58 +58,59 @@ def test_cifar10_standard_torchvision():
     access_dataset(train_ds, val_ds, test_ds)
 
 
-def test_cifar10_fft():
-    train_ds, val_ds, test_ds = CIFAR10Creator.make_datasets(
-        {
-            "dataset": {
-                "root": "./data",
-                "download": True,
-                "train_val_split": 0.9,
-                "fft": True,
-            }
-        },
-        (None, None, None),
-    )
+def test_cifar10_fft(utils):
+    config_dict = {
+        "dataset": {
+            "root": "./data",
+            "train_val_split": 0.9,
+            "fft": True,
+        }
+    }
+    config = utils.extend_base_config(config_dict)
+    train_ds, val_ds, test_ds = CIFAR10Creator.make_datasets(config, (None, None, None))
     access_dataset(train_ds, val_ds, test_ds)
 
 
-def test_imagenet():
+def test_imagenet(utils):
+    config_dict = {
+        "dataset": {
+            "root": "./data/ILSVRC2012",
+            # "split": "train",
+            "train_val_split": 0.9,
+        }
+    }
+    config = utils.extend_base_config(config_dict)
     train_ds, val_ds, test_ds = ImageNetCreator.make_datasets(
-        {
-            "dataset": {
-                "root": "./data/ILSVRC2012",
-                "split": "train",
-                "train_val_split": 0.9,
-            }
-        },
-        (None, None, None),
+        config, (None, None, None)
     )
     access_dataset(train_ds, val_ds, test_ds)
 
 
-def test_tinyimagenet32():
+def test_tinyimagenet32(utils):
+    config_dict = {
+        "dataset": {
+            "root": "./data/ImageNet32",
+            "train_val_split": 0.9,
+            "version": 32,
+        }
+    }
+    config = utils.extend_base_config(config_dict)
     train_ds, val_ds, test_ds = TinyImageNetCreator.make_datasets(
-        {
-            "dataset": {
-                "root": "./data/ImageNet32",
-                "train_val_split": 0.9,
-                "version": 32,
-            }
-        },
-        (None, None, None),
+        config, (None, None, None)
     )
     access_dataset(train_ds, val_ds, test_ds)
 
 
-# def test_tinyimagenet64(): # this is too slow to test each time
-#     train_ds, val_ds, test_ds = TinyImageNetCreator.make_datasets(
-#         {
-#             "dataset": {
-#                 "root": "./data/ImageNet64",
-#                 "train_val_split": 0.9,
-#                 "version": 64,
-#             }
-#         },
-#         (None, None, None),
-#     )
-#     access_dataset(train_ds, val_ds, test_ds)
+# def test_tinyimagenet64(utils):  # this is too slow to test each time
+#    config_dict = {
+#        "dataset": {
+#            "root": "./data/ImageNet64",
+#            "train_val_split": 0.9,
+#            "version": 64,
+#        }
+#    }
+#    config = utils.extend_base_config(config_dict)
+#    train_ds, val_ds, test_ds = TinyImageNetCreator.make_datasets(
+#        config, (None, None, None)
+#    )
+#    access_dataset(train_ds, val_ds, test_ds)

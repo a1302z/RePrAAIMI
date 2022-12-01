@@ -10,9 +10,11 @@ sys.path.insert(0, str(Path.cwd()))
 from dptraining.models import make_normalization_from_config
 
 
-def test_bn():
-    make_normalization_from_config({"model": {"normalization": "bn"}})
+def test_bn(utils):
+    config = utils.extend_base_config({"model": {"normalization": "bn"}})
+    make_normalization_from_config(config)
 
 
-def test_gn():
-    make_normalization_from_config({"model": {"normalization": "gn"}})
+def test_gn(utils):
+    config = utils.extend_base_config({"model": {"normalization": "gn"}})
+    make_normalization_from_config(config)

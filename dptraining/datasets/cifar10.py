@@ -1,9 +1,11 @@
-import numpy as np
-from typing import Tuple, Any
-from torchvision.datasets import CIFAR10
-from torch.utils.data import Dataset, DataLoader
-from sklearn.model_selection import train_test_split
+from typing import Any, Tuple
 
+import numpy as np
+from sklearn.model_selection import train_test_split
+from torch.utils.data import DataLoader, Dataset
+from torchvision.datasets import CIFAR10
+
+from dptraining.config import Config
 from dptraining.datasets.base_creator import DataLoaderCreator
 
 
@@ -48,26 +50,26 @@ class CIFAR10Creator(DataLoaderCreator):
 
     @staticmethod
     def make_datasets(  # pylint:disable=too-many-arguments
-        config,
+        config: Config,
         transforms: Tuple,
         numpy_optimisation=True,
         normalize_by_default=True,
     ) -> Tuple[Dataset, Dataset, Dataset]:
         train_tf, val_tf, test_tf = transforms
         train_kwargs = {
-            "root": config["dataset"]["root"],
+            "root": config.dataset.root,
             "download": True,
             "transform": train_tf,
             "train": True,
         }
         val_kwargs = {
-            "root": config["dataset"]["root"],
+            "root": config.dataset.root,
             "download": True,
             "transform": val_tf,
             "train": True,
         }
         test_kwargs = {
-            "root": config["dataset"]["root"],
+            "root": config.dataset.root,
             "download": True,
             "transform": test_tf,
             "train": False,
@@ -92,13 +94,13 @@ class CIFAR10Creator(DataLoaderCreator):
             train_ds.data = CIFAR10Creator.normalize_images(train_ds.data)
             val_ds.data = CIFAR10Creator.normalize_images(val_ds.data)
             test_ds.data = CIFAR10Creator.normalize_images(test_ds.data)
-        if "fft" in config["dataset"] and config["dataset"]["fft"]:
+        if config.dataset.fft:
             if not numpy_optimisation:
                 raise ValueError("FFT only works with numpy optimisation")
             train_ds.data = fft_conversion(train_ds.data, axes=(1, 2, 3))
             val_ds.data = fft_conversion(val_ds.data, axes=(1, 2, 3))
             test_ds.data = fft_conversion(test_ds.data, axes=(1, 2, 3))
-        train_val_split = config["dataset"]["train_val_split"]
+        train_val_split = config.dataset.train_val_split
         assert 0.0 < train_val_split <= 1.0, "Train/Val split must be in (0,1]"
         if abs(train_val_split - 1.0) < 1e-5:
             val_ds = None

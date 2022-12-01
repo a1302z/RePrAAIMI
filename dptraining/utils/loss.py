@@ -1,6 +1,8 @@
 import abc
 from enum import Enum
 from typing import Callable
+from dptraining.config import Config
+from dptraining.config.config import LossReduction
 import objax
 
 from jax import numpy as jnp
@@ -12,15 +14,8 @@ class Reduction(Enum):
 
 
 class LossFunctionCreator(abc.ABC):
-    def __init__(self, config) -> None:
-        self._config = config["loss"]
-        reduction = config["loss"]["reduction"]
-        if reduction == "sum":
-            self._reduction = Reduction.SUM
-        elif reduction == "mean":
-            self._reduction = Reduction.MEAN
-        else:
-            raise ValueError(f"Reduction {reduction} not supported")
+    def __init__(self, config: Config) -> None:
+        self._config = config.loss
 
     @abc.abstractmethod
     def create_loss_fn(self, model_vars, model) -> Callable:
@@ -48,20 +43,21 @@ class CSELogitsSparse(LossFunctionCreator):
         def loss_fn(inpt, label):
             logit = model(inpt, training=True)
             loss = objax.functional.loss.cross_entropy_logits_sparse(logit, label)
-            if self._reduction == Reduction.SUM:
-                return loss.sum()
-            elif self._reduction == Reduction.MEAN:
-                return loss.mean()
-            else:
-                raise RuntimeError("No supported loss reduction")
+            match self._config.reduction:
+                case LossReduction.sum:
+                    return loss.sum()
+                case LossReduction.mean:
+                    return loss.mean()
+                case _ as unsupported:
+                    raise RuntimeError(f"Unsupported loss reduction '{unsupported}'")
 
         return loss_fn
 
 
 class L2Regularization(LossFunctionCreator):
-    def __init__(self, config) -> None:
+    def __init__(self, config: Config) -> None:
         super().__init__(config)
-        self._regularization = config["hyperparams"]["l2regularization"]
+        self._regularization = config.hyperparams.l2regularization
 
     def create_loss_fn(self, model_vars, model):
         @objax.Function.with_vars(model_vars)

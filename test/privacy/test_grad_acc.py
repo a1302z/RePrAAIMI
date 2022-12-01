@@ -90,7 +90,7 @@ def test_grad_acc_step():
 #     train_op_acc(*setup_fake_data(), 1.0, apply_norm_acc=True)
 
 
-def test_grad_equality():
+def test_grad_equality(utils):
     tf1 = Transformation.from_dict_list(
         {
             "make_complex_both": None,
@@ -108,22 +108,23 @@ def test_grad_equality():
         }
     )
     tf2 = tf2.create_vectorized_transform()
-
-    model = make_model_from_config(
-        {
-            "model": {
-                "complex": True,
-                "name": "cifar10model",
-                "in_channels": 3,
-                "num_classes": 1,
-                "conv": "convws_nw",
-                "activation": "conjmish",
-                "normalization": "bn",
-                "pooling": "avgpool",
+    config_dict = {
+        "model": {
+            "complex": True,
+            "name": "cifar10model",
+            "in_channels": 3,
+            "num_classes": 1,
+            "conv": "convws_nw",
+            "activation": "conjmish",
+            "normalization": "bn",
+            "pooling": "avgpool",
+            "extra_args": {
                 "scale_norm": True,
-            }
+            },
         }
-    )
+    }
+    config = utils.extend_base_config(config_dict)
+    model = make_model_from_config(config)
     data, label = setup_fake_data((10, 3, 32, 32), (10, 1))
     _, gv = setup_fake_training(model)
 

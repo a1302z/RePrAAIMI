@@ -1,3 +1,6 @@
+defaults:
+  - base_config
+  - _self_
 project: cifar-DP-complex
 general:
   log_wandb: False
@@ -61,7 +64,6 @@ scheduler:
 #   patience: 100
 #   min_delta: 0.01
 DP:
-  disable_dp: False
   epsilon: 7.5
   max_per_sample_grad_norm: 1.0
   delta: 1e-5

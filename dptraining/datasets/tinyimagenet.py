@@ -1,11 +1,14 @@
 from copy import deepcopy
-from typing import Optional, Callable, Tuple
+from pathlib import Path
 from pickle import load
+from typing import Callable, Optional, Tuple
+
+import numpy as np
 from torch import Generator  # pylint:disable=no-name-in-module
 from torch.utils.data import Dataset, random_split
-from pathlib import Path
-import numpy as np
 from tqdm import tqdm
+
+from dptraining.config import Config
 from dptraining.datasets.base_creator import DataLoaderCreator
 
 
@@ -90,32 +93,31 @@ class TinyImageNet(Dataset):
 
 class TinyImageNetCreator(DataLoaderCreator):
     @staticmethod
-    def make_datasets(config: dict, transforms: Tuple) -> Tuple[Dataset, Dataset]:
+    def make_datasets(config: Config, transforms: Tuple) -> Tuple[Dataset, Dataset]:
         train_tf, val_tf, test_tf = transforms
         train_kwargs = {
-            "root": config["dataset"]["root"],
-            "version": config["dataset"]["version"],
+            "root": config.dataset.root,
+            "version": config.dataset.version,
             "train": True,
             "transform": train_tf,
-            "normalize": "normalization" in config["dataset"]
-            and config["dataset"]["normalization"],
+            "normalize": config.dataset.normalization,
         }
         # val_kwargs = {
-        #     "root": config["dataset"]["root"],
-        #     "version": config["dataset"]["version"],
+        #     "root": config.dataset.root,
+        #     "version": config.dataset.version,
         #     "train": True,
         #     "transform": val_tf,
         # }
         test_kwargs = {
-            "root": config["dataset"]["root"],
-            "version": config["dataset"]["version"],
+            "root": config.dataset.root,
+            "version": config.dataset.version,
             "train": False,
             "transform": test_tf,
         }
         train_ds = TinyImageNet(**train_kwargs)
         val_ds = deepcopy(train_ds)
         val_ds.transform = val_tf if val_tf is not None else lambda x: x
-        train_val_split = config["dataset"]["train_val_split"]
+        train_val_split = config.dataset.train_val_split
         # pylint:disable=duplicate-code
         assert 0.0 < train_val_split <= 1.0, "Train/Val split must be in (0,1]"
         if abs(train_val_split - 1.0) < 1e-5:
