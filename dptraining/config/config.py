@@ -31,12 +31,33 @@ class DatasetName(Enum):
     tinyimagenet = 3
     fastmri = 4
     radimagenet = 5
+    msd = 6
+
+
+class MSDSubtask(Enum):
+    braintumour = 1
+    heart = 2
+    liver = 3
+    hippocampus = 4
+    prostate = 5
+    lung = 6
+    pancreas = 7
+    hepaticvessel = 8
+    spleen = 9
+    colon = 10
 
 
 class DatasetTask(Enum):
     classification = 1
     reconstruction = 2
     segmentation = 3
+
+
+class Normalization(Enum):
+    raw = 0
+    zeroone = 1
+    gaussian = 2
+    consecutive = 3
 
 
 @dataclass
@@ -60,8 +81,12 @@ class DatasetConfig:
     center_fractions: tuple[float] = (0.08,)  # only for fmri
     accelerations: tuple[float] = (4,)  # only for fmri
     challenge: str = "knee"  # only for fmri
-    resolution: int = 320  # only for fmri so far
+    resolution: Optional[int] = None  # only for fmri and msd so far
     new_data_root: Optional[str] = None  # only for fmri so far
+    subtask: Optional[MSDSubtask] = None  # only for msd so far
+    slice_thickness: Optional[float] = None  # only for msd
+    cache: bool = False  # only for MSD
+    normalization: Normalization = Normalization.gaussian
 
 
 class LoaderCollateFn(Enum):

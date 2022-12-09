@@ -14,7 +14,10 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path.cwd()))
 
 
-from dptraining.datasets.base_creator import DataLoaderCreator
+from dptraining.datasets.base_creator import (
+    DataLoaderCreator,
+    mk_subdirectories,
+)
 from dptraining.utils.transform import NormalizeNumpyImg
 from dptraining.config import DatasetTask
 
@@ -357,38 +360,6 @@ class RadImageNet(Dataset):
         if self.task == DatasetTask.reconstruction:
             label = image
         return self.transform(image), self.target_transform(label)
-
-
-def mk_subdirectories(path: Path, subdirs: List[str]) -> List[Path]:
-    new_dirs = []
-    for subdir in subdirs:
-        new_path: Path = path / subdir
-        if not new_path.is_dir():
-            new_path.mkdir()
-        new_dirs.append(new_path)
-    return new_dirs
-
-
-def calc_mean_std(dataset: DataLoader):
-    mean = 0.0
-    for images, _ in tqdm(
-        dataset, total=len(dataset), desc="calculating mean", leave=False
-    ):
-        batch_samples = images.shape[0]
-        images = images.reshape((batch_samples, images.shape[1], -1))
-        mean += images.mean(2).sum(0)
-    mean = mean / len(dataset.dataset)
-
-    var = 0.0
-    reshaped_mean = mean[np.newaxis, ...]
-    for images, _ in tqdm(
-        dataset, total=len(dataset), desc="calculating std", leave=False
-    ):
-        batch_samples = images.shape[0]
-        images = images.reshape(batch_samples, images.shape[1], -1)
-        var += ((images - reshaped_mean) ** 2).sum(2).sum(0)
-    std = np.sqrt(var / (len(dataset.dataset) * 224 * 224))
-    return mean, std
 
 
 class RadImageNetCreator(DataLoaderCreator):

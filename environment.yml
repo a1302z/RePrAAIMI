@@ -12,6 +12,8 @@ dependencies:
   - conda-forge::wandb
   - conda-forge::scikit-learn
   - conda-forge::scikit-image
+  - conda-forge::nibabel
+  - conda-forge::nilearn
   - nvidia::cuda-nvcc
   - ipykernel
   - matplotlib

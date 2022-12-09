@@ -18,6 +18,7 @@ from dptraining.config.config import (
     EarlyStoppingConfig,
     DPConfig,
     DatasetTask,
+    Normalization
 )
 
 from dptraining.config.utils import get_allowed_names, get_allowed_values
