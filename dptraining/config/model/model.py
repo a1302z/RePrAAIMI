@@ -12,8 +12,7 @@ class ModelName(Enum):
     resnet9 = 3
     smoothnet = 4
     wide_resnet = 5
-    imagenet = 6
-    tinyimagenet = 7
+    unet = 6
 
 
 # We can't use union types yet, unfortunately:
@@ -31,6 +30,7 @@ class RealModelName(Enum):
 class ComplexModelName(Enum):
     resnet9 = 3
     smoothnet = 4
+    unet = 6
 
 
 class Normalization(Enum):

@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path.cwd()))
-from dptraining.datasets.utils import collate_np_arrays
+from dptraining.datasets.utils import collate_np_classification
 
 
 def test_collate():
@@ -15,6 +15,6 @@ def test_collate():
         (np.random.randn(3, 224, 224), np.random.randint(0, 10, size=(1,)).item())
         for _ in range(10)
     ]
-    imgs, labels = collate_np_arrays(batch)
+    imgs, labels = collate_np_classification(batch)
     assert imgs.shape == (10, 3, 224, 224)
     assert labels.shape == (10,)

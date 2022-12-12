@@ -4,11 +4,17 @@ from omegaconf import OmegaConf
 
 from deepee.dataloader import UniformWORSubsampler
 
-from dptraining.config import Config, DatasetName, LoaderCollateFn
+from dptraining.config import Config, DatasetName, LoaderCollateFn, DatasetTask
 from dptraining.datasets.cifar10 import CIFAR10Creator
 from dptraining.datasets.imagenet import ImageNetCreator
+from dptraining.datasets.radimagenet import RadImageNetCreator
+from dptraining.datasets.fmri import FMRICreator
 from dptraining.datasets.tinyimagenet import TinyImageNetCreator
-from dptraining.datasets.utils import collate_np_arrays
+from dptraining.datasets.ham10000 import HAM10000Creator
+from dptraining.datasets.utils import (
+    collate_np_classification,
+    collate_np_reconstruction,
+)
 from dptraining.utils.augment import Transformation
 
 
@@ -16,12 +22,42 @@ SUPPORTED_FFT = (DatasetName.CIFAR10,)
 SUPPORTED_NORMALIZATION = (DatasetName.CIFAR10, DatasetName.tinyimagenet)
 
 
-def modify_collate_fn_config(config: dict):
-    if config["collate_fn"] is not None:
-        if config["collate_fn"] == LoaderCollateFn.numpy:
-            config["collate_fn"] = collate_np_arrays
+def select_creator(config):
+    match config.dataset.name:
+        case DatasetName.CIFAR10:
+            creator = CIFAR10Creator
+        case DatasetName.tinyimagenet:
+            creator = TinyImageNetCreator
+        case DatasetName.imagenet:
+            creator = ImageNetCreator
+        case DatasetName.fastmri:
+            creator = FMRICreator
+        case DatasetName.radimagenet:
+            creator = RadImageNetCreator
+        case DatasetName.ham10000:
+            creator = HAM10000Creator
+        case _ as unsupported:
+            raise ValueError(f"Unsupported dataset '{unsupported}'.")
+    return creator
+
+
+def modify_collate_fn_config(loader_config, task):
+
+    if "collate_fn" in loader_config:
+        if (
+            loader_config["collate_fn"] == LoaderCollateFn.numpy
+            and task == DatasetTask.classification
+        ):
+            loader_config["collate_fn"] = collate_np_classification
+        elif (
+            loader_config["collate_fn"] == LoaderCollateFn.numpy
+            and task == DatasetTask.reconstruction
+        ):
+            loader_config["collate_fn"] = collate_np_reconstruction
         else:
-            raise ValueError(f"collate_fn {config.collate_fn} not supported.")
+            raise ValueError(
+                f"collate_fn {loader_config['collate_fn']} for {task} not supported."
+            )
 
 
 def make_dataset(config: Config):
@@ -50,27 +86,18 @@ def make_dataset(config: Config):
         if config.val_transforms
         else test_tf
     )
+    add_kwargs = {}
     match config.dataset.name:
         case DatasetName.CIFAR10:
-            train_ds, val_ds, test_ds = CIFAR10Creator.make_datasets(
-                config,
-                (train_tf, val_tf, test_tf),
-                normalize_by_default=config.dataset.normalization,
-            )
-        case DatasetName.tinyimagenet:
-            train_ds, val_ds, test_ds = TinyImageNetCreator.make_datasets(
-                config, (train_tf, val_tf, test_tf)
-            )
-        case DatasetName.imagenet:
-            train_ds, val_ds, test_ds = ImageNetCreator.make_datasets(
-                config, (train_tf, val_tf, test_tf)
-            )
-        case _ as unsupported:
-            raise ValueError(f"Unsupported dataset '{unsupported}'.")
+            add_kwargs["normalize_by_default"] = config.dataset.normalization
+    creator = select_creator(config)
+    train_ds, val_ds, test_ds = creator.make_datasets(
+        config, (train_tf, val_tf, test_tf), **add_kwargs
+    )
     return train_ds, val_ds, test_ds
 
 
-def make_loader_from_config(config: Config):
+def make_loader_from_config(config):
     train_ds, val_ds, test_ds = make_dataset(config)
     loader_kwargs = deepcopy(OmegaConf.to_container(config.loader))
 
@@ -80,7 +107,7 @@ def make_loader_from_config(config: Config):
     if loader_kwargs["num_workers"] is None:
         del loader_kwargs["num_workers"]
 
-    modify_collate_fn_config(loader_kwargs)
+    modify_collate_fn_config(loader_kwargs, config.dataset.task)
     if "train_loader" in loader_kwargs and "test_loader" in loader_kwargs:
         train_loader_kwargs = loader_kwargs["train_loader"]
         test_loader_kwargs = loader_kwargs["test_loader"]
@@ -112,36 +139,13 @@ def make_loader_from_config(config: Config):
     test_loader_kwargs["shuffle"] = False
     val_loader_kwargs["shuffle"] = False
 
-    match config.dataset.name:
-        case DatasetName.CIFAR10:
-            train_loader, val_loader, test_loader = CIFAR10Creator.make_dataloader(
-                train_ds,
-                val_ds,
-                test_ds,
-                train_loader_kwargs,
-                val_loader_kwargs,
-                test_loader_kwargs,
-            )
-        case DatasetName.tinyimagenet:
-            train_loader, val_loader, test_loader = TinyImageNetCreator.make_dataloader(
-                train_ds,
-                val_ds,
-                test_ds,
-                train_loader_kwargs,
-                val_loader_kwargs,
-                test_loader_kwargs,
-            )
-        case DatasetName.imagenet:
-            train_loader, val_loader, test_loader = ImageNetCreator.make_dataloader(
-                train_ds,
-                val_ds,
-                test_ds,
-                train_loader_kwargs,
-                val_loader_kwargs,
-                test_loader_kwargs,
-            )
-        case _ as unsupported:
-            raise ValueError(
-                f"This shouldn't happen. " f"Unsupported dataset {unsupported}."
-            )
+    creator = select_creator(config)
+    train_loader, val_loader, test_loader = creator.make_dataloader(
+        train_ds,
+        val_ds,
+        test_ds,
+        train_loader_kwargs,
+        val_loader_kwargs,
+        test_loader_kwargs,
+    )
     return train_loader, val_loader, test_loader

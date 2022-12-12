@@ -16,7 +16,8 @@ def access_dataloader(*args):
 
 def test_cifar10(utils):
     config_dict = {
-        "dataset": {"root": "./data", "download": True, "train_val_split": 0.9}
+        "dataset": {"root": "./data", "download": True, "train_val_split": 0.9},
+        "loader": {"num_workers": 16, "prefetch_factor": 16, "collate_fn": "numpy"},
     }
     config = utils.extend_base_config(config_dict)
     train_ds, val_ds, test_ds = CIFAR10Creator.make_datasets(config, (None, None, None))
@@ -39,7 +40,13 @@ def test_cifar10(utils):
 def test_cifar10_from_config(utils):
     config_dict = {
         "hyperparams": {"batch_size": 4, "batch_size_test": 1},
-        "dataset": {"name": "CIFAR10", "root": "./data", "train_val_split": 0.9},
+        "dataset": {
+            "name": "CIFAR10",
+            "root": "./data",
+            "train_val_split": 0.9,
+            "task": "classification",
+        },
+        "loader": {"num_workers": 16, "prefetch_factor": 16, "collate_fn": "numpy"},
     }
     config = utils.extend_base_config(config_dict)
     train_dl, val_dl, test_dl = make_loader_from_config(config)
@@ -50,6 +57,7 @@ def test_imagenet_from_config(utils):
     config_dict = {
         "hyperparams": {"batch_size": 4, "batch_size_test": 1},
         "dataset": {
+            "task": "classification",
             "name": "imagenet",
             "root": "./data/ILSVRC2012",
             "train_val_split": 0.9,
@@ -65,6 +73,7 @@ def test_imagenet_from_config(utils):
             "ToTensor": None,
         },
         "augmentations": {"random_vertical_flips": {"flip_prob": 0.5}},
+        "loader": {"num_workers": 16, "prefetch_factor": 16, "collate_fn": "numpy"},
     }
     config = utils.extend_base_config(config_dict)
     train_dl, val_dl, test_dl = make_loader_from_config(config)
@@ -75,10 +84,12 @@ def test_no_val_set(utils):
     config_dict = {
         "hyperparams": {"batch_size": 1, "batch_size_test": 1},
         "dataset": {
+            "task": "classification",
             "name": "CIFAR10",
             "root": "./data/",
             "train_val_split": 1.0,
         },
+        "loader": {"num_workers": 16, "prefetch_factor": 16, "collate_fn": "numpy"},
     }
     config = utils.extend_base_config(config_dict)
     train_dl, val_dl, test_dl = make_loader_from_config(config)
@@ -91,6 +102,7 @@ def test_tiny_imagenet_from_config(utils):
     config_dict = {
         "hyperparams": {"batch_size": 4, "batch_size_test": 1},
         "dataset": {
+            "task": "classification",
             "name": "tinyimagenet",
             "root": "./data/ImageNet32",
             "version": 32,
@@ -103,6 +115,7 @@ def test_tiny_imagenet_from_config(utils):
             "ToTensor": None,
         },
         "augmentations": {"random_vertical_flips": {"flip_prob": 0.5}},
+        "loader": {"num_workers": 16, "prefetch_factor": 16, "collate_fn": "numpy"},
     }
     config = utils.extend_base_config(config_dict)
     train_dl, val_dl, test_dl = make_loader_from_config(config)

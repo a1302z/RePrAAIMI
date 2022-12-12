@@ -7,11 +7,19 @@ general:
   parallel: False
   eval_train: False
 dataset: 
+  task: classification
   name: tinyimagenet
   root: ./data/ImageNet32
   version: 32
   train_val_split: 0.95
   normalization: True
+metrics:
+  main: 
+    accuracy_score: 
+  logging:
+    classification_report:
+      output_dict: True
+      zero_division: 0
 train_transforms:
   numpy_img_to_chw:
 test_transforms:

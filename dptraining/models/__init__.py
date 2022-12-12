@@ -46,9 +46,10 @@ from dptraining.models.complex.normalization import (  # pylint:disable=duplicat
     ComplexBatchNorm2D,
     ComplexGroupNorm2DWhitening,
 )
-from dptraining.models.complex.pooling import ConjugateMaxPool2D, SeparableMaxPool2D
+from dptraining.models.complex.pooling import ConjugatePool2D, SeparablePool2D
 from dptraining.models.ensemble import Ensemble
 from dptraining.models.layers import ConvCentering2D, ConvWS2D
+from dptraining.models.unet import Unet
 from dptraining.models.resnet9 import ResNet9
 from dptraining.models.smoothnet import get_smoothnet
 
@@ -193,9 +194,9 @@ def make_complex_pooling_from_config(
 ) -> Callable:
     match config.model.pooling.value:
         case ComplexPooling.conjmaxpool.value:
-            layer = ConjugateMaxPool2D
+            layer = ConjugatePool2D
         case ComplexPooling.sepmaxpool.value:
-            layer = SeparableMaxPool2D
+            layer = SeparablePool2D
         case ComplexPooling.avgpool.value:
             if len(kwargs) == 0:
                 return functional.average_pool_2d
@@ -223,7 +224,8 @@ def make_single_model_instance_from_config(config: Config) -> Callable:
     if config.model.complex:
         if config.model.name.value in get_allowed_values(ComplexModelName):
             model = make_complex_model_from_config(config)
-        if config.model.name.value in get_allowed_values(RealModelName):
+            return model
+        elif config.model.name.value in get_allowed_values(RealModelName):
             fake_config = deepcopy(config)
             fake_config.model.conv = Conv.conv
             fake_config.model.normalization = Normalization.gn
@@ -390,5 +392,26 @@ def make_complex_model_from_config(config: Config) -> Callable:
                 out_func=ComplexToReal(),
                 **kwargs,
             )
+        case ComplexModelName.unet.value:
+            already_defined = ("in_channels",)
+            kwargs = get_kwargs(Unet, already_defined, config.model)
+            if not all(
+                (
+                    expected in kwargs.keys()
+                    for expected in (
+                        "out_channels",
+                        "channels",
+                    )
+                )
+            ):
+                warnings.warn(
+                    "We recommend to explicitly set values for [out_channels, channels]"
+                    "for a UNet architecture"
+                )
+            return Unet(
+                in_channels=config.model.in_channels,
+                actv=make_complex_activation_from_config(config, init_layers=False),
+                **kwargs,
+            )
         case _:
-            raise ValueError(f"Unsupported model '{config.model.name}'")
+            raise ValueError(f"Unsupported model '{config.model.name}'.")
