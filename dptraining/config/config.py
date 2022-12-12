@@ -39,6 +39,7 @@ class DatasetConfig:
     normalization: bool = False
     download: Optional[bool] = False
     fft: bool = False
+    merge_labels: bool = True  # only for HAM10000
 
 
 class LoaderCollateFn(Enum):
