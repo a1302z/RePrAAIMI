@@ -315,10 +315,13 @@ def main(
         loss_fn=test_loss_fn,
     )
     if config.general.save_path:
-        print(f"Saving model to {config.general.save_path}")
-        objax.io.save_var_collection(
-            config.general.save_path + identifying_model_str, model.vars()
+        save_path = (
+            config.general.save_path.parent / config.general.save_path.stem
+            + identifying_model_str
+            + config.general.save_path.suffix
         )
+        print(f"Saving model to {config.general.save_path}")
+        objax.io.save_var_collection(save_path, model.vars())
     if config.general.log_wandb:
         run.finish()
     else:
