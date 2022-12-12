@@ -8,7 +8,7 @@ general:
   eval_train: True
   # save_path: radimagenet_resnet9.npz
   make_save_str_unique: True
-# ckpt:
+# checkpoint:
 #   logdir: radimagenet_resnet9_ckpt
 #   keep_ckpts: 10
 #   makedir: True
