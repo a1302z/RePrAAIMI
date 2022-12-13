@@ -1,0 +1,80 @@
+defaults:
+  - base_config
+  - _self_
+project: fmri
+general:
+  log_wandb: False
+  parallel: False
+  eval_train: False
+  make_save_str_unique: True
+# checkpoint:
+#   logdir: fmri_ckpts
+#   keep_ckpts: 2
+#   makedir: True
+dataset: 
+  task: reconstruction
+  name: fastmri
+  root: ./data/FastMRI/knee/data/
+  train_val_split: 0.9
+  fmri:
+    new_data_root: ./data
+    mask_type: random
+    center_fractions:
+      - 0.08
+    accelerations:
+      - 4
+    challenge: "singlecoil"
+    resolution: 320
+loader: 
+  num_workers: 16
+  prefetch_factor: 16
+  collate_fn: numpy
+model:
+  complex: True
+  name: unet
+  in_channels: 1
+  activation: cardioid
+  extra_args:
+    out_channels: 1
+    channels: 16
+optim:
+  name: nadam
+loss: 
+  type: l1
+  reduction: mean
+ema:
+  use_ema: False
+  decay: 0.999
+hyperparams:
+  epochs: 10
+  batch_size: 8
+  batch_size_test: 16
+  lr: 2e-3
+  # momentum: 0.9
+  # l2regularization: 1e-5
+  # overfit: 32
+metrics:
+  main: 
+    structural_similarity:
+      win_size: 7
+      channel_axis: 0
+      data_range: 8.48
+  logging:
+    mean_squared_error:
+    structural_similarity:
+      win_size: 7
+      channel_axis: 0
+      data_range: 8.48
+    peak_signal_noise_ratio: 
+      data_range: 8.48
+  per_batch_metrics: True
+scheduler:
+  type: reduceonplateau
+  normalize_lr: False
+  patience: 20
+  min_delta: 0.01
+  factor: 0.5
+# earlystopping:
+#   mode: maximize
+#   patience: 100
+#   min_delta: 0.01

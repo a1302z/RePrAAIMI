@@ -8,6 +8,7 @@ import numpy as np
 import wandb
 from omegaconf import OmegaConf
 from tqdm import tqdm
+from datetime import datetime
 
 sys.path.insert(0, str(Path.cwd()))
 
@@ -15,7 +16,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 # os.environ["CUDA_VISIBLE_DEVICES"] = ""
 # os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 
-from dptraining.config import Config
+from dptraining.config import Config, DatasetTask
 from dptraining.config.config_store import load_config_store
 
 # pylint:disable=import-outside-toplevel
@@ -45,6 +46,7 @@ def main(
         make_loss_from_config,
         make_scheduler_from_config,
         make_stopper_from_config,
+        make_metrics,
     )
     from dptraining.utils.augment import Transformation
     from dptraining.utils.training_utils import (
@@ -82,11 +84,21 @@ def main(
         print(f"Loading model from {config.general.use_pretrained_model}")
         objax.io.load_var_collection(config.general.use_pretrained_model, model.vars())
     model_vars = model.vars()
-    ckpt = (
-        objax.io.Checkpoint(**config["ckpt"])
-        if "ckpt" in config and config["ckpt"] is not None
-        else None
-    )
+
+    identifying_model_str = ""
+    if config.general.make_save_str_unique:
+        if config.general.log_wandb:
+            identifying_model_str += (
+                f"_{wandb.run.name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+            )
+        else:
+            identifying_model_str += f"_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+
+    if config.checkpoint:
+        config.checkpoint.logdir += identifying_model_str
+        checkpoint = objax.io.Checkpoint(**OmegaConf.to_container(config.checkpoint))
+    else:
+        checkpoint = None
 
     ema: Optional[ExponentialMovingAverage] = None
     if config.ema.use_ema:
@@ -95,16 +107,19 @@ def main(
         )
     opt = make_optim_from_config(config, model_vars)
 
+    predict_lambda = (
+        lambda x: objax.functional.softmax(  # pylint:disable=unnecessary-lambda-assignment
+            model(x, training=False)
+        )
+        if config.dataset.task == DatasetTask.classification
+        else model(x, training=False)
+    )
+
     predict_op_parallel = objax.Parallel(
-        lambda x: objax.functional.softmax(model(x, training=False)),
-        model_vars,
-        reduce=np.concatenate,
+        predict_lambda, model_vars, reduce=np.concatenate
     )
     predict_op_jit = objax.Jit(
-        lambda x: objax.functional.softmax(
-            model(x, training=False)  # pylint:disable=not-callable
-        ),
-        model_vars,
+        predict_lambda, model_vars  # pylint:disable=not-callable
     )
 
     if not config.DP:
@@ -157,8 +172,11 @@ def main(
             )
 
     loss_class = make_loss_from_config(config)
-    loss_fn = loss_class.create_loss_fn(model_vars, model)
-    loss_gv = create_loss_gradient(config, model_vars, loss_fn)
+    train_loss_fn = loss_class.create_train_loss_fn(model_vars, model)
+    test_loss_fn = loss_class.create_test_loss_fn()
+    loss_gv = create_loss_gradient(config, model_vars, train_loss_fn)
+
+    metric_fns = make_metrics(config)
 
     augmenter = Transformation.from_dict_list(
         OmegaConf.to_container(config.augmentations)
@@ -167,6 +185,13 @@ def main(
     augment_op = augmenter.create_vectorized_transform()
     if n_augmentations > 1:
         print(f"Augmentation multiplicity of {n_augmentations}")
+    if config.label_augmentations:
+        label_augmenter = Transformation.from_dict_list(
+            OmegaConf.to_container(config.label_augmentations)
+        )
+        label_augment_op = label_augmenter.create_vectorized_transform()
+    else:
+        label_augment_op = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
     # augment_op = augment_op.create_vectorized_transform()
     if config.test_augmentations:
         test_augmenter = Transformation.from_dict_list(
@@ -175,6 +200,13 @@ def main(
         test_aug = test_augmenter.create_vectorized_transform()
     else:
         test_aug = lambda x: x  # pylint:disable=unnecessary-lambda-assignment
+    if config.test_label_augmentations:
+        test_label_augmenter = Transformation.from_dict_list(
+            OmegaConf.to_container(config.test_label_augmentations)
+        )
+        test_label_aug = test_label_augmenter.create_vectorized_transform()
+    else:
+        test_label_aug = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
     scheduler = make_scheduler_from_config(config)
     stopper = make_stopper_from_config(config)
 
@@ -188,6 +220,7 @@ def main(
         loss_gv,
         opt,
         augment_op,
+        label_augment_op,
         grad_accumulation=grad_acc > 1,
         noise=total_noise,
         effective_batch_size=effective_batch_size,
@@ -228,9 +261,12 @@ def main(
                 train_loader,
                 predict_op_parallel if config.general.parallel else predict_op_jit,
                 test_aug,
+                test_label_aug,
                 model_vars,
                 config.general.parallel,
                 "train",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
             )
         if val_loader is not None:
             metric = test(
@@ -238,9 +274,12 @@ def main(
                 val_loader,
                 predict_op_parallel if config.general.parallel else predict_op_jit,
                 test_aug,
+                test_label_aug,
                 model_vars,
                 config.general.parallel,
                 "val",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
             )
             scheduler.update_score(metric)
         else:
@@ -256,19 +295,33 @@ def main(
                 wandb.log({"epsilon": epsilon})
             else:
                 print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})")
-        if ckpt is not None:
-            ckpt.save(model.vars(), idx=epoch)
+        if checkpoint is not None:
+            checkpoint.save(model.vars(), idx=epoch)
         if metric is not None and stopper(metric):
             print("Early Stopping was activated -> Stopping Training")
             break
 
     # never do test parallel as this could emit some test samples and thus distort results
     metric = test(
-        config, test_loader, predict_op_jit, test_aug, model_vars, False, "test"
+        config,
+        test_loader,
+        predict_op_jit,
+        test_aug,
+        test_label_aug,
+        model_vars,
+        False,
+        "test",
+        metrics=metric_fns,
+        loss_fn=test_loss_fn,
     )
     if config.general.save_path:
+        save_path = (
+            config.general.save_path.parent / config.general.save_path.stem
+            + identifying_model_str
+            + config.general.save_path.suffix
+        )
         print(f"Saving model to {config.general.save_path}")
-        objax.io.save_var_collection(config.general.save_path, model.vars())
+        objax.io.save_var_collection(save_path, model.vars())
     if config.general.log_wandb:
         run.finish()
     else:

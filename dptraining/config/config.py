@@ -22,12 +22,41 @@ class GeneralConfig:
     use_pretrained_model: Optional[str] = None
     save_path: Optional[str] = None
     eval_train: bool = MISSING
+    make_save_str_unique: Optional[str] = None
 
 
 class DatasetName(Enum):
     CIFAR10 = 1
     imagenet = 2
     tinyimagenet = 3
+    fastmri = 4
+    radimagenet = 5
+
+
+class DatasetTask(Enum):
+    classification = 1
+    reconstruction = 2
+    segmentation = 3
+
+
+@dataclass
+class FmriConfig:
+    mask_type: str = "random"
+    center_fractions: tuple[float] = (0.08,)
+    accelerations: tuple[float] = (4,)
+    challenge: str = "knee"
+    resolution: int = 320
+    new_data_root: Optional[str] = None
+
+
+@dataclass
+class RadimagenetConfig:
+    datasplit_seed: Optional[int] = 0
+    modality: str = "all"
+    normalize_by_modality: bool = False
+    allowed_body_regions: str = "all"
+    allowed_labels: str = "all"
+    split_folder: Optional[str] = None
 
 
 @dataclass
@@ -39,6 +68,10 @@ class DatasetConfig:
     normalization: bool = False
     download: Optional[bool] = False
     fft: bool = False
+    task: DatasetTask = MISSING
+    test_split: float = 0.1
+    radimagenet: Optional[RadimagenetConfig] = None
+    fmri: Optional[FmriConfig] = None
 
 
 class LoaderCollateFn(Enum):
@@ -68,6 +101,7 @@ class OptimConfig:
 
 class LossType(Enum):
     cse = 1
+    l1 = 2
 
 
 class LossReduction(Enum):
@@ -141,12 +175,15 @@ class Config:
     project: str = MISSING
     general: GeneralConfig = GeneralConfig()
     dataset: DatasetConfig = DatasetConfig()
+    checkpoint: dict[str, Any] = field(default_factory=dict)
     train_transforms: dict[str, Any] = field(default_factory=dict)
     test_transforms: dict[str, Any] = field(default_factory=dict)
     val_transforms: dict[str, Any] = field(default_factory=dict)
     loader: LoaderConfig = LoaderConfig()
     augmentations: dict[str, Any] = field(default_factory=dict)
     test_augmentations: dict[str, Any] = field(default_factory=dict)
+    label_augmentations: dict[str, Any] = field(default_factory=dict)
+    test_label_augmentations: dict[str, Any] = field(default_factory=dict)
     model: ModelConfig = ModelConfig()
     optim: OptimConfig = OptimConfig()
     loss: LossConfig = LossConfig()
@@ -154,4 +191,5 @@ class Config:
     hyperparams: HyperparamsConfig = HyperparamsConfig()
     earlystopping: Optional[EarlyStoppingConfig] = None
     scheduler: SchedulerConfig = SchedulerConfig()
+    metrics: dict[str, Any] = field(default_factory=dict)
     DP: Optional[DPConfig] = None

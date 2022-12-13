@@ -1,18 +1,18 @@
 defaults:
   - base_config
   - _self_
-project: tinyimagenet-dp
+project: imagenet
 general:
   log_wandb: False
   parallel: False
   eval_train: False
+  save_path: imagenet_resnet9_gn_mp.npz
+  make_save_str_unique: True
 dataset: 
   task: classification
-  name: tinyimagenet
-  root: ./data/ImageNet32
-  version: 32
-  train_val_split: 0.95
-  normalization: True
+  name: imagenet
+  root: ./data/ILSVRC2012
+  train_val_split: 0.9
 metrics:
   main: 
     accuracy_score: 
@@ -21,8 +21,18 @@ metrics:
       output_dict: True
       zero_division: 0
 train_transforms:
+  Resize: 
+      size: 224
+  RandomCrop:
+      size: 224
+  pil_to_numpy:
   numpy_img_to_chw:
 test_transforms:
+  Resize: 
+      size: 224
+  CenterCrop:
+      size: 224
+  pil_to_numpy:
   numpy_img_to_chw:
 loader:
   collate_fn: numpy
@@ -30,47 +40,58 @@ loader:
   prefetch_factor: 6
   pin_memory: True
 augmentations:
-  consecutive_augmentations:
-    multiplicity: 16
-    consecutive_augmentations:
-      random_img_shift:
-        max_shift: 4
-      random_vertical_flips:
-        flip_prob: 0.5
+  pil_to_jax:
+  normalize_jax:
+      mean:
+        - 0.485
+        - 0.456
+        - 0.406
+      std:
+        - 0.229
+        - 0.224
+        - 0.225 
+  # random_vertical_flips:
+  #     flip_prob: 0.5
+  # random_horizontal_flips:
+  #     flip_prob: 0.5
 test_augmentations:
+  pil_to_jax:
+  normalize_jax:
+      mean:
+        - 0.485
+        - 0.456
+        - 0.406
+      std:
+        - 0.229
+        - 0.224
+        - 0.225 
 optim:
   name: nadam
 loss: 
   type: cse
   reduction: sum
 model:
-  name: wide_resnet
-  depth: 40
-  width: 4
+  name: resnet9
   in_channels: 3
   num_classes: 1000
   conv: conv
   activation: mish
   normalization: gn
-  pooling: avgpool
-  scale_norm: True
+  pooling: maxpool
+  extra_args: 
+    scale_norm: True
 ema:
   use_ema: False
   decay: 0.04
 hyperparams:
   epochs: 200
-  batch_size: 32
+  batch_size: 64
   batch_size_test: 256
   lr: 1e-3
+  overfit: 20
 scheduler:
   type: reduceonplateau
   normalize_lr: False
   patience: 20
   min_delta: 0.01
   factor: 0.5
-DP:
-  epsilon: 8.0
-  max_per_sample_grad_norm: 1.0
-  delta: 8e-7
-  norm_acc: False
-  grad_acc_steps: 64

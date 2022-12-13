@@ -17,6 +17,7 @@ from dptraining.config.config import (
     SchedulerType,
     EarlyStoppingConfig,
     DPConfig,
+    DatasetTask,
 )
 
 from dptraining.config.utils import get_allowed_names, get_allowed_values

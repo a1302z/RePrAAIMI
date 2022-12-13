@@ -11,3 +11,7 @@ Environment can then be installed via `bash setup_env.sh` and activated with `co
 
 ## Contribute
 Please execute ```cp check_before_commit.sh .git/hooks/pre-commit && chmod u+x .git/hooks/pre-commit``` to ensure all commits are tested and adhere to pylint guidelines. To manually check use `bash check_before_commit.sh`.
+
+
+## Pretrained models
+We provide several pretrained models, which can be downloaded via this [link](https://syncandshare.lrz.de/getlink/fiTqfRPfJK9iTbHDWLyny3/).

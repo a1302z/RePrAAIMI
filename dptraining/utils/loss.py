@@ -1,5 +1,4 @@
 import abc
-from enum import Enum
 from typing import Callable
 from dptraining.config import Config
 from dptraining.config.config import LossReduction
@@ -8,37 +7,47 @@ import objax
 from jax import numpy as jnp
 
 
-class Reduction(Enum):
-    SUM = 0
-    MEAN = 1
-
-
 class LossFunctionCreator(abc.ABC):
     def __init__(self, config: Config) -> None:
         self._config = config.loss
 
     @abc.abstractmethod
-    def create_loss_fn(self, model_vars, model) -> Callable:
+    def create_train_loss_fn(self, model_vars, model) -> Callable:
+        pass
+
+    @abc.abstractmethod
+    def create_test_loss_fn(self) -> Callable:
         pass
 
 
 class CombinedLoss(LossFunctionCreator):
     def __init__(self, config, losses) -> None:
         super().__init__(config)
-        self._losses = losses
+        self._train_losses = losses
+        self._test_losses = losses
 
-    def create_loss_fn(self, model_vars, model):
-        self._losses = [loss.create_loss_fn(model_vars, model) for loss in self._losses]
+    def create_train_loss_fn(self, model_vars, model):
+        self._train_losses = [
+            loss.create_train_loss_fn(model_vars, model) for loss in self._train_losses
+        ]
 
         @objax.Function.with_vars(model_vars)
         def loss_fn(inpt, label):
-            return sum((l(inpt, label) for l in self._losses))
+            return sum((l(inpt, label) for l in self._train_losses))
+
+        return loss_fn
+
+    def create_test_loss_fn(self) -> Callable:
+        self._test_losses = [loss.create_test_loss_fn() for loss in self._train_losses]
+
+        def loss_fn(predicted, correct):
+            return sum((l(predicted, correct) for l in self._test_losses))
 
         return loss_fn
 
 
 class CSELogitsSparse(LossFunctionCreator):
-    def create_loss_fn(self, model_vars, model):
+    def create_train_loss_fn(self, model_vars, model):
         @objax.Function.with_vars(model_vars)
         def loss_fn(inpt, label):
             logit = model(inpt, training=True)
@@ -53,13 +62,56 @@ class CSELogitsSparse(LossFunctionCreator):
 
         return loss_fn
 
+    def create_test_loss_fn(self):
+        def loss_fn(predicted, correct):
+            loss = objax.functional.loss.cross_entropy_logits_sparse(predicted, correct)
+            match self._config.reduction:
+                case LossReduction.sum:
+                    return loss.sum()
+                case LossReduction.mean:
+                    return loss.mean()
+                case _ as reduction:
+                    raise RuntimeError(f"Not supported loss reduction: {reduction}")
+
+        return loss_fn
+
+
+class L1Loss(LossFunctionCreator):
+    def create_train_loss_fn(self, model_vars, model):
+        @objax.Function.with_vars(model_vars)
+        def loss_fn(inpt, label):
+            logit = model(inpt, training=True)
+            loss = objax.functional.loss.mean_absolute_error(logit, label)
+            match self._config.reduction:
+                case LossReduction.sum:
+                    return loss.sum()
+                case LossReduction.mean:
+                    return loss.mean()
+                case _ as reduction:
+                    raise RuntimeError(f"Not supported loss reduction: {reduction}")
+
+        return loss_fn
+
+    def create_test_loss_fn(self):
+        def loss_fn(predicted, correct):
+            loss = objax.functional.loss.mean_absolute_error(predicted, correct)
+            match self._config.reduction:
+                case LossReduction.sum:
+                    return loss.sum()
+                case LossReduction.mean:
+                    return loss.mean()
+                case _ as reduction:
+                    raise RuntimeError(f"Not supported loss reduction: {reduction}")
+
+        return loss_fn
+
 
 class L2Regularization(LossFunctionCreator):
     def __init__(self, config: Config) -> None:
         super().__init__(config)
         self._regularization = config.hyperparams.l2regularization
 
-    def create_loss_fn(self, model_vars, model):
+    def create_train_loss_fn(self, model_vars, model):
         @objax.Function.with_vars(model_vars)
         def loss_fn(*_):
             return (
@@ -75,3 +127,6 @@ class L2Regularization(LossFunctionCreator):
             )
 
         return loss_fn
+
+    def create_test_loss_fn(self, _, __) -> Callable:
+        return 0

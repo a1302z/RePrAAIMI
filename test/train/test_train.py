@@ -15,13 +15,21 @@ def test_train_cifar_one_batch(utils):
         "project": "test",
         "general": {"log_wandb": False, "cpu": True, "eval_train": False},
         "loader": {"num_workers": 2, "collate_fn": "numpy"},
-        "model": {"name": "cifar10model", "num_classes": 10},
+        "model": {
+            "name": "cifar10model",
+            "num_classes": 10,
+        },
         "augmentations": {
             "random_vertical_flips": None,
             "random_horizontal_flips": None,
             "random_img_shift": None,
         },
-        "dataset": {"name": "CIFAR10", "root": "./data", "train_val_split": 0.9},
+        "dataset": {
+            "name": "CIFAR10",
+            "root": "./data",
+            "train_val_split": 0.9,
+            "task": "classification",
+        },
         "optim": {"name": "momentum", "args": {"momentum": 0.5}},
         "loss": {"type": "cse", "reduction": "mean"},
         "hyperparams": {
@@ -37,6 +45,13 @@ def test_train_cifar_one_batch(utils):
             "max_per_sample_grad_norm": 10.0,
             "delta": 1e-5,
             "norm_acc": False,
+        },
+        "metrics": {
+            "main": {"accuracy_score": None},
+            "logging": {
+                "classification_report": {"output_dict": True, "zero_division": 0}
+            },
+            # "per_batch_metrics": False,
         },
     }
     config = utils.extend_base_config(config_dict)

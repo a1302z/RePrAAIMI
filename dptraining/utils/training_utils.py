@@ -1,6 +1,7 @@
 import wandb
 import time
 import contextlib
+from typing import Callable
 
 import numpy as np
 
@@ -9,12 +10,11 @@ import sys
 
 from jax import numpy as jn, local_device_count
 from pathlib import Path
-from sklearn import metrics
 from tqdm import tqdm
 
 sys.path.insert(0, str(Path.cwd()))
 
-from dptraining.config import Config
+from dptraining.config import Config, DatasetTask
 from dptraining.privacy import ClipAndAccumulateGrads
 
 N_DEVICES = local_device_count()
@@ -25,6 +25,7 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
     grad_calc,
     opt,
     augment_op,
+    label_op,
     grad_accumulation: bool,
     noise: float,
     effective_batch_size: int,
@@ -38,6 +39,7 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
         @objax.Function.with_vars(train_vars)
         def calc_grads(image_batch, label_batch):
             image_batch = augment_op(image_batch)
+            label_batch = label_op(label_batch)
             if n_augmentations > 1:
                 if image_batch.shape[1] != n_augmentations:
                     raise RuntimeError(
@@ -108,6 +110,7 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
         ):
             # assert image_batch.shape[0] == effective_batch_size
             image_batch = augment_op(image_batch)
+            label_batch = label_op(label_batch)
             if n_augmentations > 1:
                 label_batch = jn.repeat(
                     label_batch[:, jn.newaxis], n_augmentations, axis=1
@@ -223,19 +226,55 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
     return time.time() - start_time
 
 
-def test(  # pylint:disable=too-many-arguments
+def calculate_metrics(task, metrics, loss_fn, correct, predicted):
+    loss = loss_fn(predicted, correct).item()
+    if task == DatasetTask.classification:
+        predicted = predicted.argmax(axis=1)
+    correct, predicted = correct.squeeze(), predicted.squeeze()
+    if np.iscomplexobj(correct):
+        correct = np.abs(correct)
+    if np.iscomplexobj(predicted):
+        predicted = np.abs(predicted)
+
+    main_metric_fn, logging_fns = metrics
+    main_metric = (
+        main_metric_fn[0],
+        loss
+        if main_metric_fn[0] == "loss" and main_metric_fn[1] is None
+        else main_metric_fn[1](correct, predicted),
+    )
+    logging_metrics = {
+        func_name: lfn(correct, predicted) for func_name, lfn in logging_fns.items()
+    }
+    if main_metric[0] != "loss":
+        logging_metrics["loss"] = loss
+    logging_metrics[f"{main_metric[0]}"] = main_metric[1]
+    return main_metric, logging_metrics
+
+
+def test(  # pylint:disable=too-many-arguments,too-many-branches
     config: Config,
     test_loader,
     predict_op,
     test_aug,
+    test_label_aug,
     model_vars,
     parallel,
     dataset_split: str,
-    score_fn=metrics.accuracy_score,
+    metrics: tuple,
+    loss_fn: Callable,
 ):
     ctx_mngr = (model_vars).replicate() if parallel else contextlib.suppress()
+    per_batch_metrics = (
+        config.metrics.per_batch_metrics
+        if "per_batch_metrics" in config.metrics
+        else False
+    )
+    if per_batch_metrics:
+        main_metric_list, logging_metric_list = [], []
+    else:
+        correct, scores = [], []
     with ctx_mngr:
-        correct, predicted = [], []
         max_batches = (
             config.hyperparams.overfit
             if config.hyperparams.overfit is not None
@@ -248,32 +287,52 @@ def test(  # pylint:disable=too-many-arguments
             leave=False,
         ):
             image = test_aug(image)
+            label = test_label_aug(label)
             n_images = image.shape[0]
             if parallel and not (n_images % N_DEVICES) == 0:
                 max_samples = n_images - (n_images % N_DEVICES)
                 image = image[:max_samples]
                 label = label[:max_samples]
             y_pred = predict_op(image)
-            correct.append(label)
-            predicted.append(y_pred)
+            y_pred, label = np.array(y_pred), np.array(label)
+            if per_batch_metrics:
+                main_metric_batch, logging_metric_batch = calculate_metrics(
+                    config.dataset.task, metrics, loss_fn, label, y_pred
+                )
+                main_metric_list.append(main_metric_batch)
+                logging_metric_list.append(logging_metric_batch)
+            else:
+                correct.append(label)
+                scores.append(y_pred)
             if i + 1 >= max_batches:
                 break
-    correct = np.concatenate(correct)
-    predicted = np.concatenate(predicted).argmax(axis=1)
-
-    if config.general.log_wandb:
-        wandb.log(
-            {
-                dataset_split: metrics.classification_report(
-                    correct, predicted, output_dict=True, zero_division=0
-                )
-            }
+    if per_batch_metrics:
+        main_metric = (
+            metrics[0][0],
+            np.mean([batch_metric[1] for batch_metric in main_metric_list]),
+        )
+        logging_metrics = summarise_batch_metrics(
+            metrics[1].keys(), logging_metric_list
         )
     else:
-        print(f"{dataset_split} evaluation:")
-        print(
-            metrics.classification_report(
-                correct, predicted, output_dict=False, zero_division=0
-            )
+        correct = np.concatenate(correct)
+        predicted = np.concatenate(scores)
+        main_metric, logging_metrics = calculate_metrics(
+            config.dataset.task, metrics, loss_fn, correct, predicted
         )
-    return score_fn(correct, predicted)
+
+    if config.general.log_wandb:
+        if config.general.log_wandb:
+            wandb.log({dataset_split: logging_metrics})
+    else:
+        print(f"{dataset_split} evaluation:")
+        for name, value in logging_metrics.items():
+            print(f"\t{name}: {value}")
+    return main_metric[1]
+
+
+def summarise_batch_metrics(metric_names, metric_list):
+    return {
+        func_name: np.mean([metric[func_name] for metric in metric_list])
+        for func_name in metric_names
+    }

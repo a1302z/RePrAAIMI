@@ -1,0 +1,84 @@
+defaults:
+  - base_config
+  - _self_
+project: radimagenet
+general:
+  log_wandb: False
+  parallel: False
+  eval_train: True
+  # save_path: radimagenet_resnet9.npz
+  make_save_str_unique: True
+# checkpoint:
+#   logdir: radimagenet_resnet9_ckpt
+#   keep_ckpts: 10
+#   makedir: True
+dataset: 
+  name: radimagenet
+  task: classification
+  root: ./data/radiology_ai
+  train_val_split: 0.8
+  test_split: 0.1
+  radimagenet:
+    normalize_by_modality: True
+    datasplit_seed: 0
+    modality: all
+    allowed_body_regions: all
+    allowed_labels: all
+loader: 
+  num_workers: 16
+  prefetch_factor: 16
+  collate_fn: numpy
+  pin_memory: True
+augmentations:
+  normalize_jax:
+      mean:
+        - 0.22039941
+      std:
+        - 0.24865805
+test_augmentations:
+  normalize_jax:
+      mean:
+        - 0.22039941
+      std:
+        - 0.24865805
+model:
+  name: resnet9
+  in_channels: 1
+  num_classes: 165
+  conv: conv
+  activation: mish
+  normalization: gn
+  pooling: maxpool
+  # scale_norm: True
+optim:
+  name: nadam
+ema:
+  use_ema: True
+  decay: 0.995
+hyperparams:
+  epochs: 10
+  batch_size: 60
+  batch_size_test: 128
+  lr: 2e-3
+  overfit: 10
+  # momentum: 0.9
+metrics:
+  main: 
+    accuracy_score: 
+  logging:
+    classification_report:
+      output_dict: True
+      zero_division: 0
+loss: 
+  type: cse
+  reduction: sum
+scheduler:
+  type: reduceonplateau
+  normalize_lr: False
+  patience: 5
+  min_delta: 0.01
+  factor: 0.9
+earlystopping:
+  mode: maximize
+  patience: 100
+  min_delta: 0.01

@@ -13,6 +13,9 @@ from dptraining.models.complex.normalization import (
 from dptraining.models.complex.layers import (
     ComplexConv2D,
     ComplexWSConv2D,
+    ComplexConv2DTranspose,
+    ComplexWSConv2DTranspose,
+    ComplexWSConv2DNoWhitenTranspose,
     ComplexLinear,
 )
-from dptraining.models.complex.pooling import ConjugateMaxPool2D, SeparableMaxPool2D
+from dptraining.models.complex.pooling import ConjugatePool2D, SeparablePool2D
