@@ -12,6 +12,7 @@ from dptraining.utils.loss import (
     CombinedLoss,
     L1Loss,
     L2Regularization,
+    SigmoidCrossEntropy,
 )
 from dptraining.config import Config, SchedulerType, LossType
 from dptraining.utils.scheduler import (
@@ -55,6 +56,8 @@ def make_loss_from_config(config: Config):  # pylint:disable=unused-argument
             loss_fn = CSELogitsSparse(config)
         case LossType.l1:
             loss_fn = L1Loss(config)
+        case LossType.binary:
+            loss_fn = SigmoidCrossEntropy(config)
     if config.hyperparams.l2regularization and config.hyperparams.l2regularization > 0:
         regularization = L2Regularization(config)
         loss_fn = CombinedLoss(config, [loss_fn, regularization])

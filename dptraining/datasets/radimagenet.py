@@ -218,7 +218,7 @@ class RadImageNet(Dataset):
     def __init__(
         self,
         root_dir: Union[str, Path],
-        task: DatasetTask = DatasetTask.classification,
+        task: DatasetTask = DatasetTask.multi_class_classification,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
         modality: str = "all",  # pylint:disable=redefined-outer-name

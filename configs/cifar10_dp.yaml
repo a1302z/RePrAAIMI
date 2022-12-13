@@ -13,7 +13,7 @@ general:
 #   keep_ckpts: 2
 #   makedir: True
 dataset: 
-  task: classification
+  task: multi_class_classification
   name: CIFAR10
   root: ./data
   train_val_split: 0.9

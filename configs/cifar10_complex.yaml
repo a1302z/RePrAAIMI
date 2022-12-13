@@ -7,7 +7,7 @@ general:
   parallel: False
   eval_train: True
 dataset: 
-  task: classification
+  task: multi_class_classification
   name: CIFAR10
   root: ./data
   train_val_split: 0.9

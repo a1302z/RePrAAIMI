@@ -14,7 +14,7 @@ general:
 #   makedir: True
 dataset: 
   name: radimagenet
-  task: classification
+  task: multi_class_classification
   root: ./data/radiology_ai
   train_val_split: 0.8
   test_split: 0.1

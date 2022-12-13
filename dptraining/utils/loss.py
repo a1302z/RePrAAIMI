@@ -76,6 +76,40 @@ class CSELogitsSparse(LossFunctionCreator):
         return loss_fn
 
 
+class SigmoidCrossEntropy(LossFunctionCreator):
+    def create_train_loss_fn(self, model_vars, model):
+        @objax.Function.with_vars(model_vars)
+        def loss_fn(inpt, label):
+            logit = model(inpt, training=True)
+            loss = objax.functional.loss.sigmoid_cross_entropy_logits(
+                logit.squeeze(), label
+            )
+            match self._config.reduction:
+                case LossReduction.sum:
+                    return loss.sum()
+                case LossReduction.mean:
+                    return loss.mean()
+                case _ as unsupported:
+                    raise RuntimeError(f"Unsupported loss reduction '{unsupported}'")
+
+        return loss_fn
+
+    def create_test_loss_fn(self):
+        def loss_fn(predicted, correct):
+            loss = objax.functional.loss.sigmoid_cross_entropy_logits(
+                predicted, correct
+            )
+            match self._config.reduction:
+                case LossReduction.sum:
+                    return loss.sum()
+                case LossReduction.mean:
+                    return loss.mean()
+                case _ as reduction:
+                    raise RuntimeError(f"Not supported loss reduction: {reduction}")
+
+        return loss_fn
+
+
 class L1Loss(LossFunctionCreator):
     def create_train_loss_fn(self, model_vars, model):
         @objax.Function.with_vars(model_vars)

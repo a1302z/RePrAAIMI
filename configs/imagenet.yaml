@@ -9,7 +9,7 @@ general:
   save_path: imagenet_resnet9_gn_mp.npz
   make_save_str_unique: True
 dataset: 
-  task: classification
+  task: multi_class_classification
   name: imagenet
   root: ./data/ILSVRC2012
   train_val_split: 0.9

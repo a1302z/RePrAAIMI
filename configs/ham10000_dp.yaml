@@ -15,7 +15,7 @@ general:
 #   makedir: True
 dataset: 
   name: ham10000
-  task: classification
+  task: binary_classification
   root: ./data/dataverse_files
   train_val_split: 0.8
   test_split: 0.1

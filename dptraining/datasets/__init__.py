@@ -44,10 +44,10 @@ def select_creator(config):
 def modify_collate_fn_config(loader_config, task):
 
     if "collate_fn" in loader_config:
-        if (
-            loader_config["collate_fn"] == LoaderCollateFn.numpy
-            and task == DatasetTask.classification
-        ):
+        if loader_config["collate_fn"] == LoaderCollateFn.numpy and task in [
+            DatasetTask.multi_class_classification,
+            DatasetTask.binary_classification,
+        ]:
             loader_config["collate_fn"] = collate_np_classification
         elif (
             loader_config["collate_fn"] == LoaderCollateFn.numpy

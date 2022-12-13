@@ -35,9 +35,10 @@ class DatasetName(Enum):
 
 
 class DatasetTask(Enum):
-    classification = 1
-    reconstruction = 2
-    segmentation = 3
+    binary_classification = 1
+    multi_class_classification = 2
+    reconstruction = 3
+    segmentation = 4
 
 
 @dataclass
@@ -109,6 +110,7 @@ class OptimConfig:
 class LossType(Enum):
     cse = 1
     l1 = 2
+    binary = 3
 
 
 class LossReduction(Enum):
