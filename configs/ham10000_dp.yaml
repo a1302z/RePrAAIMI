@@ -7,7 +7,8 @@ general:
   parallel: False
   eval_train: True
   # save_path: 
-  make_save_str_unique: True
+  # make_save_str_unique: True
+  # use_pretrained_model: radimagenet_resnet9_gn_maxpool.npz
 # ckpt:
 #   logdir: _resnet9_ckpt
 #   keep_ckpts: 10
@@ -61,12 +62,13 @@ test_augmentations:
         - 0.1766
 model:
   name: resnet9
-  in_channels: 3
-  num_classes: 165
   conv: conv
   activation: mish
   normalization: gn
   pooling: maxpool
+  pretrained_model_changes:
+    in_channels: 3
+    num_classes: 1
   extra_args: 
     scale_norm: True
 optim:
@@ -107,4 +109,4 @@ DP:
   max_per_sample_grad_norm: 1.0
   delta: 8e-7
   norm_acc: False
-  grad_acc_steps: 66
+  grad_acc_steps: 1

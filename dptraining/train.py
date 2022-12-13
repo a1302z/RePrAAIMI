@@ -38,7 +38,10 @@ def main(
     from torch.random import manual_seed as torch_manual_seed
 
     from dptraining.datasets import make_loader_from_config
-    from dptraining.models import make_model_from_config
+    from dptraining.models import (
+        make_model_from_config,
+        modify_architecture_from_pretrained_model,
+    )
     from dptraining.optim import make_optim_from_config
     from dptraining.privacy import EpsCalculator
     from dptraining.utils import (
@@ -79,10 +82,20 @@ def main(
     if config.hyperparams.overfit is not None:
         val_loader = train_loader
         test_loader = train_loader
-    model: Callable = make_model_from_config(config)
     if config.general.use_pretrained_model is not None:
         print(f"Loading model from {config.general.use_pretrained_model}")
-        objax.io.load_var_collection(config.general.use_pretrained_model, model.vars())
+        if config.model.pretrained_model_changes is not None:
+            model = make_model_from_config(config.model)
+            objax.io.load_var_collection(
+                config.general.use_pretrained_model, model.vars()
+            )
+            modify_architecture_from_pretrained_model(config, model)
+        else:  # assuming pretrained model is exactly like current model
+            objax.io.load_var_collection(
+                config.general.use_pretrained_model, model.vars()
+            )
+    else:
+        model: Callable = make_model_from_config(config.model)
     model_vars = model.vars()
 
     identifying_model_str = ""

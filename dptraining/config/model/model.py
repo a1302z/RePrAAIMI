@@ -112,6 +112,12 @@ class ComplexPooling(Enum):
 
 
 @dataclass
+class PretrainChanges:
+    in_channels: int = MISSING
+    num_classes: int = MISSING
+
+
+@dataclass
 class ModelConfig:
     name: ModelName = MISSING
     ensemble: Optional[int] = None
@@ -122,4 +128,5 @@ class ModelConfig:
     activation: Optional[Activation] = None
     normalization: Optional[Normalization] = None
     pooling: Pooling = MISSING
+    pretrained_model_changes: Optional[PretrainChanges] = None
     extra_args: Optional[dict[str, Any]] = None
