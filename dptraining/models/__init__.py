@@ -417,8 +417,7 @@ def make_complex_model_from_config(config: ModelConfig) -> Callable:
 
 
 def modify_architecture_from_pretrained_model(config: Config, model: Callable):
-    if config.model.pretrained_model_changes.only_finetune:
-        model_vars = {}
+    model_vars = {}
     if config.model.in_channels != config.model.pretrained_model_changes.in_channels:
         if config.model.complex:
             new_layer = make_complex_conv_from_config(config.model)
