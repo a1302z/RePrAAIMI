@@ -8,7 +8,7 @@ general:
   eval_train: True
   # save_path: 
   # make_save_str_unique: True
-  # use_pretrained_model: radimagenet_resnet9_gn_maxpool.npz
+  use_pretrained_model: radimagenet_resnet9_gn_maxpool.npz
 # ckpt:
 #   logdir: _resnet9_ckpt
 #   keep_ckpts: 10
@@ -63,14 +63,17 @@ test_augmentations:
 model:
   name: resnet9
   conv: conv
+  in_channels: 1
+  num_classes: 165
   activation: mish
   normalization: gn
   pooling: maxpool
   pretrained_model_changes:
     in_channels: 3
     num_classes: 1
-  extra_args: 
-    scale_norm: True
+    only_finetune: True
+  # extra_args: 
+  #   scale_norm: True
 optim:
   name: nadam
 ema:
@@ -78,7 +81,7 @@ ema:
   decay: 0.995
 hyperparams:
   epochs: 50
-  batch_size: 60
+  batch_size: 64
   batch_size_test: 128
   lr: 2e-3
   # overfit: 10
@@ -92,7 +95,7 @@ metrics:
       zero_division: 0
     accuracy_score: 
 loss: 
-  type: cse
+  type: binary
   reduction: sum
 scheduler:
   type: reduceonplateau

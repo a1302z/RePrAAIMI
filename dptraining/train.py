@@ -84,19 +84,15 @@ def main(
         test_loader = train_loader
     if config.general.use_pretrained_model is not None:
         print(f"Loading model from {config.general.use_pretrained_model}")
+        model = make_model_from_config(config.model)
+        objax.io.load_var_collection(config.general.use_pretrained_model, model.vars())
         if config.model.pretrained_model_changes is not None:
-            model = make_model_from_config(config.model)
-            objax.io.load_var_collection(
-                config.general.use_pretrained_model, model.vars()
-            )
-            modify_architecture_from_pretrained_model(config, model)
+            model_vars = modify_architecture_from_pretrained_model(config, model)
         else:  # assuming pretrained model is exactly like current model
-            objax.io.load_var_collection(
-                config.general.use_pretrained_model, model.vars()
-            )
+            model_vars = model.vars()
     else:
         model: Callable = make_model_from_config(config.model)
-    model_vars = model.vars()
+        model_vars = model.vars()
 
     identifying_model_str = ""
     if config.general.make_save_str_unique:

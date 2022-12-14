@@ -4,7 +4,7 @@ from copy import deepcopy
 from functools import partial
 from typing import Callable
 
-from objax import functional, nn
+from objax import functional, nn, VarCollection
 from omegaconf import OmegaConf
 
 from dptraining.config import Config, ModelConfig, get_allowed_values
@@ -417,6 +417,8 @@ def make_complex_model_from_config(config: ModelConfig) -> Callable:
 
 
 def modify_architecture_from_pretrained_model(config: Config, model: Callable):
+    if config.model.pretrained_model_changes.only_finetune:
+        model_vars = {}
     if config.model.in_channels != config.model.pretrained_model_changes.in_channels:
         if config.model.complex:
             new_layer = make_complex_conv_from_config(config.model)
@@ -427,6 +429,8 @@ def modify_architecture_from_pretrained_model(config: Config, model: Callable):
             config.model.in_channels,
             k=1,
         )
+        for k, v in new_layer.vars().items():
+            model_vars[f"adaptchannellayer_{k}"] = v
         match config.model.name:
             case ModelName.resnet9:
                 model.conv1 = nn.Sequential([new_layer, model.conv1])
@@ -441,24 +445,35 @@ def modify_architecture_from_pretrained_model(config: Config, model: Callable):
             new_layer = nn.Linear
         match config.model.name:
             case ModelName.resnet9:
-                model.classifier = new_layer(
+                new_layer = new_layer(
                     model.classifier.linr.shape[0]
                     if config.model.complex
                     else model.classifier.w.shape[0],
                     config.model.pretrained_model_changes.num_classes,
                 )
+                model.classifier = new_layer
             case ModelName.smoothnet:
-                model.fc3 = new_layer(
+                new_layer = new_layer(
                     128, config.model.pretrained_model_changes.num_classes
                 )
+                model.fc3 = new_layer
             case ModelName.wide_resnet:
-                model[-1] = new_layer(
+                new_layer = new_layer(
                     model[-1].shape[0]
                     if config.model.complex
                     else model[-1].w.shape[0],
                     config.model.pretrained_model_changes.num_classes,
                 )
+                model[-1] = new_layer
             case other:
                 raise ValueError(
                     f"Change of number of out classes not yet supported for {other}"
                 )
+
+        for k, v in new_layer.vars().items():
+            model_vars[f"class_fc_{k}"] = v
+    if config.model.pretrained_model_changes.only_finetune:
+        model_vars = VarCollection(**model_vars)
+    else:
+        model_vars = model.vars()
+    return model_vars

@@ -115,6 +115,7 @@ class ComplexPooling(Enum):
 class PretrainChanges:
     in_channels: int = MISSING
     num_classes: int = MISSING
+    only_finetune: bool = False
 
 
 @dataclass
