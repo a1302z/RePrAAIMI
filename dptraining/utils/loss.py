@@ -97,7 +97,7 @@ class SigmoidCrossEntropy(LossFunctionCreator):
     def create_test_loss_fn(self):
         def loss_fn(predicted, correct):
             loss = objax.functional.loss.sigmoid_cross_entropy_logits(
-                predicted, correct
+                predicted.squeeze(), correct
             )
             match self._config.reduction:
                 case LossReduction.sum:
