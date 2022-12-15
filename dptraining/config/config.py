@@ -168,6 +168,11 @@ class EarlyStoppingConfig:
 
 
 @dataclass
+class UnfreezingSchedule:
+    trigger_points: list[int] = MISSING
+
+
+@dataclass
 class DPConfig:
     epsilon: float = MISSING
     max_per_sample_grad_norm: float = MISSING
@@ -200,5 +205,6 @@ class Config:
     hyperparams: HyperparamsConfig = HyperparamsConfig()
     earlystopping: Optional[EarlyStoppingConfig] = None
     scheduler: SchedulerConfig = SchedulerConfig()
+    unfreeze_schedule: Optional[UnfreezingSchedule] = None
     metrics: dict[str, Any] = field(default_factory=dict)
     DP: Optional[DPConfig] = None

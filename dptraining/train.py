@@ -58,6 +58,7 @@ def main(
         test,
         train,
     )
+    from dptraining.utils.gradual_unfreezing import make_unfreezing_schedule
 
     np.random.seed(config.general.seed)
     objax.random.DEFAULT_GENERATOR.seed(config.general.seed)
@@ -94,6 +95,14 @@ def main(
         model: Callable = make_model_from_config(config.model)
         model_vars = model.vars()
 
+    if config.unfreeze_schedule is not None:
+        unfreeze_schedule = make_unfreezing_schedule(
+            config.model.name, config.unfreeze_schedule.trigger_points, model_vars
+        )
+        model_vars = unfreeze_schedule(0)
+    else:
+        unfreeze_schedule = lambda _: model_vars
+
     identifying_model_str = ""
     if config.general.make_save_str_unique:
         if config.general.log_wandb:
@@ -109,13 +118,6 @@ def main(
     else:
         checkpoint = None
 
-    ema: Optional[ExponentialMovingAverage] = None
-    if config.ema.use_ema:
-        ema = ExponentialMovingAverage(
-            model_vars, config.ema.decay, update_every=config.ema.update_every
-        )
-    opt = make_optim_from_config(config, model_vars)
-
     if config.dataset.task == DatasetTask.multi_class_classification:
         predict_lambda = lambda x: objax.functional.softmax(  # pylint:disable=unnecessary-lambda-assignment
             model(x, training=False)
@@ -128,10 +130,10 @@ def main(
         predict_lambda = lambda x: model(x, training=False)
 
     predict_op_parallel = objax.Parallel(
-        predict_lambda, model_vars, reduce=np.concatenate
+        predict_lambda, model.vars(), reduce=np.concatenate
     )
     predict_op_jit = objax.Jit(
-        predict_lambda, model_vars  # pylint:disable=not-callable
+        predict_lambda, model.vars()  # pylint:disable=not-callable
     )
 
     if not config.DP:
@@ -183,11 +185,6 @@ def main(
                 f"the number of gradient accumulation steps ({grad_acc})"
             )
 
-    loss_class = make_loss_from_config(config)
-    train_loss_fn = loss_class.create_train_loss_fn(model_vars, model)
-    test_loss_fn = loss_class.create_test_loss_fn()
-    loss_gv = create_loss_gradient(config, model_vars, train_loss_fn)
-
     metric_fns = make_metrics(config)
 
     augmenter = Transformation.from_dict_list(
@@ -221,25 +218,43 @@ def main(
         test_label_aug = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
     scheduler = make_scheduler_from_config(config)
     stopper = make_stopper_from_config(config)
+    loss_class = make_loss_from_config(config)
+    test_loss_fn = loss_class.create_test_loss_fn()
 
-    train_vars = (
-        model_vars + loss_gv.vars() + opt.vars() + objax.random.DEFAULT_GENERATOR.vars()
-    )
-    if ema is not None:
-        train_vars += ema.vars()
-    train_op = create_train_op(
-        train_vars,
-        loss_gv,
-        opt,
-        augment_op,
-        label_augment_op,
-        grad_accumulation=grad_acc > 1,
-        noise=total_noise,
-        effective_batch_size=effective_batch_size,
-        n_augmentations=n_augmentations,
-        parallel=config.general.parallel,
-        ema=ema,
-    )
+    def make_train_op(model_vars):
+        ema: Optional[ExponentialMovingAverage] = None
+        if config.ema.use_ema:
+            ema = ExponentialMovingAverage(
+                model_vars, config.ema.decay, update_every=config.ema.update_every
+            )
+        opt = make_optim_from_config(config, model_vars)
+        train_loss_fn = loss_class.create_train_loss_fn(model_vars, model)
+        loss_gv = create_loss_gradient(config, model_vars, train_loss_fn)
+        train_vars = (
+            model_vars
+            + loss_gv.vars()
+            + opt.vars()
+            + objax.random.DEFAULT_GENERATOR.vars()
+        )
+        if ema is not None:
+            train_vars += ema.vars()
+        train_op = create_train_op(
+            train_vars,
+            loss_gv,
+            opt,
+            augment_op,
+            label_augment_op,
+            grad_accumulation=grad_acc > 1,
+            noise=total_noise,
+            effective_batch_size=effective_batch_size,
+            n_augmentations=n_augmentations,
+            parallel=config.general.parallel,
+            ema=ema,
+        )
+
+        return train_op, train_vars
+
+    train_op, train_vars = make_train_op(model_vars)
 
     epoch_time = []
     epoch_iter: Iterable
@@ -274,7 +289,7 @@ def main(
                 predict_op_parallel if config.general.parallel else predict_op_jit,
                 test_aug,
                 test_label_aug,
-                model_vars,
+                model.vars(),
                 config.general.parallel,
                 "train",
                 metrics=metric_fns,
@@ -287,7 +302,7 @@ def main(
                 predict_op_parallel if config.general.parallel else predict_op_jit,
                 test_aug,
                 test_label_aug,
-                model_vars,
+                model.vars(),
                 config.general.parallel,
                 "val",
                 metrics=metric_fns,
@@ -307,6 +322,9 @@ def main(
                 wandb.log({"epsilon": epsilon})
             else:
                 print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})")
+        if config.unfreeze_schedule is not None:
+            model_vars = unfreeze_schedule(epoch + 1)
+            train_op, train_vars = make_train_op(model_vars)
         if checkpoint is not None:
             checkpoint.save(model.vars(), idx=epoch)
         if metric is not None and stopper(metric):
@@ -320,7 +338,7 @@ def main(
         predict_op_jit,
         test_aug,
         test_label_aug,
-        model_vars,
+        model.vars(),
         False,
         "test",
         metrics=metric_fns,
