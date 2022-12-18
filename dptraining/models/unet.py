@@ -34,6 +34,10 @@ class Unet(Module):
         channels: int = 32,
         num_pool_layers: int = 4,
         actv=Cardioid,
+        conv_layer: Module = ComplexConv2D,
+        upconv_layer: Module = ComplexWSConv2DNoWhitenTranspose,
+        norm_layer: Module = ComplexGroupNorm2DWhitening,
+        pool_fn=SeparablePool2D,
     ):
         """
         Args:
@@ -51,33 +55,59 @@ class Unet(Module):
         self.num_pool_layers = num_pool_layers
 
         self.down_sample_layers = nn.Sequential(
-            [ConvBlock(in_channels, channels, actv)]
+            [
+                ConvBlock(
+                    in_channels,
+                    channels,
+                    actv,
+                    conv_layer=conv_layer,
+                    norm_layer=norm_layer,
+                )
+            ]
         )
         ch = channels
         for _ in range(num_pool_layers - 1):
-            self.down_sample_layers.append(ConvBlock(ch, ch * 2, actv))
+            self.down_sample_layers.append(
+                ConvBlock(
+                    ch, ch * 2, actv, conv_layer=conv_layer, norm_layer=norm_layer
+                )
+            )
             ch *= 2
-        self.conv = ConvBlock(ch, ch * 2, actv)
+        self.conv = ConvBlock(
+            ch, ch * 2, actv, conv_layer=conv_layer, norm_layer=norm_layer
+        )
 
         self.up_conv = nn.Sequential()
         self.up_transpose_conv = nn.Sequential()
         for _ in range(num_pool_layers - 1):
-            self.up_transpose_conv.append(TransposeConvBlock(ch * 2, ch, actv))
-            self.up_conv.append(ConvBlock(ch * 2, ch, actv))
+            self.up_transpose_conv.append(
+                TransposeConvBlock(
+                    ch * 2, ch, actv, conv_layer=upconv_layer, norm_layer=norm_layer
+                )
+            )
+            self.up_conv.append(
+                ConvBlock(
+                    ch * 2, ch, actv, conv_layer=conv_layer, norm_layer=norm_layer
+                )
+            )
             ch //= 2
 
-        self.up_transpose_conv.append(TransposeConvBlock(ch * 2, ch, actv))
+        self.up_transpose_conv.append(
+            TransposeConvBlock(
+                ch * 2, ch, actv, conv_layer=upconv_layer, norm_layer=norm_layer
+            )
+        )
         self.up_conv.append(
             nn.Sequential(
                 [
-                    ConvBlock(ch * 2, ch, actv),
-                    ComplexConv2D(ch, self.out_channels, k=1, strides=1, padding=0),
+                    ConvBlock(
+                        ch * 2, ch, actv, conv_layer=conv_layer, norm_layer=norm_layer
+                    ),
+                    conv_layer(ch, self.out_channels, k=1, strides=1, padding=0),
                 ],
             )
         )
-        self.pool = SeparablePool2D(
-            size=2, strides=2, padding=0, pool_func=average_pool_2d
-        )
+        self.pool = pool_fn(size=2, strides=2, padding=0)
 
     def __call__(self, image, **kwargs):
         """
@@ -129,6 +159,8 @@ class ConvBlock(Module):
         in_channels: int,
         out_chans: int,
         actv: Module,
+        conv_layer: Module = ComplexConv2D,
+        norm_layer: Module = ComplexGroupNorm2DWhitening,
     ):
         """
         Args:
@@ -143,16 +175,16 @@ class ConvBlock(Module):
 
         self.layers = nn.Sequential(
             [
-                ComplexConv2D(
+                conv_layer(
                     in_channels,
                     out_chans,
                     k=3,
                     padding=1,
                 ),
-                ComplexGroupNorm2DWhitening(nin=out_chans, groups=16),
+                norm_layer(nin=out_chans, groups=16),
                 actv(),
-                ComplexConv2D(out_chans, out_chans, k=3, padding=1),
-                ComplexGroupNorm2DWhitening(nin=out_chans, groups=out_chans),
+                conv_layer(out_chans, out_chans, k=3, padding=1),
+                norm_layer(nin=out_chans, groups=out_chans),
                 actv(),
             ]
         )
@@ -174,7 +206,14 @@ class TransposeConvBlock(Module):
     layers followed by instance normalization and LeakyReLU activation.
     """
 
-    def __init__(self, in_chans: int, out_chans: int, actv: Module):
+    def __init__(
+        self,
+        in_chans: int,
+        out_chans: int,
+        actv: Module,
+        conv_layer: Module = ComplexWSConv2DNoWhitenTranspose,
+        norm_layer: Module = ComplexGroupNorm2DWhitening,
+    ):
         """
         Args:
             in_chans: Number of channels in the input.
@@ -187,7 +226,7 @@ class TransposeConvBlock(Module):
 
         self.layers = nn.Sequential(
             [
-                ComplexWSConv2DNoWhitenTranspose(
+                conv_layer(
                     in_chans,
                     out_chans,
                     k=2,
@@ -195,7 +234,7 @@ class TransposeConvBlock(Module):
                     padding=0,
                     # output_padding=0,
                 ),
-                ComplexGroupNorm2DWhitening(groups=16, nin=out_chans),
+                norm_layer(groups=16, nin=out_chans),
                 actv(),
             ]
         )

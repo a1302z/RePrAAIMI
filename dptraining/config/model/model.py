@@ -67,6 +67,12 @@ class ComplexConv(Enum):
     convws_nw = 3
 
 
+class UpConv(Enum):
+    conv = 1
+    convws = 2
+    convws_nw = 3
+
+
 class Activation(Enum):
     relu = 1
     selu = 2
@@ -98,6 +104,8 @@ class Pooling(Enum):
     avgpool = 2
     conjmaxpool = 3
     sepmaxpool = 4
+    conjavgpool = 5
+    sepavgpool = 6
 
 
 class RealPooling(Enum):
@@ -109,6 +117,8 @@ class ComplexPooling(Enum):
     avgpool = 2
     conjmaxpool = 3
     sepmaxpool = 4
+    conjavgpool = 5
+    sepavgpool = 6
 
 
 @dataclass
@@ -123,3 +133,4 @@ class ModelConfig:
     normalization: Optional[Normalization] = None
     pooling: Pooling = MISSING
     extra_args: Optional[dict[str, Any]] = None
+    upconv: Optional[UpConv] = None

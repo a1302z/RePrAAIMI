@@ -23,6 +23,7 @@ from dptraining.config.model import (
     RealModelName,
     RealNormalization,
     RealPooling,
+    UpConv,
 )
 from dptraining.models import resnet_v2, wide_resnet
 from dptraining.models.activations import mish
@@ -41,6 +42,9 @@ from dptraining.models.complex.layers import (
     ComplexToReal,
     ComplexWSConv2D,
     ComplexWSConv2DNoWhiten,
+    ComplexConv2DTranspose,
+    ComplexWSConv2DNoWhitenTranspose,
+    ComplexWSConv2DTranspose,
 )
 from dptraining.models.complex.normalization import (  # pylint:disable=duplicate-code
     ComplexBatchNorm2D,
@@ -48,7 +52,18 @@ from dptraining.models.complex.normalization import (  # pylint:disable=duplicat
 )
 from dptraining.models.complex.pooling import ConjugatePool2D, SeparablePool2D
 from dptraining.models.ensemble import Ensemble
-from dptraining.models.layers import ConvCentering2D, ConvWS2D
+from dptraining.models.layers import (
+    ConvCentering2D,
+    ConvWS2D,
+    ConvWSTranspose2D,
+    ConvCenteringTranspose2D,
+    Conv3D,
+    ConvTranspose3D,
+    ConvWS3D,
+    ConvCentering3D,
+    ConvWSTranspose3D,
+    ConvCenteringTranspose3D,
+)
 from dptraining.models.unet import Unet
 from dptraining.models.resnet9 import ResNet9
 from dptraining.models.smoothnet import get_smoothnet
@@ -138,6 +153,54 @@ def make_complex_conv_from_config(config: Config) -> Callable:
             raise ValueError(f"Unsupported convolutional layer '{config.model.conv}'")
 
 
+def make_upconv_from_config(config: Config) -> Callable:
+    match config.model.upconv:
+        case UpConv.conv:
+            return nn.ConvTranspose2D
+        case UpConv.convws:
+            return ConvWSTranspose2D
+        case UpConv.convws_nw:
+            return ConvCenteringTranspose2D
+        case other:
+            raise ValueError(f"Unsupported up-convolutional layer '{other}'")
+
+
+def make_complex_upconv_from_config(config: Config) -> Callable:
+    match config.model.upconv:
+        case UpConv.conv:
+            return ComplexConv2DTranspose
+        case UpConv.convws:
+            return ComplexWSConv2DTranspose
+        case UpConv.convws_nw:
+            return ComplexWSConv2DNoWhitenTranspose
+        case other:
+            raise ValueError(f"Unsupported up-convolutional layer '{other}'")
+
+
+def make_3d_conv_from_config(config: Config) -> Callable:
+    match config.model.conv.value:
+        case RealConv.conv:
+            return Conv3D
+        case RealConv.convws:
+            return ConvWS3D
+        case RealConv.convws_nw:
+            return ConvCentering3D
+        case other:
+            raise ValueError(f"Unsupported 3D-convolutional layer '{other}'")
+
+
+def make_3d_upconv_from_config(config: Config) -> Callable:
+    match config.model.conv.value:
+        case UpConv.conv:
+            return ConvTranspose3D
+        case UpConv.convws:
+            return ConvWSTranspose3D
+        case UpConv.convws_nw:
+            return ConvCenteringTranspose3D
+        case other:
+            raise ValueError(f"Unsupported 3D-convolutional layer '{other}'")
+
+
 def make_activation_from_config(config: Config) -> Callable:
     match config.model.activation.value:
         case RealActivation.relu.value:
@@ -197,6 +260,10 @@ def make_complex_pooling_from_config(
             layer = ConjugatePool2D
         case ComplexPooling.sepmaxpool.value:
             layer = SeparablePool2D
+        case ComplexPooling.conjavgpool.value:
+            layer = partial(ConjugatePool2D, pool_func=functional.average_pool_2d)
+        case ComplexPooling.sepavgpool.value:
+            layer = partial(SeparablePool2D, pool_func=functional.average_pool_2d)
         case ComplexPooling.avgpool.value:
             if len(kwargs) == 0:
                 return functional.average_pool_2d
@@ -330,6 +397,30 @@ def make_normal_model_from_config(config: Config) -> Callable:
                 ),
                 **kwargs,
             )
+        case RealModelName.unet.value:
+            already_defined = ("in_channels",)
+            kwargs = get_kwargs(Unet, already_defined, config.model)
+            if not all(
+                (
+                    expected in kwargs.keys()
+                    for expected in (
+                        "out_channels",
+                        "channels",
+                    )
+                )
+            ):
+                warnings.warn(
+                    "We recommend to explicitly set values for [out_channels, channels]"
+                    "for a UNet architecture"
+                )
+            return Unet(
+                in_channels=config.model.in_channels,
+                actv=make_activation_from_config(config, init_layers=False),
+                conv_layer=make_conv_from_config(config),
+                upconv_layer=make_upconv_from_config(config),
+                pool_fn=make_pooling_from_config(config, init_layers=False),
+                **kwargs,
+            )
         case _:
             raise ValueError(f"Unsupported model '{config.model.name}'")
 
@@ -411,6 +502,9 @@ def make_complex_model_from_config(config: Config) -> Callable:
             return Unet(
                 in_channels=config.model.in_channels,
                 actv=make_complex_activation_from_config(config, init_layers=False),
+                conv_layer=make_complex_conv_from_config(config),
+                upconv_layer=make_complex_upconv_from_config(config),
+                pool_fn=make_complex_pooling_from_config(config, init_layers=False),
                 **kwargs,
             )
         case _:

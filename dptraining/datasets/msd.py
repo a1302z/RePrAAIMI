@@ -292,7 +292,7 @@ class MSDCreator(DataLoaderCreator):
                 transform=tf,
                 resolution=config.dataset.resolution,
                 slice_thickness=config.dataset.slice_thickness,
-                normalization=config.dataset.normalization,
+                normalization=config.dataset.normalization_type,
                 data_mean_std=MSD.raw_stats,
                 cache_files=config.dataset.cache,
             )

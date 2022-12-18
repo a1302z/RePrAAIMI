@@ -86,7 +86,7 @@ class DatasetConfig:
     subtask: Optional[MSDSubtask] = None  # only for msd so far
     slice_thickness: Optional[float] = None  # only for msd
     cache: bool = False  # only for MSD
-    normalization: Normalization = Normalization.gaussian
+    normalization_type: Normalization = Normalization.gaussian
 
 
 class LoaderCollateFn(Enum):

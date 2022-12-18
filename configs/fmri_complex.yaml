@@ -34,6 +34,9 @@ model:
   name: unet
   in_channels: 1
   activation: cardioid
+  conv: convws_nw
+  upconv: convws_nw
+  pooling: conjavgpool
   extra_args:
     out_channels: 1
     channels: 16
@@ -47,7 +50,7 @@ ema:
   decay: 0.999
 hyperparams:
   epochs: 10
-  batch_size: 8
+  batch_size: 4
   batch_size_test: 16
   lr: 2e-3
   # momentum: 0.9

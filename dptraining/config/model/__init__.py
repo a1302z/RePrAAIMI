@@ -15,4 +15,5 @@ from dptraining.config.model.model import (
     Pooling,
     RealPooling,
     ComplexPooling,
+    UpConv
 )
