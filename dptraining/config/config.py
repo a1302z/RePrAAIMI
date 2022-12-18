@@ -73,7 +73,7 @@ class DatasetConfig:
     datasplit_seed: Optional[int] = 0  # only for radimagenet
     modality: str = "all"  # only for radimagenet
     normalize_by_modality: bool = False  # only for radimagenet
-    test_split: float = 0.1  # only for radimagenet
+    test_split: float = MISSING  # only for radimagenet and msd
     allowed_body_regions: str = "all"  # only for radimagenet
     allowed_labels: str = "all"  # only for radimagenet
     split_folder: Optional[str] = None  # only for radimagenet

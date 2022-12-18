@@ -25,6 +25,7 @@ class RealModelName(Enum):
     resnet9 = 3
     smoothnet = 4
     wide_resnet = 5
+    unet = 6
 
 
 class ComplexModelName(Enum):
@@ -126,6 +127,7 @@ class ModelConfig:
     name: ModelName = MISSING
     ensemble: Optional[int] = None
     complex: bool = False
+    dim3: bool = False
     in_channels: int = MISSING
     num_classes: int = MISSING
     conv: Conv = MISSING

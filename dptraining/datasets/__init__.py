@@ -10,6 +10,7 @@ from dptraining.datasets.imagenet import ImageNetCreator
 from dptraining.datasets.radimagenet import RadImageNetCreator
 from dptraining.datasets.fmri import FMRICreator
 from dptraining.datasets.tinyimagenet import TinyImageNetCreator
+from dptraining.datasets.msd import MSDCreator
 from dptraining.datasets.utils import (
     collate_np_classification,
     collate_np_reconstruction,
@@ -33,13 +34,14 @@ def select_creator(config):
             creator = FMRICreator
         case DatasetName.radimagenet:
             creator = RadImageNetCreator
+        case DatasetName.msd:
+            creator = MSDCreator
         case _ as unsupported:
             raise ValueError(f"Unsupported dataset '{unsupported}'.")
     return creator
 
 
 def modify_collate_fn_config(loader_config, task):
-
     if "collate_fn" in loader_config:
         if (
             loader_config["collate_fn"] == LoaderCollateFn.numpy
@@ -48,7 +50,7 @@ def modify_collate_fn_config(loader_config, task):
             loader_config["collate_fn"] = collate_np_classification
         elif (
             loader_config["collate_fn"] == LoaderCollateFn.numpy
-            and task == DatasetTask.reconstruction
+            and task in [DatasetTask.reconstruction, DatasetTask.segmentation]
         ):
             loader_config["collate_fn"] = collate_np_reconstruction
         else:

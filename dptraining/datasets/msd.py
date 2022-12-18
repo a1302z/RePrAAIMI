@@ -106,7 +106,7 @@ class MSD(Dataset):
         )
         # t1 = time()
         # print(f"\t Loading took {t1-t0:.1f} seconds")
-        return scan, label
+        return scan[np.newaxis, ...], label[np.newaxis, ...]  # add channel dimension
 
     def load_nifti_files(self, index, img_file, label_file):
         if self.cache:

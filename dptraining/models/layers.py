@@ -5,6 +5,7 @@ from objax.typing import JaxArray, ConvPaddingInt
 from objax.constants import ConvPadding
 from objax.functional import flatten
 from dptraining.models.complex import ComplexGroupNormWhitening
+from numpy import prod
 
 from jax import lax, numpy as jn
 
@@ -276,3 +277,96 @@ class ConvCenteringTranspose3D(ConvTranspose3D):
     def __call__(self, x: JaxArray) -> JaxArray:
         self.w.assign(self.w - jn.mean(self.w.value, axis=(0, 1, 2, 3), keepdims=True))
         return super().__call__(x)
+
+
+class BatchNorm3D(nn.BatchNorm):
+    """Applies a 3D batch normalization on a 5D-input batch of shape (N,C,H,W,D).
+
+    The module follows the operation described in Algorithm 1 of
+    `Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift
+    <https://arxiv.org/abs/1502.03167>`_.
+    """
+
+    def __init__(self, nin: int, momentum: float = 0.999, eps: float = 1e-6):
+        """Creates a BatchNorm2D module instance.
+
+        Args:
+            nin: number of channels in the input example.
+            momentum: value used to compute exponential moving average of batch statistics.
+            eps: small value which is used for numerical stability.
+        """
+        super().__init__((1, nin, 1, 1, 1), (0, 2, 3, 4), momentum, eps)
+
+    def __repr__(self):
+        return f"{util.class_name(self)}(nin={self.beta.value.shape[1]}, momentum={self.momentum}, eps={self.eps})"
+
+
+class GroupNorm3D(nn.GroupNorm):
+    """Applies a 3D group normalization on a input batch of shape (N,C,H,W,D)."""
+
+    def __init__(self, nin: int, groups: int = 32, eps: float = 1e-5):
+        """Creates a GroupNorm3D module instance.
+
+        Args:
+            nin: number of input channels.
+            groups: number of normalization groups.
+            eps: small value which is used for numerical stability.
+        """
+        super().__init__(nin, rank=5, groups=groups, eps=eps)
+
+    def __repr__(self):
+        return f"{util.class_name(self)}(nin={self.nin}, groups={self.groups}, eps={self.eps})"
+
+
+def max_pool_3d(
+    x: JaxArray,
+    size: Union[Tuple[int, int, int], int] = 2,
+    strides: Optional[Union[Tuple[int, int, int], int]] = None,
+    padding: Union[ConvPadding, str, ConvPaddingInt] = ConvPadding.VALID,
+) -> JaxArray:
+    """Applies max pooling using a square 2D filter.
+
+    Args:
+        x: input tensor of shape (N, C, H, W).
+        size: size of pooling filter.
+        strides: stride step, use size when stride is none (default).
+        padding: padding of the input tensor, either Padding.SAME or Padding.VALID or numerical values.
+
+    Returns:
+        output tensor of shape (N, C, H, W).
+    """
+    size = util.to_tuple(size, 3)
+    strides = util.to_tuple(strides, 3) if strides else size
+    padding = util.to_padding(padding, 3)
+    if isinstance(padding, tuple):
+        padding = ((0, 0), (0, 0)) + padding
+    return lax.reduce_window(
+        x, -jn.inf, lax.max, (1, 1) + size, (1, 1) + strides, padding=padding
+    )
+
+
+def average_pool_3d(
+    x: JaxArray,
+    size: Union[Tuple[int, int, int], int] = 2,
+    strides: Optional[Union[Tuple[int, int, int], int]] = None,
+    padding: Union[ConvPadding, str, ConvPaddingInt] = ConvPadding.VALID,
+) -> JaxArray:
+    """Applies average pooling using a square 3D filter.
+
+    Args:
+        x: input tensor of shape (N, C, H, W, D).
+        size: size of pooling filter.
+        strides: stride step, use size when stride is none (default).
+        padding: padding of the input tensor, either Padding.SAME or Padding.VALID or numerical values.
+
+    Returns:
+        output tensor of shape (N, C, H, W, D).
+    """
+    size = util.to_tuple(size, 3)
+    strides = util.to_tuple(strides, 3) if strides else size
+    padding = util.to_padding(padding, 3)
+    if isinstance(padding, tuple):
+        padding = ((0, 0), (0, 0)) + padding
+    return lax.reduce_window(
+        x, 0, lax.add, (1, 1) + size, (1, 1) + strides, padding=padding
+    ) / prod(size)

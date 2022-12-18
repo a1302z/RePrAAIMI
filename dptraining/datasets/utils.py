@@ -18,5 +18,5 @@ def collate_np_reconstruction(list_of_samples):
             for i in range(len(list_of_samples[0]))
         )
     else:
-        list_of_outputs = tuple(list_of_samples)
+        list_of_outputs = tuple(l[np.newaxis, ...] for l in list_of_samples[0])
     return list_of_outputs

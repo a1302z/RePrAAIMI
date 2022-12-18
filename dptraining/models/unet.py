@@ -2,6 +2,7 @@
 from objax import nn, Module
 from objax.functional import average_pool_2d, pad
 from jax import numpy as jn
+from math import floor, ceil
 
 # import sys
 # from pathlib import Path
@@ -38,6 +39,7 @@ class Unet(Module):
         upconv_layer: Module = ComplexWSConv2DNoWhitenTranspose,
         norm_layer: Module = ComplexGroupNorm2DWhitening,
         pool_fn=SeparablePool2D,
+        dim_mode: int = 2,  # how many dimension will the input have
     ):
         """
         Args:
@@ -53,6 +55,8 @@ class Unet(Module):
         self.out_channels = out_channels
         self.channels = channels
         self.num_pool_layers = num_pool_layers
+        self.dim_mode = dim_mode
+        assert self.dim_mode in [2, 3], "Unet only supports 2D or 3D input"
 
         self.down_sample_layers = nn.Sequential(
             [
@@ -107,7 +111,7 @@ class Unet(Module):
                 ],
             )
         )
-        self.pool = pool_fn(size=2, strides=2, padding=0)
+        self.pool = pool_fn
 
     def __call__(self, image, **kwargs):
         """
@@ -134,13 +138,30 @@ class Unet(Module):
             output = transpose_conv(output)
 
             # reflect pad on the right/botton if needed to handle odd input dimensions
-            padding = [[0, 0], [0, 0], [0, 0], [0, 0]]
-            if output.shape[-1] != downsample_layer.shape[-1]:
-                padding[-1] = [1, 1]  # padding right
-            if output.shape[-2] != downsample_layer.shape[-2]:
-                padding[-2] = [1, 1]  # padding bottom
-            if sum([sum(p) for p in padding]) != 0:
-                output = pad(output, pad_width=padding, mode="reflect")
+            match self.dim_mode:
+                case 2:
+                    padding = [[0, 0], [0, 0], [0, 0], [0, 0]]
+                    if output.shape[-1] != downsample_layer.shape[-1]:
+                        padding[-1] = [1, 1]  # padding right
+                    if output.shape[-2] != downsample_layer.shape[-2]:
+                        padding[-2] = [1, 1]  # padding bottom
+                    if sum([sum(p) for p in padding]) != 0:
+                        output = pad(output, pad_width=padding, mode="reflect")
+                case 3:
+                    padding = [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+                    if output.shape[-1] != downsample_layer.shape[-1]:
+                        diff = abs(output.shape[-1] - downsample_layer.shape[-1]) / 2.0
+                        padding[-1] = [int(floor(diff)), int(ceil(diff))]
+                    if output.shape[-2] != downsample_layer.shape[-2]:
+                        diff = abs(output.shape[-2] - downsample_layer.shape[-2]) / 2.0
+                        padding[-2] = [int(floor(diff)), int(ceil(diff))]
+                    if output.shape[-3] != downsample_layer.shape[-3]:
+                        diff = abs(output.shape[-3] - downsample_layer.shape[-3]) / 2.0
+                        padding[-3] = [int(floor(diff)), int(ceil(diff))]
+                    if sum([sum(p) for p in padding]) != 0:
+                        output = pad(output, pad_width=padding, mode="reflect")
+                case other:
+                    raise ValueError(f"{other} dimensions not supported")
 
             output = jn.concatenate([output, downsample_layer], axis=1)
             output = conv(output)
@@ -182,10 +203,10 @@ class ConvBlock(Module):
                     padding=1,
                 ),
                 norm_layer(nin=out_chans, groups=16),
-                actv(),
+                actv,
                 conv_layer(out_chans, out_chans, k=3, padding=1),
                 norm_layer(nin=out_chans, groups=out_chans),
-                actv(),
+                actv,
             ]
         )
 
@@ -235,7 +256,7 @@ class TransposeConvBlock(Module):
                     # output_padding=0,
                 ),
                 norm_layer(groups=16, nin=out_chans),
-                actv(),
+                actv,
             ]
         )
 
