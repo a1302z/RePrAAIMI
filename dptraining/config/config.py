@@ -61,6 +61,18 @@ class Normalization(Enum):
 
 
 @dataclass
+class DataStats:
+    mean: float = MISSING
+    std: float = MISSING
+
+
+@dataclass
+class CTWindow:
+    low: int = MISSING
+    high: int = MISSING
+
+
+@dataclass
 class DatasetConfig:
     name: DatasetName = MISSING
     root: str = MISSING
@@ -87,6 +99,8 @@ class DatasetConfig:
     slice_thickness: Optional[float] = None  # only for msd
     cache: bool = False  # only for MSD
     normalization_type: Normalization = Normalization.gaussian
+    data_stats: Optional[DataStats] = None
+    ct_window: Optional[CTWindow] = None
 
 
 class LoaderCollateFn(Enum):

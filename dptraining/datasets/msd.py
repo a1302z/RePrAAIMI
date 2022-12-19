@@ -1,10 +1,8 @@
 import sys
-from enum import Enum
 from pathlib import Path
 from random import seed, shuffle
 from typing import Callable, Optional, Tuple
 
-from time import time
 
 import ctypes
 import multiprocessing as mp
@@ -16,7 +14,7 @@ from torch.utils.data import Dataset
 
 sys.path.insert(0, str(Path.cwd()))
 
-from dptraining.config import Config, Normalization
+from dptraining.config import Config, Normalization, DataStats, CTWindow
 from dptraining.datasets.base_creator import DataLoaderCreator, mk_subdirectories
 
 # We are assuming that all tasks are structured as Task03_Liver
@@ -31,7 +29,9 @@ def scale_array_zero_one(array: np.array) -> np.array:
 
 
 def scale_array_unit_gaussian(
-    array: np.array, mean: np.array, std: np.array
+    array: np.array,
+    mean: np.array,
+    std: np.array,
 ) -> np.array:
     return (array - mean) / std
 
@@ -47,9 +47,9 @@ def rotate_label(label_volume) -> np.array:
 
 
 class MSD(Dataset):
-    # raw_stats = np.array([-20.76621642152709, 10.325427899115375])
-    raw_stats = np.array([-41.432015233869066, 9.509903769499498])
-    consecutive_stats = np.array([0.06497363541417449, 0.027557578189309158])
+
+    # resolution: 256 / window: (-150, 200) / thickness: 3mm
+    # Mean: -81.909645        Std: 8.735866
 
     def __init__(
         self,
@@ -59,8 +59,9 @@ class MSD(Dataset):
         resolution: Optional[int] = None,
         slice_thickness: Optional[int] = None,
         normalization: Normalization = Normalization.raw,
-        data_mean_std: Optional[tuple[np.array, np.array]] = None,
+        data_stats: DataStats = None,
         cache_files: bool = False,
+        ct_window: CTWindow = CTWindow(-150, 200),
     ) -> None:
         super().__init__()
         self.matched_labeled_scans: list[tuple[str, Path, Path]] = matched_labeled_scans
@@ -71,6 +72,7 @@ class MSD(Dataset):
         self.normalization: Normalization = normalization
         self.cache: bool = cache_files
         self.cached_files: Optional[mp.Array]
+        self.ct_window: CTWindow = ct_window
         if self.cache:
             # self.cached_files = [False for _ in self.matched_labeled_scans]
             self.cached_files = mp.Array(
@@ -78,10 +80,10 @@ class MSD(Dataset):
             )
         else:
             self.cached_files = None
-        if self.normalization == Normalization.gaussian:
-            if data_mean_std is not None:
-                self.mean = data_mean_std[0]
-                self.std = data_mean_std[1]
+        if self.normalization in [Normalization.gaussian, Normalization.consecutive]:
+            if data_stats is not None:
+                self.mean = data_stats.mean
+                self.std = data_stats.std
             else:
                 raise ValueError(
                     "Normalization supposed to be gaussian "
@@ -118,8 +120,11 @@ class MSD(Dataset):
         scan = nib.load(img_file)
         label = nib.load(label_file)
         if self.resolution or self.slice_thickness:
-            scan = self.resize_scan(scan, label=False)
-            label = self.resize_scan(label, label=True)
+            scan, label = self.resize_scan(scan, label)
+            assert scan.header.get_data_shape() == label.header.get_data_shape(), (
+                f"Index {index} has not matching shapes"
+                f"\nShapes: {scan.header.get_data_shape()}\t{label.header.get_data_shape()}"
+            )
 
         scan, label = self.preprocess_and_convert_to_numpy(scan, label)
         if self.cache:
@@ -138,7 +143,7 @@ class MSD(Dataset):
         label = np.load(label_path)
         return scan, label
 
-    def create_new_filenames(self, img_file, label_file):
+    def create_new_filenames(self, img_file, label_file) -> tuple[Path, Path]:
         scan_path = img_file.parent / f"preprocessed_scan_{img_file.stem}.npy"
         label_path = label_file.parent / f"preprocessed_label_{label_file.stem}.npy"
 
@@ -149,15 +154,25 @@ class MSD(Dataset):
         - clips vales to -150 to 200,
         - peforms rotations and flipping to move patient into reference position
         Return: np.array"""
-        scan = np.clip(scan, -150, 200)
+        scan = np.clip(scan, self.ct_window.low, self.ct_window.high)
         match self.normalization:
             case Normalization.zeroone:
                 scan = scale_array_zero_one(scan)
             case Normalization.gaussian:
-                scan = scale_array_unit_gaussian(scan, self.mean, self.std)
+                scan = scale_array_unit_gaussian(
+                    scan,
+                    self.mean,
+                    self.std,
+                )
             case Normalization.consecutive:
+                # not really necessary but may be useful if
+                # stats were calculated over 0,1 interval
                 scan = scale_array_zero_one(scan)
-                scan = scale_array_unit_gaussian(scan, self.mean, self.std)
+                scan = scale_array_unit_gaussian(
+                    scan,
+                    self.mean,
+                    self.std,
+                )
         scan = np.rot90(scan)
         scan = np.fliplr(scan)
 
@@ -174,25 +189,30 @@ class MSD(Dataset):
         nifti_scan.uncache()
         np_scan = self.preprocess_scan(np_scan)
         np_label = rotate_label(np_label)
-        assert np_scan.shape == np_label.shape
+        assert np_scan.shape == np_label.shape, (
+            f"Scan has shape {np_scan.shape} while label has {np_label.shape}"
+            f"\nNifti data: {nifti_scan.header.get_data_shape()}\t {nifti_mask.header.get_data_shape()}"
+        )
 
         return np_scan, np_label
 
-    def resize_scan(self, scan, label: bool):
+    def resize_scan(
+        self, scan: nib.Nifti1Header, label: nib.Nifti1Header
+    ) -> tuple[nib.Nifti1Image, nib.Nifti1Image]:
         data_shape = scan.header.get_data_shape()
         zooms = scan.header.get_zooms()
-        print(
-            f"Actual size: {data_shape[0]*zooms[0]:.1f}mm x {data_shape[1]*zooms[1]:.1f}mm x {data_shape[2]*zooms[2]:.1f}mm"
-        )
+        # print(
+        #     f"Actual size: {data_shape[0]*zooms[0]:.1f}mm x {data_shape[1]*zooms[1]:.1f}mm x {data_shape[2]*zooms[2]:.1f}mm"
+        # )
         new_shape = (
             self.resolution if self.resolution else data_shape[0],
-            self.resolution if self.resolution else data_shape[0],
-            int(data_shape[-1] * zooms[2] / self.slice_thickness)
+            self.resolution if self.resolution else data_shape[1],
+            int(data_shape[2] * zooms[2] / self.slice_thickness)
             if self.slice_thickness
-            else data_shape[-1],
+            else data_shape[2],
         )
         new_affine = np.copy(scan.affine)
-        for i in range(2):
+        for i in range(len(new_shape)):
             new_affine[i, i] *= data_shape[i] / new_shape[i]
         # print(zooms)
         if self.slice_thickness:
@@ -203,14 +223,32 @@ class MSD(Dataset):
             scan,
             target_affine=new_affine,
             target_shape=new_shape,
-            interpolation="nearest" if label else "continuous",
+            interpolation="continuous",
         )
-        new_zooms = scan.header.get_zooms()
+        label = resample_img(
+            label,
+            target_affine=new_affine,
+            target_shape=new_shape,
+            interpolation="nearest",
+        )
+        # new_zooms = scan.header.get_zooms()
 
-        print(
-            f"New real size: {new_shape[0]*new_zooms[0]:.1f}mm x {new_shape[1]*new_zooms[1]:.1f}mm x {new_shape[2]*new_zooms[2]:.1f}mm"
-        )
-        return scan
+        # print(
+        #     f"New real size: {new_shape[0]*new_zooms[0]:.1f}mm x {new_shape[1]*new_zooms[1]:.1f}mm x {new_shape[2]*new_zooms[2]:.1f}mm"
+        # )
+        return scan, label
+
+    # def __del__(self):
+    #     if self.cache:
+    #         for i in range(len(self)):
+    #             if self.cached_files[i]:
+    #                 _, img_file, label_file = self.matched_labeled_scans[i]
+    #                 scan_path, label_path = self.create_new_filenames(
+    #                     img_file, label_file
+    #                 )
+    #                 print(scan_path)
+    #                 # scan_path.unlink()
+    #                 # label_path.unlink()
 
 
 class MSDCreator(DataLoaderCreator):
@@ -293,8 +331,9 @@ class MSDCreator(DataLoaderCreator):
                 resolution=config.dataset.resolution,
                 slice_thickness=config.dataset.slice_thickness,
                 normalization=config.dataset.normalization_type,
-                data_mean_std=MSD.raw_stats,
+                data_stats=config.dataset.data_stats,
                 cache_files=config.dataset.cache,
+                ct_window=config.dataset.ct_window,
             )
             for smls, tf in zip(split_matched_labeled_scans, transforms)
         )
@@ -307,6 +346,8 @@ if __name__ == "__main__":
     from torch.utils.data import DataLoader
     from tqdm import tqdm
 
+    from time import time
+
     def extend_base_config(overrides: dict):
         base_conf = OmegaConf.structured(Config)
         merged_conf = OmegaConf.merge(base_conf, overrides)
@@ -315,8 +356,8 @@ if __name__ == "__main__":
     def collate_fn(list_of_data_tuples: list[tuple[np.array, np.array]]):
         scans = [item[0] for item in list_of_data_tuples]
         labels = [item[1] for item in list_of_data_tuples]
-        scans = np.concatenate(scans, axis=2)[np.newaxis, ...].transpose(3, 0, 1, 2)
-        labels = np.concatenate(labels, axis=2)[np.newaxis, ...].transpose(3, 0, 1, 2)
+        scans = np.concatenate(scans, axis=-1)
+        labels = np.concatenate(labels, axis=-1)
         return scans, labels
 
     def calc_mean_std(dataset: DataLoader):
@@ -337,31 +378,6 @@ if __name__ == "__main__":
         std = np.sqrt(var / (len(dataset.dataset) * N_px))
         return mean, std
 
-    # config = extend_base_config(
-    #     {
-    #         "project": "test",
-    #         "general": {"log_wandb": False, "cpu": True, "eval_train": False},
-    #         "loader": {"num_workers": 0, "collate_fn": "numpy"},
-    #         "dataset": {
-    #             "name": "msd",
-    #             "root": "./data/MSD/",
-    #             "subtask": "liver",
-    #             "train_val_split": 0.9,
-    #             "test_split": 0.1,
-    #             "datasplit_seed": 0,
-    #             "task": "segmentation",
-    #             "resolution": 256,
-    #         },
-    #     }
-    # )
-    # train_ds, val_ds, test_ds = MSDCreator.make_datasets(config, (None, None, None))
-    # print(
-    #     f"{len(train_ds)} train files\t {len(val_ds)} val files\t {len(test_ds)} test files"
-    # )
-    # scan, label = train_ds[0]
-    # print(scan.shape)
-    # print(label.shape)
-
     # N = int(np.ceil(np.sqrt(scan.shape[-1])))
     # fig, axs = plt.subplots(N, N, sharex=True, sharey=True)
     # for i in range(N):
@@ -379,48 +395,6 @@ if __name__ == "__main__":
     #         axs[i, j].set_axis_off()
     # plt.savefig("test_msd.png", dpi=600)
 
-    # config = extend_base_config(
-    #     {
-    #         "project": "test",
-    #         "general": {"log_wandb": False, "cpu": True, "eval_train": False},
-    #         "loader": {"num_workers": 0, "collate_fn": "numpy"},
-    #         "dataset": {
-    #             "name": "msd",
-    #             "root": "./data/MSD/",
-    #             "subtask": "liver",
-    #             "train_val_split": 1.0,
-    #             "test_split": 0.0,
-    #             "datasplit_seed": 0,
-    #             "task": "segmentation",
-    #             "cache": False,
-    #             "normalization": "raw",
-    #             "slice_thickness": None,
-    #         },
-    #     }
-    # )
-    # train_ds, val_ds, test_ds = MSDCreator.make_datasets(config, (None, None, None))
-    # train_dl = DataLoader(
-    #     train_ds,
-    #     batch_size=2,
-    #     shuffle=False,
-    #     num_workers=4,
-    #     prefetch_factor=2,
-    #     collate_fn=collate_fn,
-    # )
-    # print(calc_mean_std(train_dl))
-    # print(MSD.raw_stats)
-    # N = 4
-    # t0 = time()
-    # for i in tqdm(range(N), total=N, leave=False):
-    #     train_ds[i]
-    # t1 = time()
-    # print(f"First access took {t1-t0:.2f}s")
-    # t0 = time()
-    # for i in tqdm(range(N), total=N, leave=False):
-    #     train_ds[i]
-    # t1 = time()
-    # print(f"Second access took {t1-t0:.2f}s")
-
     config = extend_base_config(
         {
             "project": "test",
@@ -434,9 +408,11 @@ if __name__ == "__main__":
                 "test_split": 0.0,
                 "datasplit_seed": 0,
                 "task": "segmentation",
-                "cache": False,
-                "normalization": "gaussian",
-                "slice_thickness": None,
+                "cache": True,
+                "slice_thickness": 3.0,
+                "normalization_type": "raw",
+                "resolution": 128,
+                "ct_window": {"low": -150, "high": 250},
             },
         }
     )
@@ -444,24 +420,60 @@ if __name__ == "__main__":
 
     train_dl = DataLoader(
         train_ds,
-        batch_size=2,
+        batch_size=1,
         shuffle=False,
-        num_workers=4,
+        num_workers=16,
         prefetch_factor=2,
         collate_fn=collate_fn,
     )
-    print(calc_mean_std(train_dl))
 
-    # N = 16
+    # mean, std = calc_mean_std(train_dl)
+    # print(f"Mean: {mean:.6f}\tStd: {std:.6f}")
+
+    # config = extend_base_config(
+    #     {
+    #         "project": "test",
+    #         "general": {"log_wandb": False, "cpu": True, "eval_train": False},
+    #         "loader": {"num_workers": 0, "collate_fn": "numpy"},
+    #         "dataset": {
+    #             "task": "segmentation",
+    #             "name": "msd",
+    #             "root": "./data/MSD/",
+    #             "train_val_split": 0.9,
+    #             "test_split": 0.1,
+    #             "resolution": 128,
+    #             "subtask": "liver",
+    #             "cache": True,
+    #             "slice_thickness": 3.0,
+    #             "normalization_type": "gaussian",
+    #             "data_stats": {"mean": float(mean), "std": float(std)},
+    #             "ct_window": {"low": -150, "high": 250}
+    #             # "data_stats": {"mean": -63.59883264405043, "std": 110.56125220959515},
+    #         },
+    #     }
+    # )
+    # train_ds, val_ds, test_ds = MSDCreator.make_datasets(config, (None, None, None))
+
     # t0 = time()
-    # for i, _ in tqdm(enumerate(train_dl), total=N, leave=False):
-    #     if i > N:
-    #         break
+    # img, label = train_ds[0]
     # t1 = time()
-    # print(f"First access took {t1-t0:.2f}s")
+    # print(f"First access took {t1-t0:.1f}s")
+
+    # print(f"{img.mean()}\t{img.std()}")
+
+    # train_dl = DataLoader(
+    #     train_ds,
+    #     batch_size=1,
+    #     shuffle=False,
+    #     num_workers=16,
+    #     prefetch_factor=2,
+    #     collate_fn=collate_fn,
+    # )
+    # mean, std = calc_mean_std(train_dl)
+    # print(f"Mean: {mean:.6f}\tStd: {std:.6f}")
+
     # t0 = time()
-    # for i, _ in tqdm(enumerate(train_dl), total=N, leave=False):
-    #     if i > N:
-    #         break
+    # img, label = train_ds[0]
     # t1 = time()
-    # print(f"Second access took {t1-t0:.2f}s")
+    # print(f"Second access took {t1-t0:.3f}s")
+    # pass

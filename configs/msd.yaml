@@ -20,6 +20,13 @@ dataset:
   resolution: 128
   subtask: liver
   cache: True
+  slice_thickness: 3.0
+  data_stats:
+    mean: -81.91
+    std: 8.736
+  ct_window: 
+    low: -150
+    high: 200
 loader: 
   num_workers: 0
   # prefetch_factor: 2

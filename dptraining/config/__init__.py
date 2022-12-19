@@ -18,7 +18,9 @@ from dptraining.config.config import (
     EarlyStoppingConfig,
     DPConfig,
     DatasetTask,
-    Normalization
+    Normalization,
+    DataStats,
+    CTWindow,
 )
 
 from dptraining.config.utils import get_allowed_names, get_allowed_values
