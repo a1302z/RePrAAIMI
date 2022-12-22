@@ -2,6 +2,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Callable, Iterable, Optional
+from functools import partial
 
 import hydra
 import numpy as np
@@ -107,13 +108,31 @@ def main(
         )
     opt = make_optim_from_config(config, model_vars)
 
-    predict_lambda = (
-        lambda x: objax.functional.softmax(  # pylint:disable=unnecessary-lambda-assignment
-            model(x, training=False)
-        )
-        if config.dataset.task == DatasetTask.classification
-        else model(x, training=False)
-    )
+    match config.dataset.task:
+        case DatasetTask.classification:
+            if (
+                config.model.num_classes == 1
+            ):  # TODO: when merging dont forget to include pretrain classes case
+                predict_lambda = lambda x: objax.functional.sigmoid(  # pylint:disable=unnecessary-lambda-assignment
+                    model(x, training=False)
+                )
+            else:
+                predict_lambda = lambda x: objax.functional.softmax(  # pylint:disable=unnecessary-lambda-assignment
+                    model(x, training=False)
+                )
+        case DatasetTask.segmentation:
+            if (
+                config.loss.dice_loss_args.binary
+            ):  # assuming dice loss is used for segmentation
+                predict_lambda = lambda x: objax.functional.sigmoid(  # pylint:disable=unnecessary-lambda-assignment
+                    model(x, training=False)
+                )
+            else:
+                predict_lambda = lambda x: objax.functional.softmax(  # pylint:disable=unnecessary-lambda-assignment
+                    model(x, training=False)
+                )
+        case _:
+            predict_lambda = partial(model, training=False)
 
     predict_op_parallel = objax.Parallel(
         predict_lambda, model_vars, reduce=np.concatenate

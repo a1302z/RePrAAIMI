@@ -48,10 +48,10 @@ def modify_collate_fn_config(loader_config, task):
             and task == DatasetTask.classification
         ):
             loader_config["collate_fn"] = collate_np_classification
-        elif (
-            loader_config["collate_fn"] == LoaderCollateFn.numpy
-            and task in [DatasetTask.reconstruction, DatasetTask.segmentation]
-        ):
+        elif loader_config["collate_fn"] == LoaderCollateFn.numpy and task in [
+            DatasetTask.reconstruction,
+            DatasetTask.segmentation,
+        ]:
             loader_config["collate_fn"] = collate_np_reconstruction
         else:
             raise ValueError(

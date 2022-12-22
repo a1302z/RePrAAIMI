@@ -12,6 +12,8 @@ from dptraining.utils.loss import (
     CombinedLoss,
     L1Loss,
     L2Regularization,
+    DiceLoss,
+    f_score_loss,
 )
 from dptraining.config import Config, SchedulerType, LossType
 from dptraining.utils.scheduler import (
@@ -55,6 +57,10 @@ def make_loss_from_config(config: Config):  # pylint:disable=unused-argument
             loss_fn = CSELogitsSparse(config)
         case LossType.l1:
             loss_fn = L1Loss(config)
+        case LossType.dice:
+            loss_fn = DiceLoss(config)
+        case other:
+            raise ValueError(f"{other} loss not supported")
     if config.hyperparams.l2regularization and config.hyperparams.l2regularization > 0:
         regularization = L2Regularization(config)
         loss_fn = CombinedLoss(config, [loss_fn, regularization])
@@ -92,7 +98,7 @@ def retrieve_func_dict(func):
     return {name: getattr(func, name) for name in dir(func) if name[0] != "_"}
 
 
-def make_metrics(config):
+def make_metrics(config: Config):
     if not config.metrics:
         warn("no metrics defined in config", category=UserWarning)
         return sklearnmetrics.accuracy_score, (sklearnmetrics.classification_report,)
@@ -102,6 +108,13 @@ def make_metrics(config):
         **retrieve_func_dict(sklearnmetrics),
         **retrieve_func_dict(skimagemetrics),
     }  # torchmetrics of course leads to problems -.-
+    if config.loss.dice_loss_args:
+
+        def fscore(*args, **kwargs) -> float:
+            return 1.0 - f_score_loss(*args, **kwargs)
+
+        all_funcs["fscore"] = fscore
+
     if isinstance(config.metrics.main, str):
         if config.metrics.main == "loss":
             main_metric = ("loss", None)

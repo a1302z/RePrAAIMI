@@ -230,7 +230,7 @@ def calculate_metrics(task, metrics, loss_fn, correct, predicted):
     loss = loss_fn(predicted, correct).item()
     if task == DatasetTask.classification:
         predicted = predicted.argmax(axis=1)
-    correct, predicted = correct.squeeze(), predicted.squeeze()
+        correct, predicted = correct.squeeze(), predicted.squeeze()
     if np.iscomplexobj(correct):
         correct = np.abs(correct)
     if np.iscomplexobj(predicted):

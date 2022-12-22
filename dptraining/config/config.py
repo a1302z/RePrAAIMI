@@ -97,6 +97,7 @@ class DatasetConfig:
     new_data_root: Optional[str] = None  # only for fmri so far
     subtask: Optional[MSDSubtask] = None  # only for msd so far
     slice_thickness: Optional[float] = None  # only for msd
+    n_slices: Optional[int] = None
     cache: bool = False  # only for MSD
     normalization_type: Normalization = Normalization.gaussian
     data_stats: Optional[DataStats] = None
@@ -131,6 +132,7 @@ class OptimConfig:
 class LossType(Enum):
     cse = 1
     l1 = 2
+    dice = 3
 
 
 class LossReduction(Enum):
@@ -139,9 +141,15 @@ class LossReduction(Enum):
 
 
 @dataclass
+class DiceLossConfig:
+    binary: bool = MISSING
+
+
+@dataclass
 class LossConfig:
     type: LossType = MISSING
     reduction: LossReduction = MISSING
+    dice_loss_args: Optional[DiceLossConfig] = None
 
 
 @dataclass

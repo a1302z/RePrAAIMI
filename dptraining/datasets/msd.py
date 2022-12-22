@@ -57,22 +57,31 @@ class MSD(Dataset):
         transform: Optional[Callable] = None,
         label_transform: Optional[Callable] = None,
         resolution: Optional[int] = None,
-        slice_thickness: Optional[int] = None,
+        slice_thickness: Optional[float] = None,
+        n_slices: Optional[int] = None,
         normalization: Normalization = Normalization.raw,
         data_stats: DataStats = None,
         cache_files: bool = False,
         ct_window: CTWindow = CTWindow(-150, 200),
     ) -> None:
         super().__init__()
+        assert (slice_thickness is not None) or (
+            n_slices is not None
+        ), "You can only set either slice_thickness or n_slices"
         self.matched_labeled_scans: list[tuple[str, Path, Path]] = matched_labeled_scans
         self.transform = transform
         self.label_transform = label_transform
         self.resolution: Optional[int] = resolution
-        self.slice_thickness: Optional[int] = slice_thickness
+        self.slice_thickness: Optional[float] = slice_thickness
+        self.n_slices: Optional[int] = n_slices
         self.normalization: Normalization = normalization
         self.cache: bool = cache_files
         self.cached_files: Optional[mp.Array]
         self.ct_window: CTWindow = ct_window
+        # self.slice_thicknesses = mp.Array(
+        #     ctypes.c_float, [0.0] * len(self.matched_labeled_scans), lock=True
+        # )
+
         if self.cache:
             # self.cached_files = [False for _ in self.matched_labeled_scans]
             self.cached_files = mp.Array(
@@ -108,7 +117,10 @@ class MSD(Dataset):
         )
         # t1 = time()
         # print(f"\t Loading took {t1-t0:.1f} seconds")
-        return scan[np.newaxis, ...], label[np.newaxis, ...]  # add channel dimension
+        return (
+            scan[np.newaxis, ...],
+            label[np.newaxis, ...],
+        )  # add channel dimension
 
     def load_nifti_files(self, index, img_file, label_file):
         if self.cache:
@@ -119,12 +131,18 @@ class MSD(Dataset):
             label_file = label_file.readlink()
         scan = nib.load(img_file)
         label = nib.load(label_file)
-        if self.resolution or self.slice_thickness:
+        if self.resolution or self.slice_thickness or self.n_slices:
             scan, label = self.resize_scan(scan, label)
             assert scan.header.get_data_shape() == label.header.get_data_shape(), (
                 f"Index {index} has not matching shapes"
                 f"\nShapes: {scan.header.get_data_shape()}\t{label.header.get_data_shape()}"
             )
+            # if self.n_slices:
+            #     new_zooms = scan.header.get_zooms()
+            #     # print(
+            #     #     f"Old num slices: {data_shape[2]}\tOld thickness: {zooms[2]:.2f}\tNew num slices: {self.n_slices}\tNew thickness: {new_zooms[2]:.2f}"
+            #     # )
+            #     self.slice_thicknesses[index] = new_zooms[2]
 
         scan, label = self.preprocess_and_convert_to_numpy(scan, label)
         if self.cache:
@@ -204,12 +222,15 @@ class MSD(Dataset):
         # print(
         #     f"Actual size: {data_shape[0]*zooms[0]:.1f}mm x {data_shape[1]*zooms[1]:.1f}mm x {data_shape[2]*zooms[2]:.1f}mm"
         # )
+        z_shape = data_shape[2]
+        if self.slice_thickness:
+            z_shape = int(data_shape[2] * zooms[2] / self.slice_thickness)
+        if self.n_slices:
+            z_shape = self.n_slices
         new_shape = (
             self.resolution if self.resolution else data_shape[0],
             self.resolution if self.resolution else data_shape[1],
-            int(data_shape[2] * zooms[2] / self.slice_thickness)
-            if self.slice_thickness
-            else data_shape[2],
+            z_shape,
         )
         new_affine = np.copy(scan.affine)
         for i in range(len(new_shape)):
@@ -217,8 +238,10 @@ class MSD(Dataset):
         # print(zooms)
         if self.slice_thickness:
             new_affine[2, 2] = self.slice_thickness
+        elif self.n_slices:
+            new_affine[2, 2] = (data_shape[2] * zooms[2]) / self.n_slices
         else:
-            new_affine[2, 2] = data_shape[-1]
+            new_affine[2, 2] = data_shape[2]
         scan = resample_img(
             scan,
             target_affine=new_affine,
@@ -231,7 +254,11 @@ class MSD(Dataset):
             target_shape=new_shape,
             interpolation="nearest",
         )
-        # new_zooms = scan.header.get_zooms()
+        # if self.n_slices:
+        #     new_zooms = scan.header.get_zooms()
+        # print(
+        #     f"Old num slices: {data_shape[2]}\tOld thickness: {zooms[2]:.2f}\tNew num slices: {self.n_slices}\tNew thickness: {new_zooms[2]:.2f}"
+        # )
 
         # print(
         #     f"New real size: {new_shape[0]*new_zooms[0]:.1f}mm x {new_shape[1]*new_zooms[1]:.1f}mm x {new_shape[2]*new_zooms[2]:.1f}mm"
@@ -330,6 +357,7 @@ class MSDCreator(DataLoaderCreator):
                 transform=tf,
                 resolution=config.dataset.resolution,
                 slice_thickness=config.dataset.slice_thickness,
+                n_slices=config.dataset.n_slices,
                 normalization=config.dataset.normalization_type,
                 data_stats=config.dataset.data_stats,
                 cache_files=config.dataset.cache,
@@ -409,7 +437,8 @@ if __name__ == "__main__":
                 "datasplit_seed": 0,
                 "task": "segmentation",
                 "cache": True,
-                "slice_thickness": 3.0,
+                # "slice_thickness": 3.0,
+                "n_slices": 100,
                 "normalization_type": "raw",
                 "resolution": 128,
                 "ct_window": {"low": -150, "high": 250},
@@ -426,6 +455,12 @@ if __name__ == "__main__":
         prefetch_factor=2,
         collate_fn=collate_fn,
     )
+    # for _ in tqdm(train_dl, total=len(train_dl)):
+    #     pass
+    # x = np.array(train_dl.dataset.slice_thicknesses)
+    # plt.hist(x, bins=list(range(10)), density=True)
+    # plt.savefig("slice_thicknesses.png")
+    # exit()
 
     # mean, std = calc_mean_std(train_dl)
     # print(f"Mean: {mean:.6f}\tStd: {std:.6f}")
