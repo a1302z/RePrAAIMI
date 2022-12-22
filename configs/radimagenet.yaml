@@ -8,7 +8,7 @@ general:
   eval_train: True
   # save_path: radimagenet_resnet9.npz
   make_save_str_unique: True
-# ckpt:
+# checkpoint:
 #   logdir: radimagenet_resnet9_ckpt
 #   keep_ckpts: 10
 #   makedir: True
@@ -16,13 +16,14 @@ dataset:
   name: radimagenet
   task: classification
   root: ./data/radiology_ai
-  normalize_by_modality: True
   train_val_split: 0.8
   test_split: 0.1
-  datasplit_seed: 0
-  modality: all
-  allowed_body_regions: all
-  allowed_labels: all
+  radimagenet:
+    normalize_by_modality: True
+    datasplit_seed: 0
+    modality: all
+    allowed_body_regions: all
+    allowed_labels: all
 loader: 
   num_workers: 16
   prefetch_factor: 16

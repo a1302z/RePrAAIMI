@@ -8,7 +8,7 @@ general:
   eval_train: True
   use_pretrained_model: 
   save_path: cifar10dp.npz
-# ckpt:
+# checkpoint:
 #   logdir: cifar10dpckpts
 #   keep_ckpts: 2
 #   makedir: True

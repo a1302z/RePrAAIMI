@@ -7,7 +7,7 @@ general:
   parallel: False
   eval_train: False
   make_save_str_unique: True
-# ckpt:
+# checkpoint:
 #   logdir: fmri_ckpts
 #   keep_ckpts: 2
 #   makedir: True
@@ -15,16 +15,16 @@ dataset:
   task: reconstruction
   name: fastmri
   root: ./data/FastMRI/knee/data/
-  new_data_root: ./data
   train_val_split: 0.9
-  fft: False
-  mask_type: random
-  center_fractions:
-    - 0.08
-  accelerations:
-    - 4
-  challenge: "singlecoil"
-  resolution: 320
+  fmri:
+    new_data_root: ./data
+    mask_type: random
+    center_fractions:
+      - 0.08
+    accelerations:
+      - 4
+    challenge: "singlecoil"
+    resolution: 320
 loader: 
   num_workers: 16
   prefetch_factor: 16

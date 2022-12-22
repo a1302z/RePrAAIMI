@@ -16,18 +16,19 @@ dataset:
   name: msd
   root: ./data/MSD/
   train_val_split: 0.9
-  test_split: 0.1
-  resolution: 128
-  subtask: liver
-  cache: True
-  # slice_thickness: 1.0
-  n_slices: 50
-  data_stats:
-    mean: -81.91
-    std: 8.736
-  ct_window: 
-    low: -150
-    high: 200
+  msd:
+    test_split: 0.1
+    resolution: 128
+    subtask: liver
+    cache: True
+    # slice_thickness: 1.0
+    n_slices: 50
+    data_stats:
+      mean: -81.91
+      std: 8.736
+    ct_window: 
+      low: -150
+      high: 200
 loader: 
   num_workers: 16
   prefetch_factor: 2

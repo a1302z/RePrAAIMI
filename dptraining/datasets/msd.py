@@ -298,13 +298,13 @@ class MSDCreator(DataLoaderCreator):
         config: Config, transforms: Tuple
     ) -> Tuple[Dataset, Dataset, Dataset]:
         root = Path(config.dataset.root)
-        if config.dataset.subtask:
-            root = root / MSDCreator.subtask_paths[config.dataset.subtask.value]
-        seed(config.dataset.datasplit_seed)
+        if config.dataset.msd.subtask:
+            root = root / MSDCreator.subtask_paths[config.dataset.msd.subtask.value]
+        seed(config.dataset.msd.datasplit_seed)
 
         train_split, test_split = (
             config.dataset.train_val_split,
-            config.dataset.test_split,
+            config.dataset.msd.test_split,
         )
 
         labeled_scans_path = root / "imagesTr"
@@ -355,13 +355,13 @@ class MSDCreator(DataLoaderCreator):
             MSD(
                 smls,
                 transform=tf,
-                resolution=config.dataset.resolution,
-                slice_thickness=config.dataset.slice_thickness,
-                n_slices=config.dataset.n_slices,
-                normalization=config.dataset.normalization_type,
-                data_stats=config.dataset.data_stats,
-                cache_files=config.dataset.cache,
-                ct_window=config.dataset.ct_window,
+                resolution=config.dataset.msd.resolution,
+                slice_thickness=config.dataset.msd.slice_thickness,
+                n_slices=config.dataset.msd.n_slices,
+                normalization=config.dataset.msd.normalization_type,
+                data_stats=config.dataset.msd.data_stats,
+                cache_files=config.dataset.msd.cache,
+                ct_window=config.dataset.msd.ct_window,
             )
             for smls, tf in zip(split_matched_labeled_scans, transforms)
         )

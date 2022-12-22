@@ -7,7 +7,7 @@ general:
   parallel: False
   eval_train: True
   make_save_str_unique: True
-# ckpt:
+# checkpoint:
 #   logdir: radimagenet_resnet9_ckpt
 #   keep_ckpts: 10
 #   makedir: True
@@ -15,13 +15,14 @@ dataset:
   name: radimagenet
   task: classification
   root: ./data/radiology_ai
-  normalize_by_modality: True
   train_val_split: 0.8
   test_split: 0.1
-  datasplit_seed: 0
-  modality: all
-  allowed_body_regions: all
-  allowed_labels: all
+  radimagenet:
+    normalize_by_modality: True
+    datasplit_seed: 0
+    modality: all
+    allowed_body_regions: all
+    allowed_labels: all
 loader: 
   num_workers: 16
   prefetch_factor: 16
@@ -47,7 +48,8 @@ model:
   activation: mish
   normalization: gn
   pooling: maxpool
-  # scale_norm: True
+  extra_args:
+    scale_norm: True
 optim:
   name: nadam
 ema:
@@ -81,7 +83,6 @@ earlystopping:
   patience: 100
   min_delta: 0.01
 DP:
-  disable_dp: False
   epsilon: 8.0
   max_per_sample_grad_norm: 1.0
   delta: 8e-7

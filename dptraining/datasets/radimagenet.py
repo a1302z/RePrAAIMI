@@ -376,13 +376,13 @@ class RadImageNetCreator(DataLoaderCreator):
         val_split = 1.0 - train_split - test_split
         assert val_split > 0, "Train and test split are combined larger than 1"
         seed = (
-            config.dataset.datasplit_seed
-            if config.dataset.datasplit_seed
+            config.dataset.radimagenet.datasplit_seed
+            if config.dataset.radimagenet.datasplit_seed
             else config.general.seed
         )
         copy_folder = (
-            config.dataset.split_folder
-            if config.dataset.split_folder
+            config.dataset.radimagenet.split_folder
+            if config.dataset.radimagenet.split_folder
             else root_folder.parent
             / (
                 f"{root_folder.name}_dataset_split_{train_split}_"
@@ -463,10 +463,10 @@ class RadImageNetCreator(DataLoaderCreator):
                 new_root,
                 transform=tf,
                 task=task,
-                modality=config.dataset.modality,
-                allowed_body_regions=config.dataset.allowed_body_regions,
-                allowed_labels=config.dataset.allowed_labels,
-                normalize_by_modality=config.dataset.normalize_by_modality,
+                modality=config.dataset.radimagenet.modality,
+                allowed_body_regions=config.dataset.radimagenet.allowed_body_regions,
+                allowed_labels=config.dataset.radimagenet.allowed_labels,
+                normalize_by_modality=config.dataset.radimagenet.normalize_by_modality,
             )
             for (new_root, tf) in zip(train_val_test_dirs, transforms)
         )

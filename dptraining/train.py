@@ -90,16 +90,16 @@ def main(
     if config.general.make_save_str_unique:
         if config.general.log_wandb:
             identifying_model_str += (
-                f"_{wandb.run.name}_{datetime.now().strftime('%Y-%m-%d_%H-%M')}"
+                f"_{wandb.run.name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
             )
         else:
             identifying_model_str += f"_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
 
-    if config.ckpt:
-        config.ckpt.logdir += identifying_model_str
-        ckpt = objax.io.Checkpoint(**OmegaConf.to_container(config.ckpt))
+    if config.checkpoint:
+        config.checkpoint.logdir += identifying_model_str
+        checkpoint = objax.io.Checkpoint(**OmegaConf.to_container(config.checkpoint))
     else:
-        ckpt = None
+        checkpoint = None
 
     ema: Optional[ExponentialMovingAverage] = None
     if config.ema.use_ema:
@@ -314,8 +314,8 @@ def main(
                 wandb.log({"epsilon": epsilon})
             else:
                 print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})")
-        if ckpt is not None:
-            ckpt.save(model.vars(), idx=epoch)
+        if checkpoint is not None:
+            checkpoint.save(model.vars(), idx=epoch)
         if metric is not None and stopper(metric):
             print("Early Stopping was activated -> Stopping Training")
             break
@@ -334,10 +334,13 @@ def main(
         loss_fn=test_loss_fn,
     )
     if config.general.save_path:
-        print(f"Saving model to {config['general']['save_path']}")
-        objax.io.save_var_collection(
-            config.general.save_path + identifying_model_str, model.vars()
+        save_path = (
+            config.general.save_path.parent / config.general.save_path.stem
+            + identifying_model_str
+            + config.general.save_path.suffix
         )
+        print(f"Saving model to {config.general.save_path}")
+        objax.io.save_var_collection(save_path, model.vars())
     if config.general.log_wandb:
         run.finish()
     else:

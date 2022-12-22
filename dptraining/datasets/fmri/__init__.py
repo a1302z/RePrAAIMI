@@ -23,27 +23,27 @@ class FMRICreator(DataLoaderCreator):
             )
 
         mask = create_mask_for_mask_type(
-            config.dataset.mask_type,
-            config.dataset.center_fractions,
-            config.dataset.accelerations,
+            config.dataset.fmri.mask_type,
+            config.dataset.fmri.center_fractions,
+            config.dataset.fmri.accelerations,
         )
         train_transform = UnetDataTransform(
-            config.dataset.challenge,
+            config.dataset.fmri.challenge,
             mask_func=mask,
             use_seed=False,
-            size=config.dataset.resolution,
+            size=config.dataset.fmri.resolution,
         )
         val_transform = UnetDataTransform(
-            config.dataset.challenge,
+            config.dataset.fmri.challenge,
             mask_func=mask,
-            size=config.dataset.resolution,
+            size=config.dataset.fmri.resolution,
         )
         test_transform = UnetDataTransform(
-            config.dataset.challenge, size=config.dataset.resolution
+            config.dataset.fmri.challenge, size=config.dataset.fmri.resolution
         )
         data_module = FastMriDataModule(
             data_path=Path(config.dataset.root),
-            challenge=config.dataset.challenge,
+            challenge=config.dataset.fmri.challenge,
             train_transform=train_transform,
             val_transform=val_transform,
             test_transform=test_transform,
@@ -53,8 +53,8 @@ class FMRICreator(DataLoaderCreator):
             batch_size=config.hyperparams.batch_size,
             num_workers=config.loader.num_workers,
             split_train_dataset=config.dataset.train_val_split,
-            new_data_root=Path(config.dataset.new_data_root)
-            if config.dataset.new_data_root
+            new_data_root=Path(config.dataset.fmri.new_data_root)
+            if config.dataset.fmri.new_data_root
             else None,
         )
         train_set, val_set, test_set = (

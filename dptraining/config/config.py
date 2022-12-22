@@ -73,6 +73,40 @@ class CTWindow:
 
 
 @dataclass
+class FmriConfig:
+    mask_type: str = "random"
+    center_fractions: tuple[float] = (0.08,)
+    accelerations: tuple[float] = (4,)
+    challenge: str = "knee"
+    resolution: int = 320
+    new_data_root: Optional[str] = None
+
+
+@dataclass
+class RadimagenetConfig:
+    datasplit_seed: Optional[int] = 0
+    modality: str = "all"
+    normalize_by_modality: bool = False
+    allowed_body_regions: str = "all"
+    allowed_labels: str = "all"
+    split_folder: Optional[str] = None
+
+
+@dataclass
+class MSDConfig:
+    subtask: Optional[MSDSubtask] = None
+    slice_thickness: Optional[float] = None
+    n_slices: Optional[int] = None
+    cache: bool = False
+    normalization_type: Normalization = Normalization.gaussian
+    data_stats: Optional[DataStats] = None
+    ct_window: Optional[CTWindow] = None
+    test_split: float = MISSING
+    resolution: Optional[int] = None
+    datasplit_seed: Optional[int] = 0
+
+
+@dataclass
 class DatasetConfig:
     name: DatasetName = MISSING
     root: str = MISSING
@@ -82,26 +116,10 @@ class DatasetConfig:
     download: Optional[bool] = False
     fft: bool = False
     task: DatasetTask = MISSING
-    datasplit_seed: Optional[int] = 0  # only for radimagenet
-    modality: str = "all"  # only for radimagenet
-    normalize_by_modality: bool = False  # only for radimagenet
-    test_split: float = MISSING  # only for radimagenet and msd
-    allowed_body_regions: str = "all"  # only for radimagenet
-    allowed_labels: str = "all"  # only for radimagenet
-    split_folder: Optional[str] = None  # only for radimagenet
-    mask_type: str = "random"  # only for fmri
-    center_fractions: tuple[float] = (0.08,)  # only for fmri
-    accelerations: tuple[float] = (4,)  # only for fmri
-    challenge: str = "knee"  # only for fmri
-    resolution: Optional[int] = None  # only for fmri and msd so far
-    new_data_root: Optional[str] = None  # only for fmri so far
-    subtask: Optional[MSDSubtask] = None  # only for msd so far
-    slice_thickness: Optional[float] = None  # only for msd
-    n_slices: Optional[int] = None
-    cache: bool = False  # only for MSD
-    normalization_type: Normalization = Normalization.gaussian
-    data_stats: Optional[DataStats] = None
-    ct_window: Optional[CTWindow] = None
+    test_split: float = 0.1
+    radimagenet: Optional[RadimagenetConfig] = None
+    fmri: Optional[FmriConfig] = None
+    msd: Optional[MSDConfig] = None
 
 
 class LoaderCollateFn(Enum):
@@ -212,7 +230,7 @@ class Config:
     project: str = MISSING
     general: GeneralConfig = GeneralConfig()
     dataset: DatasetConfig = DatasetConfig()
-    ckpt: dict[str, Any] = field(default_factory=dict)
+    checkpoint: dict[str, Any] = field(default_factory=dict)
     train_transforms: dict[str, Any] = field(default_factory=dict)
     test_transforms: dict[str, Any] = field(default_factory=dict)
     val_transforms: dict[str, Any] = field(default_factory=dict)
@@ -228,5 +246,5 @@ class Config:
     hyperparams: HyperparamsConfig = HyperparamsConfig()
     earlystopping: Optional[EarlyStoppingConfig] = None
     scheduler: SchedulerConfig = SchedulerConfig()
-    metrics: Optional[dict[str, Any]] = field(default_factory=dict)
+    metrics: dict[str, Any] = field(default_factory=dict)
     DP: Optional[DPConfig] = None

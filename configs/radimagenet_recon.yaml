@@ -8,7 +8,7 @@ general:
   eval_train: True
   save_path: radimagenet_unet.npz
   make_save_str_unique: True
-ckpt:
+checkpoint:
   logdir: radimagenet_unet_ckpt
   keep_ckpts: 10
   makedir: True
@@ -16,13 +16,14 @@ dataset:
   name: radimagenet
   task: reconstruction
   root: ./data/radiology_ai
-  normalize_by_modality: False
   train_val_split: 0.8
   test_split: 0.1
-  datasplit_seed: 0
-  modality: all
-  allowed_body_regions: all
-  allowed_labels: all
+  radimagenet:
+    normalize_by_modality: False
+    datasplit_seed: 0
+    modality: all
+    allowed_body_regions: all
+    allowed_labels: all
 loader: 
   num_workers: 16
   prefetch_factor: 16
@@ -60,9 +61,10 @@ model:
   complex: True
   name: unet
   in_channels: 1
-  out_channels: 1
-  channels: 16
   activation: cardioid
+  extra_args:
+    out_channels: 1
+    channels: 16
 optim:
   name: nadam
 ema:
@@ -103,5 +105,3 @@ earlystopping:
   mode: maximize
   patience: 100
   min_delta: 0.01
-DP:
-  disable_dp: True
