@@ -2,9 +2,9 @@ import inspect
 import warnings
 from copy import deepcopy
 from functools import partial
-from typing import Callable
+from typing import Callable, Union
 
-from objax import functional, nn, VarCollection
+from objax import functional, nn, VarCollection, BaseVar
 from omegaconf import OmegaConf
 
 from dptraining.config import Config, ModelConfig, get_allowed_values
@@ -417,19 +417,21 @@ def make_complex_model_from_config(config: ModelConfig) -> Callable:
 
 
 def modify_architecture_from_pretrained_model(config: Config, model: Callable):
-    model_vars = {}
+    model_vars: dict[str, BaseVar] = {}
     if config.model.in_channels != config.model.pretrained_model_changes.in_channels:
         if config.model.complex:
-            new_layer = make_complex_conv_from_config(config.model)
+            new_layer: Callable = make_complex_conv_from_config(config.model)
         else:
-            new_layer = make_conv_from_config(config.model)
-        new_layer = new_layer(
+            new_layer: Callable = make_conv_from_config(config.model)
+        new_layer = new_layer(  # pylint:disable=not-callable
             config.model.pretrained_model_changes.in_channels,
             config.model.in_channels,
             k=1,
         )
-        for k, v in new_layer.vars().items():
-            model_vars[f"adaptchannellayer_{k}"] = v
+        model_vars = {
+            f"adaptchannellayer_{layer_name}": layer_param
+            for layer_name, layer_param in new_layer.vars().items()
+        }
         match config.model.name:
             case ModelName.resnet9:
                 model.conv1 = nn.Sequential([new_layer, model.conv1])
@@ -469,8 +471,8 @@ def modify_architecture_from_pretrained_model(config: Config, model: Callable):
                     f"Change of number of out classes not yet supported for {other}"
                 )
 
-        for k, v in new_layer.vars().items():
-            model_vars[f"class_fc_{k}"] = v
+        for layer_name, layer_param in new_layer.vars().items():
+            model_vars[f"class_fc_{layer_name}"] = layer_param
     if config.model.pretrained_model_changes.only_finetune:
         model_vars = VarCollection(**model_vars)
     else:

@@ -101,7 +101,9 @@ def main(
         )
         model_vars = unfreeze_schedule(0)
     else:
-        unfreeze_schedule = lambda _: model_vars
+        unfreeze_schedule = (
+            lambda _: model_vars  # pylint:disable=unnecessary-lambda-assignment
+        )
 
     identifying_model_str = ""
     if config.general.make_save_str_unique:
@@ -127,7 +129,11 @@ def main(
             model(x, training=False)
         )
     else:
-        predict_lambda = lambda x: model(x, training=False)
+        predict_lambda = (
+            lambda x: model(  # pylint:disable=unnecessary-lambda-assignment
+                x, training=False
+            )
+        )
 
     predict_op_parallel = objax.Parallel(
         predict_lambda, model.vars(), reduce=np.concatenate

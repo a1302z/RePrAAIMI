@@ -28,7 +28,7 @@ def test_train_cifar_one_batch(utils):
             "name": "CIFAR10",
             "root": "./data",
             "train_val_split": 0.9,
-            "task": "classification",
+            "task": "multi_class_classification",
         },
         "optim": {"name": "momentum", "args": {"momentum": 0.5}},
         "loss": {"type": "cse", "reduction": "mean"},

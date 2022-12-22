@@ -93,22 +93,22 @@ def make_unfreezing_schedule(
         case ModelName.resnet9:
             match len(epoch_triggers):
                 case 2:
-                    search_terms = [
-                        [".classifier("],
-                        [".classifier(", ".res2(", ".conv4(", ".res3(", ".conv3("],
+                    search_terms = (
+                        (".classifier("),
+                        (".classifier(", ".res2(", ".conv4(", ".res3(", ".conv3("),
                         all_keys,
-                    ]
+                    )
                 case 3:
-                    search_terms = [
-                        [".classifier("],
-                        [
+                    search_terms = (
+                        (".classifier("),
+                        (
                             ".classifier(",
                             ".res2(",
                             ".conv4(",
-                        ],
-                        [".classifier(", ".res2(", ".conv4(", ".res3(", ".conv3("],
+                        ),
+                        (".classifier(", ".res2(", ".conv4(", ".res3(", ".conv3("),
                         all_keys,
-                    ]
+                    )
                 case other:
                     raise ValueError(
                         f"No Scheduler for {model_name} with {other} trigger points yet defined"

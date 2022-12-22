@@ -15,7 +15,7 @@ from sklearn.model_selection import train_test_split
 from dptraining.datasets.base_creator import DataLoaderCreator
 
 
-IDENTITY = lambda _: _
+IDENTITY = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
 
 
 class HAM10000(Dataset):
@@ -52,7 +52,9 @@ class HAM10000(Dataset):
                 self.metadata["dx"].isin(["akiec", "bcc", "mel"]).astype(int)
             )
         else:
-            label_assignment = {val: i for i, val in enumerate(df.dx.unique())}
+            label_assignment = {
+                val: i for i, val in enumerate(self.metadata.dx.unique())
+            }
             self.metadata["label"] = self.metadata.dx.map(label_assignment).astype(int)
 
         self.transform = transform if transform is not None else IDENTITY
@@ -82,19 +84,19 @@ class HAM10000Creator(DataLoaderCreator):
         test_split = config.dataset.test_split
         train_split = config.dataset.train_val_split
         merge_labels = config.dataset.ham.merge_labels
-        df = pd.read_csv(root / "HAM10000_metadata.csv")
-        label_assignment = {val: i for i, val in enumerate(df.dx.unique())}
-        df["label"] = df.dx.map(label_assignment).astype(int)
-        idcs, lbls = np.arange(len(df)), df.label.to_numpy()
+        metadata = pd.read_csv(root / "HAM10000_metadata.csv")
+        label_assignment = {val: i for i, val in enumerate(metadata.dx.unique())}
+        metadata["label"] = metadata.dx.map(label_assignment).astype(int)
+        idcs, lbls = np.arange(len(metadata)), metadata.label.to_numpy()
         idcs_train, idcs_test, lbls_train, _ = train_test_split(
             idcs, lbls, stratify=lbls, test_size=test_split
         )
         idcs_train, idcs_val, _, _ = train_test_split(
             idcs_train, lbls_train, stratify=lbls_train, train_size=train_split
         )
-        train_df = df.iloc[idcs_train]
-        val_df = df.iloc[idcs_val]
-        test_df = df.iloc[idcs_test]
+        train_df = metadata.iloc[idcs_train]
+        val_df = metadata.iloc[idcs_val]
+        test_df = metadata.iloc[idcs_test]
 
         return (
             HAM10000(root, metadata=split_df, merge_labels=merge_labels, transform=tf)
@@ -205,7 +207,7 @@ class HAM10000Creator(DataLoaderCreator):
 #     #     {
 #     #         "dataset": {
 #     #             "name": "ham10000",
-#     #             "task": "classification",
+#     #             "task": "binary_classification",
 #     #             "root": "./data/dataverse_files",
 #     #             "train_val_split": 0.8,
 #     #             "test_split": 0.1,

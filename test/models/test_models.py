@@ -56,7 +56,7 @@ def test_cifar10convnet_wrong_shape():
 def test_make_cifar10model(utils):
     config_dict = {"model": {"name": "cifar10model", "num_classes": 10}}
     config = utils.extend_base_config(config_dict)
-    m = make_model_from_config(config)
+    m = make_model_from_config(config.model)
     random_input_data = np.random.randn(10, 3, 32, 32)
     m(random_input_data, training=False)
 
@@ -73,7 +73,7 @@ def test_resnet18(utils):
         }
     }
     config = utils.extend_base_config(config_dict)
-    m = make_model_from_config(config)
+    m = make_model_from_config(config.model)
     random_input_data = np.random.randn(2, 3, 224, 224)
     m(random_input_data, training=False)
 
@@ -105,7 +105,7 @@ def test_make_resnet9(utils):
         }
     }
     config = utils.extend_base_config(config_dict)
-    m = make_model_from_config(config)
+    m = make_model_from_config(config.model)
     random_input_data = np.random.randn(2, 12, 224, 224)
     m(random_input_data, training=False)
     assert m.conv1[1].groups == 4
@@ -138,9 +138,9 @@ def test_all_options(utils):
         config = utils.extend_base_config(config_dict)
         if model == "cifar10model":
             with pytest.warns(UserWarning):
-                model = make_model_from_config(config)
+                model = make_model_from_config(config.model)
         else:
-            model = make_model_from_config(config)
+            model = make_model_from_config(config.model)
         pred = model(fake_data, training=True)
         assert pred.shape[1] == 5
 
@@ -163,7 +163,7 @@ def test_ensemble(utils):
         }
     }
     config = utils.extend_base_config(config_dict)
-    model = make_model_from_config(config)
+    model = make_model_from_config(config.model)
     assert len(model.ensemble) == 2
     random_input_data = np.random.randn(2, 12, 224, 224)
     model(random_input_data, training=False)

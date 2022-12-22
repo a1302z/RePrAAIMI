@@ -44,7 +44,7 @@ def test_cifar10_from_config(utils):
             "name": "CIFAR10",
             "root": "./data",
             "train_val_split": 0.9,
-            "task": "classification",
+            "task": "multi_class_classification",
         },
         "loader": {"num_workers": 16, "prefetch_factor": 16, "collate_fn": "numpy"},
     }
@@ -57,7 +57,7 @@ def test_imagenet_from_config(utils):
     config_dict = {
         "hyperparams": {"batch_size": 4, "batch_size_test": 1},
         "dataset": {
-            "task": "classification",
+            "task": "multi_class_classification",
             "name": "imagenet",
             "root": "./data/ILSVRC2012",
             "train_val_split": 0.9,
@@ -84,7 +84,7 @@ def test_no_val_set(utils):
     config_dict = {
         "hyperparams": {"batch_size": 1, "batch_size_test": 1},
         "dataset": {
-            "task": "classification",
+            "task": "multi_class_classification",
             "name": "CIFAR10",
             "root": "./data/",
             "train_val_split": 1.0,
@@ -102,7 +102,7 @@ def test_tiny_imagenet_from_config(utils):
     config_dict = {
         "hyperparams": {"batch_size": 4, "batch_size_test": 1},
         "dataset": {
-            "task": "classification",
+            "task": "multi_class_classification",
             "name": "tinyimagenet",
             "root": "./data/ImageNet32",
             "version": 32,
