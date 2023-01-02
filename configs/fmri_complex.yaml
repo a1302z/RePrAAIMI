@@ -45,6 +45,7 @@ optim:
 loss: 
   type: l1
   reduction: mean
+  binary_loss: False
 ema:
   use_ema: False
   decay: 0.999

@@ -50,8 +50,7 @@ optim:
 loss: 
   type: dice
   reduction: mean
-  dice_loss_args:
-    binary: True
+  binary_loss: True
 ema:
   use_ema: False
   decay: 0.999

@@ -32,6 +32,7 @@ class DatasetName(Enum):
     fastmri = 4
     radimagenet = 5
     msd = 6
+    ham10000 = 7
 
 
 class MSDSubtask(Enum):
@@ -94,16 +95,21 @@ class RadimagenetConfig:
 
 @dataclass
 class MSDConfig:
-    subtask: Optional[MSDSubtask] = None
+    subtask: Optional[MSDSubtask] = MISSING
     slice_thickness: Optional[float] = None
     n_slices: Optional[int] = None
     cache: bool = False
-    normalization_type: Normalization = Normalization.gaussian
+    normalization_type: Normalization = MISSING
     data_stats: Optional[DataStats] = None
     ct_window: Optional[CTWindow] = None
     test_split: float = MISSING
     resolution: Optional[int] = None
     datasplit_seed: Optional[int] = 0
+
+
+@dataclass
+class HAM10000:
+    merge_labels: bool = True  # only for HAM10000
 
 
 @dataclass
@@ -120,6 +126,7 @@ class DatasetConfig:
     radimagenet: Optional[RadimagenetConfig] = None
     fmri: Optional[FmriConfig] = None
     msd: Optional[MSDConfig] = None
+    ham: Optional[HAM10000] = None
 
 
 class LoaderCollateFn(Enum):
@@ -159,15 +166,10 @@ class LossReduction(Enum):
 
 
 @dataclass
-class DiceLossConfig:
-    binary: bool = MISSING
-
-
-@dataclass
 class LossConfig:
     type: LossType = MISSING
     reduction: LossReduction = MISSING
-    dice_loss_args: Optional[DiceLossConfig] = None
+    binary_loss: bool = MISSING
 
 
 @dataclass
@@ -214,6 +216,11 @@ class EarlyStoppingConfig:
 
 
 @dataclass
+class UnfreezingSchedule:
+    trigger_points: list[int] = MISSING
+
+
+@dataclass
 class DPConfig:
     epsilon: float = MISSING
     max_per_sample_grad_norm: float = MISSING
@@ -246,5 +253,6 @@ class Config:
     hyperparams: HyperparamsConfig = HyperparamsConfig()
     earlystopping: Optional[EarlyStoppingConfig] = None
     scheduler: SchedulerConfig = SchedulerConfig()
+    unfreeze_schedule: Optional[UnfreezingSchedule] = None
     metrics: dict[str, Any] = field(default_factory=dict)
     DP: Optional[DPConfig] = None

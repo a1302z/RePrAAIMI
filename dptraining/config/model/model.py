@@ -19,7 +19,9 @@ class ModelName(Enum):
 # https://github.com/omry/omegaconf/issues/144
 
 
-class RealModelName(Enum):
+class RealModelName(
+    Enum
+):  # TODO: split also by classification vs segmentation/recon models
     cifar10model = 1
     resnet18 = 2
     resnet9 = 3
@@ -123,6 +125,13 @@ class ComplexPooling(Enum):
 
 
 @dataclass
+class PretrainChanges:
+    in_channels: int = MISSING
+    num_classes: int = MISSING
+    only_finetune: bool = False
+
+
+@dataclass
 class ModelConfig:
     name: ModelName = MISSING
     ensemble: Optional[int] = None
@@ -134,5 +143,6 @@ class ModelConfig:
     activation: Optional[Activation] = None
     normalization: Optional[Normalization] = None
     pooling: Pooling = MISSING
+    pretrained_model_changes: Optional[PretrainChanges] = None
     extra_args: Optional[dict[str, Any]] = None
     upconv: Optional[UpConv] = None

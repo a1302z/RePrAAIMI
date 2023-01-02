@@ -31,7 +31,7 @@ def test_train_cifar_one_batch(utils):
             "task": "classification",
         },
         "optim": {"name": "momentum", "args": {"momentum": 0.5}},
-        "loss": {"type": "cse", "reduction": "mean"},
+        "loss": {"type": "cse", "reduction": "mean", "binary_loss": False},
         "hyperparams": {
             "epochs": 1,
             "batch_size": 128,

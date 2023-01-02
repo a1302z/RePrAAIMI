@@ -11,6 +11,7 @@ from dptraining.datasets.radimagenet import RadImageNetCreator
 from dptraining.datasets.fmri import FMRICreator
 from dptraining.datasets.tinyimagenet import TinyImageNetCreator
 from dptraining.datasets.msd import MSDCreator
+from dptraining.datasets.ham10000 import HAM10000Creator
 from dptraining.datasets.utils import (
     collate_np_classification,
     collate_np_reconstruction,
@@ -36,6 +37,8 @@ def select_creator(config):
             creator = RadImageNetCreator
         case DatasetName.msd:
             creator = MSDCreator
+        case DatasetName.ham10000:
+            creator = HAM10000Creator
         case _ as unsupported:
             raise ValueError(f"Unsupported dataset '{unsupported}'.")
     return creator

@@ -8,10 +8,17 @@ from objax.typing import JaxArray
 from jax import numpy as jnp, vmap, nn
 
 
-def f_score_from_counts(tp, pr, gt, beta, nominator_epsilon=0, denominator_epsilon=0):
+def f_score_from_counts(
+    true_positive,
+    predictions,
+    ground_truth,
+    beta,
+    nominator_epsilon=0,
+    denominator_epsilon=0,
+):
     beta_squared = beta * beta
-    return ((1 + beta_squared) * tp + nominator_epsilon) / (
-        beta_squared * pr + gt + denominator_epsilon
+    return ((1 + beta_squared) * true_positive + nominator_epsilon) / (
+        beta_squared * predictions + ground_truth + denominator_epsilon
     )
 
 
@@ -46,16 +53,16 @@ def f_scores_from_confidence(
     denominator_epsilon=0,
 ):
     if binary:
-        gt = jnp.array(labels, dtype=confidence.dtype)
+        ground_truth = jnp.array(labels, dtype=confidence.dtype)
     else:
-        gt = nn.one_hot(
+        ground_truth = nn.one_hot(
             labels,
             confidence.shape[-1],
             axis=-1,
             dtype=confidence.dtype,
         ).squeeze(-2)
     return fscores_from_one_hot(
-        gt, confidence, betas, nominator_epsilon, denominator_epsilon
+        ground_truth, confidence, betas, nominator_epsilon, denominator_epsilon
     )
 
 
@@ -142,7 +149,7 @@ class CombinedLoss(LossFunctionCreator):
         return loss_fn
 
     def create_test_loss_fn(self) -> Callable:
-        self._test_losses = [loss.create_test_loss_fn() for loss in self._train_losses]
+        self._test_losses = [loss.create_test_loss_fn() for loss in self._test_losses]
 
         def loss_fn(predicted, correct):
             return sum((l(predicted, correct) for l in self._test_losses))
@@ -150,34 +157,76 @@ class CombinedLoss(LossFunctionCreator):
         return loss_fn
 
 
-class CSELogitsSparse(LossFunctionCreator):
+class CrossEntropy(LossFunctionCreator):
     def create_train_loss_fn(self, model_vars, model):
-        @objax.Function.with_vars(model_vars)
-        def loss_fn(inpt, label):
-            logit = model(inpt, training=True)
-            loss = objax.functional.loss.cross_entropy_logits_sparse(logit, label)
-            match self._config.reduction:
-                case LossReduction.sum:
-                    return loss.sum()
-                case LossReduction.mean:
-                    return loss.mean()
-                case _ as unsupported:
-                    raise RuntimeError(f"Unsupported loss reduction '{unsupported}'")
+        if self._config.binary_loss:
 
-        return loss_fn
+            @objax.Function.with_vars(model_vars)
+            def loss_fn(inpt, label):
+                logit = model(inpt, training=True)
+                loss = objax.functional.loss.sigmoid_cross_entropy_logits(
+                    logit.squeeze(), label
+                )
+                match self._config.reduction:
+                    case LossReduction.sum:
+                        return loss.sum()
+                    case LossReduction.mean:
+                        return loss.mean()
+                    case _ as unsupported:
+                        raise RuntimeError(
+                            f"Unsupported loss reduction '{unsupported}'"
+                        )
+
+            return loss_fn
+        else:
+
+            @objax.Function.with_vars(model_vars)
+            def loss_fn(inpt, label):
+                logit = model(inpt, training=True)
+                loss = objax.functional.loss.cross_entropy_logits_sparse(logit, label)
+                match self._config.reduction:
+                    case LossReduction.sum:
+                        return loss.sum()
+                    case LossReduction.mean:
+                        return loss.mean()
+                    case _ as unsupported:
+                        raise RuntimeError(
+                            f"Unsupported loss reduction '{unsupported}'"
+                        )
+
+            return loss_fn
 
     def create_test_loss_fn(self):
-        def loss_fn(predicted, correct):
-            loss = objax.functional.loss.cross_entropy_logits_sparse(predicted, correct)
-            match self._config.reduction:
-                case LossReduction.sum:
-                    return loss.sum()
-                case LossReduction.mean:
-                    return loss.mean()
-                case _ as reduction:
-                    raise RuntimeError(f"Not supported loss reduction: {reduction}")
+        if self._config.binary_loss:
 
-        return loss_fn
+            def loss_fn(predicted, correct):
+                loss = objax.functional.loss.sigmoid_cross_entropy_logits(
+                    predicted.squeeze(), correct
+                )
+                match self._config.reduction:
+                    case LossReduction.sum:
+                        return loss.sum()
+                    case LossReduction.mean:
+                        return loss.mean()
+                    case _ as reduction:
+                        raise RuntimeError(f"Not supported loss reduction: {reduction}")
+
+            return loss_fn
+        else:
+
+            def loss_fn(predicted, correct):
+                loss = objax.functional.loss.cross_entropy_logits_sparse(
+                    predicted, correct
+                )
+                match self._config.reduction:
+                    case LossReduction.sum:
+                        return loss.sum()
+                    case LossReduction.mean:
+                        return loss.mean()
+                    case _ as reduction:
+                        raise RuntimeError(f"Not supported loss reduction: {reduction}")
+
+            return loss_fn
 
 
 class L1Loss(LossFunctionCreator):
@@ -232,8 +281,11 @@ class L2Regularization(LossFunctionCreator):
 
         return loss_fn
 
-    def create_test_loss_fn(self, _, __) -> Callable:
-        return 0
+    def create_test_loss_fn(self) -> Callable:
+        def fake_loss(*_):
+            return 0
+
+        return fake_loss
 
 
 class DiceLoss(LossFunctionCreator):
@@ -245,7 +297,7 @@ class DiceLoss(LossFunctionCreator):
                 confidence_or_logits=logit,
                 labels=label,
                 logits=True,
-                binary=self._config.dice_loss_args.binary,
+                binary=self._config.binary_loss,
             )
             match self._config.reduction:
                 case LossReduction.sum:
@@ -263,7 +315,7 @@ class DiceLoss(LossFunctionCreator):
                 confidence_or_logits=predicted,
                 labels=correct,
                 logits=False,
-                binary=self._config.dice_loss_args.binary,
+                binary=self._config.binary_loss,
             )
             match self._config.reduction:
                 case LossReduction.sum:

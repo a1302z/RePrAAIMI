@@ -37,23 +37,24 @@ augmentations:
         max_shift: 4
       random_vertical_flips:
         flip_prob: 0.5
-test_augmentations:
 optim:
   name: nadam
 loss: 
   type: cse
   reduction: sum
+  binary_loss: False
 model:
   name: wide_resnet
-  depth: 40
-  width: 4
   in_channels: 3
   num_classes: 1000
   conv: conv
   activation: mish
   normalization: gn
   pooling: avgpool
-  scale_norm: True
+  extra_args:
+    scale_norm: True
+    depth: 40
+    width: 4
 ema:
   use_ema: False
   decay: 0.04

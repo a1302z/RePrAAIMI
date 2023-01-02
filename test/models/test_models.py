@@ -22,6 +22,7 @@ from dptraining.config.model import (
     RealPooling,
 )
 from dptraining.config.utils import get_allowed_names
+from dptraining.config.model import ModelName
 
 from dptraining.models import (
     make_model_from_config,
@@ -56,7 +57,7 @@ def test_cifar10convnet_wrong_shape():
 def test_make_cifar10model(utils):
     config_dict = {"model": {"name": "cifar10model", "num_classes": 10}}
     config = utils.extend_base_config(config_dict)
-    m = make_model_from_config(config)
+    m = make_model_from_config(config.model)
     random_input_data = np.random.randn(10, 3, 32, 32)
     m(random_input_data, training=False)
 
@@ -73,7 +74,7 @@ def test_resnet18(utils):
         }
     }
     config = utils.extend_base_config(config_dict)
-    m = make_model_from_config(config)
+    m = make_model_from_config(config.model)
     random_input_data = np.random.randn(2, 3, 224, 224)
     m(random_input_data, training=False)
 
@@ -105,7 +106,7 @@ def test_make_resnet9(utils):
         }
     }
     config = utils.extend_base_config(config_dict)
-    m = make_model_from_config(config)
+    m = make_model_from_config(config.model)
     random_input_data = np.random.randn(2, 12, 224, 224)
     m(random_input_data, training=False)
     assert m.conv1[1].groups == 4
@@ -117,7 +118,12 @@ def test_make_resnet9(utils):
 def test_all_options(utils):
     fake_data = np.random.randn(6, 3, 39, 39)
     for model, conv, act, norm, pool in product(
-        get_allowed_names(RealModelName),
+        (
+            ModelName.resnet9,
+            ModelName.resnet18,
+            ModelName.smoothnet,
+            ModelName.wide_resnet,
+        ),
         get_allowed_names(RealConv),
         get_allowed_names(RealActivation),
         get_allowed_names(RealNormalization),
@@ -138,9 +144,9 @@ def test_all_options(utils):
         config = utils.extend_base_config(config_dict)
         if model == "cifar10model":
             with pytest.warns(UserWarning):
-                model = make_model_from_config(config)
+                model = make_model_from_config(config.model)
         else:
-            model = make_model_from_config(config)
+            model = make_model_from_config(config.model)
         pred = model(fake_data, training=True)
         assert pred.shape[1] == 5
 
@@ -163,7 +169,7 @@ def test_ensemble(utils):
         }
     }
     config = utils.extend_base_config(config_dict)
-    model = make_model_from_config(config)
+    model = make_model_from_config(config.model)
     assert len(model.ensemble) == 2
     random_input_data = np.random.randn(2, 12, 224, 224)
     model(random_input_data, training=False)

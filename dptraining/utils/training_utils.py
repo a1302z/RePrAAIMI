@@ -226,11 +226,14 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
     return time.time() - start_time
 
 
-def calculate_metrics(task, metrics, loss_fn, correct, predicted):
+def calculate_metrics(task, metrics, loss_fn, correct, predicted, binary_reduction):
     loss = loss_fn(predicted, correct).item()
     if task == DatasetTask.classification:
-        predicted = predicted.argmax(axis=1)
-        correct, predicted = correct.squeeze(), predicted.squeeze()
+        if binary_reduction:
+            predicted = np.where(predicted > 0.5, 1, 0)
+        else:
+            predicted = predicted.argmax(axis=1)
+    correct, predicted = correct.squeeze(), predicted.squeeze()
     if np.iscomplexobj(correct):
         correct = np.abs(correct)
     if np.iscomplexobj(predicted):
@@ -297,7 +300,12 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
             y_pred, label = np.array(y_pred), np.array(label)
             if per_batch_metrics:
                 main_metric_batch, logging_metric_batch = calculate_metrics(
-                    config.dataset.task, metrics, loss_fn, label, y_pred
+                    config.dataset.task,
+                    metrics,
+                    loss_fn,
+                    label,
+                    y_pred,
+                    config.loss.binary_loss,
                 )
                 main_metric_list.append(main_metric_batch)
                 logging_metric_list.append(logging_metric_batch)
@@ -318,7 +326,12 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
         correct = np.concatenate(correct)
         predicted = np.concatenate(scores)
         main_metric, logging_metrics = calculate_metrics(
-            config.dataset.task, metrics, loss_fn, correct, predicted
+            config.dataset.task,
+            metrics,
+            loss_fn,
+            correct,
+            predicted,
+            config.loss.binary_loss,
         )
 
     if config.general.log_wandb:

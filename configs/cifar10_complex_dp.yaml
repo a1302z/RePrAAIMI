@@ -46,12 +46,14 @@ model:
   activation: conjmish
   normalization: gnw
   pooling: avgpool
-  scale_norm: True
+  extra_args: 
+    scale_norm: True
 optim:
   name: nadam
 loss: 
   type: cse
   reduction: sum
+  binary_loss: False
 ema:
   use_ema: True
   decay: 0.04

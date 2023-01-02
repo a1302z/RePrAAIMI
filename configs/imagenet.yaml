@@ -70,6 +70,7 @@ optim:
 loss: 
   type: cse
   reduction: sum
+  binary_loss: False
 model:
   name: resnet9
   in_channels: 3

@@ -32,6 +32,10 @@ test_transforms:
       size: 224
   pil_to_numpy:
   numpy_img_to_chw:
+loss:
+  type: cse
+  binary_loss: False
+  reduction: sum
 loader:
   collate_fn: numpy
   num_workers: 16
@@ -68,7 +72,8 @@ model:
   activation: conjmish
   normalization: gnw
   pooling: avgpool
-  scale_norm: True
+  extra_args:
+    scale_norm: True
 optim:
   name: nadam
 ema:

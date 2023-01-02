@@ -74,12 +74,14 @@ model:
   activation: conjmish
   normalization: bn
   pooling: avgpool
-  scale_norm: True
+  extra_args:
+    scale_norm: True
 optim:
   name: nadam
 loss: 
   type: cse
   reduction: mean
+  binary_loss: False
 ema:
   use_ema: False
   decay: 0.999

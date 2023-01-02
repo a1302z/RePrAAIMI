@@ -140,7 +140,8 @@ class MSD(Dataset):
             # if self.n_slices:
             #     new_zooms = scan.header.get_zooms()
             #     # print(
-            #     #     f"Old num slices: {data_shape[2]}\tOld thickness: {zooms[2]:.2f}\tNew num slices: {self.n_slices}\tNew thickness: {new_zooms[2]:.2f}"
+            #     #     f"Old num slices: {data_shape[2]}\tOld thickness: {zooms[2]:.2f}"
+            #           f"\tNew num slices: {self.n_slices}\tNew thickness: {new_zooms[2]:.2f}"
             #     # )
             #     self.slice_thicknesses[index] = new_zooms[2]
 
@@ -209,7 +210,8 @@ class MSD(Dataset):
         np_label = rotate_label(np_label)
         assert np_scan.shape == np_label.shape, (
             f"Scan has shape {np_scan.shape} while label has {np_label.shape}"
-            f"\nNifti data: {nifti_scan.header.get_data_shape()}\t {nifti_mask.header.get_data_shape()}"
+            f"\nNifti data: {nifti_scan.header.get_data_shape()}"
+            f"\t {nifti_mask.header.get_data_shape()}"
         )
 
         return np_scan, np_label
@@ -220,7 +222,9 @@ class MSD(Dataset):
         data_shape = scan.header.get_data_shape()
         zooms = scan.header.get_zooms()
         # print(
-        #     f"Actual size: {data_shape[0]*zooms[0]:.1f}mm x {data_shape[1]*zooms[1]:.1f}mm x {data_shape[2]*zooms[2]:.1f}mm"
+        #     f"Actual size: {data_shape[0]*zooms[0]:.1f}mm "
+        #     f"x {data_shape[1]*zooms[1]:.1f}mm "
+        #     f"x {data_shape[2]*zooms[2]:.1f}mm"
         # )
         z_shape = data_shape[2]
         if self.slice_thickness:
@@ -233,8 +237,8 @@ class MSD(Dataset):
             z_shape,
         )
         new_affine = np.copy(scan.affine)
-        for i in range(len(new_shape)):
-            new_affine[i, i] *= data_shape[i] / new_shape[i]
+        for i, new_shape_i in enumerate(new_shape):
+            new_affine[i, i] *= data_shape[i] / new_shape_i
         # print(zooms)
         if self.slice_thickness:
             new_affine[2, 2] = self.slice_thickness
@@ -257,11 +261,14 @@ class MSD(Dataset):
         # if self.n_slices:
         #     new_zooms = scan.header.get_zooms()
         # print(
-        #     f"Old num slices: {data_shape[2]}\tOld thickness: {zooms[2]:.2f}\tNew num slices: {self.n_slices}\tNew thickness: {new_zooms[2]:.2f}"
+        #     f"Old num slices: {data_shape[2]}\tOld thickness: {zooms[2]:.2f}"
+        #     f"\tNew num slices: {self.n_slices}\tNew thickness: {new_zooms[2]:.2f}"
         # )
 
         # print(
-        #     f"New real size: {new_shape[0]*new_zooms[0]:.1f}mm x {new_shape[1]*new_zooms[1]:.1f}mm x {new_shape[2]*new_zooms[2]:.1f}mm"
+        #     f"New real size: {new_shape[0]*new_zooms[0]:.1f}mm "
+        #     f"x {new_shape[1]*new_zooms[1]:.1f}mm "
+        #     f"x {new_shape[2]*new_zooms[2]:.1f}mm"
         # )
         return scan, label
 
@@ -327,12 +334,12 @@ class MSDCreator(DataLoaderCreator):
             for name in labeled_scans.keys()
         ]
         shuffle(matched_labeled_scans)
-        L_train = int(round(len(matched_labeled_scans) * test_split))
-        train_files = matched_labeled_scans[L_train:]
-        test_files = matched_labeled_scans[:L_train]
-        L_train = int(round(len(train_files) * train_split))
-        val_files = train_files[L_train:]
-        train_files = train_files[:L_train]
+        num_train = int(round(len(matched_labeled_scans) * test_split))
+        train_files = matched_labeled_scans[num_train:]
+        test_files = matched_labeled_scans[:num_train]
+        num_train = int(round(len(train_files) * train_split))
+        val_files = train_files[num_train:]
+        train_files = train_files[:num_train]
         subdirs = mk_subdirectories(root, ["train_split", "val_split", "test_split"])
         split_files = (train_files, val_files, test_files)
 
@@ -368,147 +375,147 @@ class MSDCreator(DataLoaderCreator):
         return train_ds, val_ds, test_ds
 
 
-if __name__ == "__main__":
-    from matplotlib import pyplot as plt
-    from omegaconf import OmegaConf
-    from torch.utils.data import DataLoader
-    from tqdm import tqdm
+# if __name__ == "__main__":
+#     from matplotlib import pyplot as plt
+#     from omegaconf import OmegaConf
+#     from torch.utils.data import DataLoader
+#     from tqdm import tqdm
 
-    from time import time
+#     from time import time
 
-    def extend_base_config(overrides: dict):
-        base_conf = OmegaConf.structured(Config)
-        merged_conf = OmegaConf.merge(base_conf, overrides)
-        return merged_conf
+#     def extend_base_config(overrides: dict):
+#         base_conf = OmegaConf.structured(Config)
+#         merged_conf = OmegaConf.merge(base_conf, overrides)
+#         return merged_conf
 
-    def collate_fn(list_of_data_tuples: list[tuple[np.array, np.array]]):
-        scans = [item[0] for item in list_of_data_tuples]
-        labels = [item[1] for item in list_of_data_tuples]
-        scans = np.concatenate(scans, axis=-1)
-        labels = np.concatenate(labels, axis=-1)
-        return scans, labels
+#     def collate_fn(list_of_data_tuples: list[tuple[np.array, np.array]]):
+#         scans = [item[0] for item in list_of_data_tuples]
+#         labels = [item[1] for item in list_of_data_tuples]
+#         scans = np.concatenate(scans, axis=-1)
+#         labels = np.concatenate(labels, axis=-1)
+#         return scans, labels
 
-    def calc_mean_std(dataset: DataLoader):
-        mean = 0.0
-        for images, _ in tqdm(
-            dataset, total=len(dataset), desc="calculating mean", leave=False
-        ):
-            mean += np.mean(images)
-        mean = mean / len(dataset.dataset)
+#     def calc_mean_std(dataset: DataLoader):
+#         mean = 0.0
+#         for images, _ in tqdm(
+#             dataset, total=len(dataset), desc="calculating mean", leave=False
+#         ):
+#             mean += np.mean(images)
+#         mean = mean / len(dataset.dataset)
 
-        var = 0.0
-        N_px = 0
-        for images, _ in tqdm(
-            dataset, total=len(dataset), desc="calculating std", leave=False
-        ):
-            var += ((images - mean) ** 2).sum()
-            N_px += np.prod(images.shape)
-        std = np.sqrt(var / (len(dataset.dataset) * N_px))
-        return mean, std
+#         var = 0.0
+#         N_px = 0
+#         for images, _ in tqdm(
+#             dataset, total=len(dataset), desc="calculating std", leave=False
+#         ):
+#             var += ((images - mean) ** 2).sum()
+#             N_px += np.prod(images.shape)
+#         std = np.sqrt(var / (len(dataset.dataset) * N_px))
+#         return mean, std
 
-    # N = int(np.ceil(np.sqrt(scan.shape[-1])))
-    # fig, axs = plt.subplots(N, N, sharex=True, sharey=True)
-    # for i in range(N):
-    #     for j in range(N):
-    #         if i * N + j >= scan.shape[-1]:
-    #             break
-    #         axs[i, j].imshow(scan[:, :, i * N + j], cmap="gray")
-    #         img = axs[i, j].imshow(
-    #             label[:, :, i * N + j] / 2.0,
-    #             cmap="inferno",
-    #             alpha=0.3,
-    #             vmin=0,
-    #             vmax=1.0,
-    #         )
-    #         axs[i, j].set_axis_off()
-    # plt.savefig("test_msd.png", dpi=600)
+#     # N = int(np.ceil(np.sqrt(scan.shape[-1])))
+#     # fig, axs = plt.subplots(N, N, sharex=True, sharey=True)
+#     # for i in range(N):
+#     #     for j in range(N):
+#     #         if i * N + j >= scan.shape[-1]:
+#     #             break
+#     #         axs[i, j].imshow(scan[:, :, i * N + j], cmap="gray")
+#     #         img = axs[i, j].imshow(
+#     #             label[:, :, i * N + j] / 2.0,
+#     #             cmap="inferno",
+#     #             alpha=0.3,
+#     #             vmin=0,
+#     #             vmax=1.0,
+#     #         )
+#     #         axs[i, j].set_axis_off()
+#     # plt.savefig("test_msd.png", dpi=600)
 
-    config = extend_base_config(
-        {
-            "project": "test",
-            "general": {"log_wandb": False, "cpu": True, "eval_train": False},
-            "loader": {"num_workers": 0, "collate_fn": "numpy"},
-            "dataset": {
-                "name": "msd",
-                "root": "./data/MSD/",
-                "subtask": "liver",
-                "train_val_split": 1.0,
-                "test_split": 0.0,
-                "datasplit_seed": 0,
-                "task": "segmentation",
-                "cache": True,
-                # "slice_thickness": 3.0,
-                "n_slices": 100,
-                "normalization_type": "raw",
-                "resolution": 128,
-                "ct_window": {"low": -150, "high": 250},
-            },
-        }
-    )
-    train_ds, val_ds, test_ds = MSDCreator.make_datasets(config, (None, None, None))
+#     config = extend_base_config(
+#         {
+#             "project": "test",
+#             "general": {"log_wandb": False, "cpu": True, "eval_train": False},
+#             "loader": {"num_workers": 0, "collate_fn": "numpy"},
+#             "dataset": {
+#                 "name": "msd",
+#                 "root": "./data/MSD/",
+#                 "subtask": "liver",
+#                 "train_val_split": 1.0,
+#                 "test_split": 0.0,
+#                 "datasplit_seed": 0,
+#                 "task": "segmentation",
+#                 "cache": True,
+#                 # "slice_thickness": 3.0,
+#                 "n_slices": 100,
+#                 "normalization_type": "raw",
+#                 "resolution": 128,
+#                 "ct_window": {"low": -150, "high": 250},
+#             },
+#         }
+#     )
+#     train_ds, val_ds, test_ds = MSDCreator.make_datasets(config, (None, None, None))
 
-    train_dl = DataLoader(
-        train_ds,
-        batch_size=1,
-        shuffle=False,
-        num_workers=16,
-        prefetch_factor=2,
-        collate_fn=collate_fn,
-    )
-    # for _ in tqdm(train_dl, total=len(train_dl)):
-    #     pass
-    # x = np.array(train_dl.dataset.slice_thicknesses)
-    # plt.hist(x, bins=list(range(10)), density=True)
-    # plt.savefig("slice_thicknesses.png")
-    # exit()
+#     train_dl = DataLoader(
+#         train_ds,
+#         batch_size=1,
+#         shuffle=False,
+#         num_workers=16,
+#         prefetch_factor=2,
+#         collate_fn=collate_fn,
+#     )
+#     # for _ in tqdm(train_dl, total=len(train_dl)):
+#     #     pass
+#     # x = np.array(train_dl.dataset.slice_thicknesses)
+#     # plt.hist(x, bins=list(range(10)), density=True)
+#     # plt.savefig("slice_thicknesses.png")
+#     # exit()
 
-    # mean, std = calc_mean_std(train_dl)
-    # print(f"Mean: {mean:.6f}\tStd: {std:.6f}")
+#     # mean, std = calc_mean_std(train_dl)
+#     # print(f"Mean: {mean:.6f}\tStd: {std:.6f}")
 
-    # config = extend_base_config(
-    #     {
-    #         "project": "test",
-    #         "general": {"log_wandb": False, "cpu": True, "eval_train": False},
-    #         "loader": {"num_workers": 0, "collate_fn": "numpy"},
-    #         "dataset": {
-    #             "task": "segmentation",
-    #             "name": "msd",
-    #             "root": "./data/MSD/",
-    #             "train_val_split": 0.9,
-    #             "test_split": 0.1,
-    #             "resolution": 128,
-    #             "subtask": "liver",
-    #             "cache": True,
-    #             "slice_thickness": 3.0,
-    #             "normalization_type": "gaussian",
-    #             "data_stats": {"mean": float(mean), "std": float(std)},
-    #             "ct_window": {"low": -150, "high": 250}
-    #             # "data_stats": {"mean": -63.59883264405043, "std": 110.56125220959515},
-    #         },
-    #     }
-    # )
-    # train_ds, val_ds, test_ds = MSDCreator.make_datasets(config, (None, None, None))
+#     # config = extend_base_config(
+#     #     {
+#     #         "project": "test",
+#     #         "general": {"log_wandb": False, "cpu": True, "eval_train": False},
+#     #         "loader": {"num_workers": 0, "collate_fn": "numpy"},
+#     #         "dataset": {
+#     #             "task": "segmentation",
+#     #             "name": "msd",
+#     #             "root": "./data/MSD/",
+#     #             "train_val_split": 0.9,
+#     #             "test_split": 0.1,
+#     #             "resolution": 128,
+#     #             "subtask": "liver",
+#     #             "cache": True,
+#     #             "slice_thickness": 3.0,
+#     #             "normalization_type": "gaussian",
+#     #             "data_stats": {"mean": float(mean), "std": float(std)},
+#     #             "ct_window": {"low": -150, "high": 250}
+#     #             # "data_stats": {"mean": -63.59883264405043, "std": 110.56125220959515},
+#     #         },
+#     #     }
+#     # )
+#     # train_ds, val_ds, test_ds = MSDCreator.make_datasets(config, (None, None, None))
 
-    # t0 = time()
-    # img, label = train_ds[0]
-    # t1 = time()
-    # print(f"First access took {t1-t0:.1f}s")
+#     # t0 = time()
+#     # img, label = train_ds[0]
+#     # t1 = time()
+#     # print(f"First access took {t1-t0:.1f}s")
 
-    # print(f"{img.mean()}\t{img.std()}")
+#     # print(f"{img.mean()}\t{img.std()}")
 
-    # train_dl = DataLoader(
-    #     train_ds,
-    #     batch_size=1,
-    #     shuffle=False,
-    #     num_workers=16,
-    #     prefetch_factor=2,
-    #     collate_fn=collate_fn,
-    # )
-    # mean, std = calc_mean_std(train_dl)
-    # print(f"Mean: {mean:.6f}\tStd: {std:.6f}")
+#     # train_dl = DataLoader(
+#     #     train_ds,
+#     #     batch_size=1,
+#     #     shuffle=False,
+#     #     num_workers=16,
+#     #     prefetch_factor=2,
+#     #     collate_fn=collate_fn,
+#     # )
+#     # mean, std = calc_mean_std(train_dl)
+#     # print(f"Mean: {mean:.6f}\tStd: {std:.6f}")
 
-    # t0 = time()
-    # img, label = train_ds[0]
-    # t1 = time()
-    # print(f"Second access took {t1-t0:.3f}s")
-    # pass
+#     # t0 = time()
+#     # img, label = train_ds[0]
+#     # t1 = time()
+#     # print(f"Second access took {t1-t0:.3f}s")
+#     # pass

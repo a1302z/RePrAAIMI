@@ -19,6 +19,7 @@ def conjugate_apply(f_real, f_imag, inp):
     )
 
 
+# pylint:disable=duplicate-code
 class ComplexConv2D(Module):
     def __init__(
         self,

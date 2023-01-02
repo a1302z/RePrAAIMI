@@ -8,7 +8,7 @@ from omegaconf import OmegaConf, DictConfig
 
 # import torchmetrics
 from dptraining.utils.loss import (
-    CSELogitsSparse,
+    CrossEntropy,
     CombinedLoss,
     L1Loss,
     L2Regularization,
@@ -54,7 +54,7 @@ def make_scheduler_from_config(config: Config):
 def make_loss_from_config(config: Config):  # pylint:disable=unused-argument
     match config.loss.type:
         case LossType.cse:
-            loss_fn = CSELogitsSparse(config)
+            loss_fn = CrossEntropy(config)
         case LossType.l1:
             loss_fn = L1Loss(config)
         case LossType.dice:
@@ -108,7 +108,7 @@ def make_metrics(config: Config):
         **retrieve_func_dict(sklearnmetrics),
         **retrieve_func_dict(skimagemetrics),
     }  # torchmetrics of course leads to problems -.-
-    if config.loss.dice_loss_args:
+    if config.loss.type == LossType.dice:
 
         def fscore(*args, **kwargs) -> float:
             return 1.0 - f_score_loss(*args, **kwargs)

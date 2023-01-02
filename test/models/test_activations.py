@@ -18,23 +18,23 @@ def put_data_in_it(f):
 
 def test_relu(utils):
     config = utils.extend_base_config({"model": {"activation": "relu"}})
-    f = make_real_activation_from_config(config)
+    f = make_real_activation_from_config(config.model)
     put_data_in_it(f)
 
 
 def test_selu(utils):
     config = utils.extend_base_config({"model": {"activation": "selu"}})
-    f = make_real_activation_from_config(config)
+    f = make_real_activation_from_config(config.model)
     put_data_in_it(f)
 
 
 def test_leakyrelu(utils):
     config = utils.extend_base_config({"model": {"activation": "leakyrelu"}})
-    f = make_real_activation_from_config(config)
+    f = make_real_activation_from_config(config.model)
     put_data_in_it(f)
 
 
 def test_mish(utils):
     config = utils.extend_base_config({"model": {"activation": "mish"}})
-    f = make_real_activation_from_config(config)
+    f = make_real_activation_from_config(config.model)
     put_data_in_it(f)

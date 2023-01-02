@@ -12,9 +12,9 @@ from dptraining.models import make_real_normalization2d_from_config
 
 def test_bn(utils):
     config = utils.extend_base_config({"model": {"normalization": "bn"}})
-    make_real_normalization2d_from_config(config)
+    make_real_normalization2d_from_config(config.model)
 
 
 def test_gn(utils):
     config = utils.extend_base_config({"model": {"normalization": "gn"}})
-    make_real_normalization2d_from_config(config)
+    make_real_normalization2d_from_config(config.model)

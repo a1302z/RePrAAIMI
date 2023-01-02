@@ -70,6 +70,7 @@ optim:
 loss: 
   type: cse
   reduction: sum
+  binary_loss: False
 model:
   complex: True
   name: resnet9
@@ -79,7 +80,8 @@ model:
   activation: conjmish
   normalization: gnw
   pooling: avgpool
-  scale_norm: True
+  extra_args:
+    scale_norm: True
 ema:
   use_ema: False
   decay: 0.04

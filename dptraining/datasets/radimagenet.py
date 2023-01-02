@@ -21,6 +21,8 @@ from dptraining.datasets.base_creator import (
 from dptraining.utils.transform import NormalizeNumpyImg
 from dptraining.config import DatasetTask
 
+# from dptraining.datasets.utils import calc_mean_std
+
 DATA_OUTPUT_TYPE = Tuple[np.array, Union[int, np.array]]  # pylint:disable=invalid-name
 
 

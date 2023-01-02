@@ -62,6 +62,9 @@ model:
   name: unet
   in_channels: 1
   activation: cardioid
+  conv: conv
+  upconv: conv
+  pooling: avgpool
   extra_args:
     out_channels: 1
     channels: 16
@@ -80,6 +83,7 @@ hyperparams:
 loss: 
   type: l1
   reduction: sum
+  binary_loss: False
 metrics:
   main: 
     structural_similarity:

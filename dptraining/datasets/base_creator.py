@@ -52,13 +52,13 @@ def calc_mean_std(dataset: DataLoader):
 
     var = 0.0
     reshaped_mean = mean[newaxis, ...]
-    N_px = 0
+    num_px = 0
     for images, _ in tqdm(
         dataset, total=len(dataset), desc="calculating std", leave=False
     ):
         batch_samples = images.shape[0]
         images = images.reshape(batch_samples, images.shape[1], -1)
         var += ((images - reshaped_mean) ** 2).sum(2).sum(0)
-        N_px += images.shape[2]
-    std = sqrt(var / (len(dataset.dataset) * N_px))
+        num_px += images.shape[2]
+    std = sqrt(var / (len(dataset.dataset) * num_px))
     return mean, std

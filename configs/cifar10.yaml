@@ -41,6 +41,7 @@ optim:
 loss: 
   type: cse
   reduction: sum
+  binary_loss: False
 ema:
   use_ema: True
   decay: 0.995
