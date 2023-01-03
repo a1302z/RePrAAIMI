@@ -23,6 +23,7 @@ class GeneralConfig:
     save_path: Optional[str] = None
     eval_train: bool = MISSING
     make_save_str_unique: Optional[str] = None
+    eval_init: bool = False
 
 
 class DatasetName(Enum):

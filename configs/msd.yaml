@@ -5,8 +5,9 @@ project: msd
 general:
   log_wandb: False
   parallel: False
-  eval_train: False
+  eval_train: True
   make_save_str_unique: True
+  eval_init: True
 # ckpt:
 #   logdir: msd_ckpts
 #   keep_ckpts: 2

@@ -271,6 +271,33 @@ def main(
         )
     else:
         epoch_iter = range(config.hyperparams.epochs)
+    if config.general.eval_init:
+        if config.general.eval_train:
+            test(
+                config,
+                train_loader,
+                predict_op_parallel if config.general.parallel else predict_op_jit,
+                test_aug,
+                test_label_aug,
+                model.vars(),
+                config.general.parallel,
+                "train",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
+            )
+        if val_loader is not None:
+            metric = test(
+                config,
+                val_loader,
+                predict_op_parallel if config.general.parallel else predict_op_jit,
+                test_aug,
+                test_label_aug,
+                model.vars(),
+                config.general.parallel,
+                "val",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
+            )
     for epoch, learning_rate in zip(epoch_iter, scheduler):
         cur_epoch_time = train(
             config,
