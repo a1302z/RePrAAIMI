@@ -228,12 +228,12 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
 
 def calculate_metrics(task, metrics, loss_fn, correct, predicted, binary_reduction):
     loss = loss_fn(predicted, correct).item()
-    if task == DatasetTask.classification:
+    if task in [DatasetTask.classification, DatasetTask.reconstruction]:
         if binary_reduction:
             predicted = np.where(predicted > 0.5, 1, 0)
         else:
             predicted = predicted.argmax(axis=1)
-    correct, predicted = correct.squeeze(), predicted.squeeze()
+        correct, predicted = correct.squeeze(), predicted.squeeze()
     if np.iscomplexobj(correct):
         correct = np.abs(correct)
     if np.iscomplexobj(predicted):

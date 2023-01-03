@@ -22,6 +22,7 @@ dataset:
     subtask: liver
     cache: True
     # slice_thickness: 1.0
+    normalization_type: gaussian
     n_slices: 50
     data_stats:
       mean: -81.91
