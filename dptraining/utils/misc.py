@@ -2,6 +2,9 @@ from abc import abstractmethod
 from collections import OrderedDict
 from typing import cast
 
+from objax import VarCollection
+from numpy import prod
+
 
 class StateDictObject:
     @abstractmethod
@@ -89,3 +92,7 @@ class StateDictObjectMetricTracker(StateDictObject):
                     self.counter = 0
             case _:
                 raise RuntimeError("This is not supported and should not happen :/")
+
+
+def get_num_params(model_vars: VarCollection) -> int:
+    return sum([prod(v.shape) for v in model_vars.values()])

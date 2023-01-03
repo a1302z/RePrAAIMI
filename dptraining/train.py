@@ -60,6 +60,7 @@ def main(
         train,
     )
     from dptraining.utils.gradual_unfreezing import make_unfreezing_schedule
+    from dptraining.utils.misc import get_num_params
 
     np.random.seed(config.general.seed)
     objax.random.DEFAULT_GENERATOR.seed(config.general.seed)
@@ -95,6 +96,11 @@ def main(
     else:
         model: Callable = make_model_from_config(config.model)
         model_vars = model.vars()
+    n_train_vars_total: int = get_num_params(model_vars)
+    if config.general.log_wandb:
+        wandb.log({"total_model_vars": n_train_vars_total})
+    else:
+        print(f"Total model params: {n_train_vars_total:,}")
 
     if config.unfreeze_schedule is not None:
         unfreeze_schedule = make_unfreezing_schedule(
@@ -105,6 +111,11 @@ def main(
         unfreeze_schedule = (
             lambda _: model_vars  # pylint:disable=unnecessary-lambda-assignment
         )
+    n_train_vars_cur: int = get_num_params(model_vars)
+    if config.general.log_wandb:
+        wandb.log({"num_trained_vars": n_train_vars_cur})
+    else:
+        print(f"Num trained params: {n_train_vars_cur:,}")
 
     identifying_model_str = ""
     if config.general.make_save_str_unique:
@@ -356,6 +367,11 @@ def main(
         if config.unfreeze_schedule is not None:
             model_vars = unfreeze_schedule(epoch + 1)
             train_op, train_vars = make_train_op(model_vars)
+            n_train_vars_cur = get_num_params(model_vars)
+            if config.general.log_wandb:
+                wandb.log({"num_trained_vars": n_train_vars_cur})
+            else:
+                print(f"\tNum Train Vars: {n_train_vars_cur:,}")
         if checkpoint is not None:
             checkpoint.save(model.vars(), idx=epoch)
         if metric is not None and stopper(metric):
