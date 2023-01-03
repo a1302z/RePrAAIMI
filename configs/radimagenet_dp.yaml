@@ -1,19 +1,20 @@
 defaults:
   - base_config
   - _self_
-project: radimagenet
+project: radimagenet-DP
 general:
   log_wandb: False
   parallel: False
   eval_train: True
   make_save_str_unique: True
+  use_pretrained_model: imagenet_resnet9_gn_mp.npz
 # checkpoint:
 #   logdir: radimagenet_resnet9_ckpt
 #   keep_ckpts: 10
 #   makedir: True
 dataset: 
-  name: multi_class_classification
-  task: classification
+  name: radimagenet
+  task: multi_class_classification
   root: ./data/radiology_ai
   train_val_split: 0.8
   test_split: 0.1
@@ -34,6 +35,13 @@ augmentations:
         - 0.22039941
       std:
         - 0.24865805
+  # consecutive_augmentations:
+  #   multiplicity: 4
+  #   consecutive_augmentations:
+  #     random_img_shift:
+  #       max_shift: 28
+  #     random_vertical_flips:
+  #       flip_prob: 0.5
 test_augmentations:
   normalize_jax:
       mean:
@@ -42,22 +50,31 @@ test_augmentations:
         - 0.24865805
 model:
   name: resnet9
-  in_channels: 1
-  num_classes: 165
+  in_channels: 3
+  num_classes: 1000
   conv: conv
   activation: mish
   normalization: gn
   pooling: maxpool
+  pretrained_model_changes:
+    in_channels: 1
+    num_classes: 165
+    # only_finetune: True
   extra_args:
     scale_norm: True
+unfreeze_schedule:
+  trigger_points:
+    - 2
+    - 4
+    - 8
 optim:
   name: nadam
 ema:
   use_ema: True
   decay: 0.995
 hyperparams:
-  epochs: 10
-  batch_size: 60
+  epochs: 20
+  batch_size: 64
   batch_size_test: 128
   lr: 2e-3
   # overfit: 256
@@ -87,4 +104,4 @@ DP:
   max_per_sample_grad_norm: 1.0
   delta: 8e-7
   norm_acc: False
-  grad_acc_steps: 128
+  grad_acc_steps: 64

@@ -50,6 +50,13 @@ augmentations:
         - 0.1374
         - 0.1584
         - 0.1766
+  consecutive_augmentations:
+    multiplicity: 16
+    consecutive_augmentations:
+      random_img_shift:
+        max_shift: 28
+      random_vertical_flips:
+        flip_prob: 0.5
 test_augmentations:
   normalize_jax:
       mean:
@@ -71,9 +78,14 @@ model:
   pretrained_model_changes:
     in_channels: 3
     num_classes: 1
-    only_finetune: True
+    # only_finetune: True
   # extra_args: 
   #   scale_norm: True
+unfreeze_schedule:
+  trigger_points:
+    - 5
+    - 10
+    - 15
 optim:
   name: nadam
 ema:
@@ -81,7 +93,7 @@ ema:
   decay: 0.995
 hyperparams:
   epochs: 50
-  batch_size: 64
+  batch_size: 2
   batch_size_test: 128
   lr: 2e-3
   # overfit: 10
@@ -112,4 +124,4 @@ DP:
   max_per_sample_grad_norm: 1.0
   delta: 8e-7
   norm_acc: False
-  grad_acc_steps: 1
+  grad_acc_steps: 2048

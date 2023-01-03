@@ -8,7 +8,7 @@ general:
   eval_train: True
   # save_path: 
   # make_save_str_unique: True
-  use_pretrained_model: radimagenet_resnet9_gn_maxpool.npz
+  use_pretrained_model: imagenet_resnet9_gn_mp.npz
 # ckpt:
 #   logdir: _resnet9_ckpt
 #   keep_ckpts: 10
@@ -62,8 +62,8 @@ test_augmentations:
         - 0.1766
 model:
   name: resnet9
-  in_channels: 1
-  num_classes: 165
+  in_channels: 3
+  num_classes: 1000
   conv: conv
   activation: mish
   normalization: gn
@@ -74,6 +74,11 @@ model:
     # only_finetune: True
   # extra_args: 
   #   scale_norm: True
+unfreeze_schedule:
+  trigger_points:
+    - 5
+    - 10
+    - 15
 optim:
   name: nadam
 ema:

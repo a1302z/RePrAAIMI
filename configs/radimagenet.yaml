@@ -8,6 +8,7 @@ general:
   eval_train: True
   # save_path: radimagenet_resnet9.npz
   make_save_str_unique: True
+  use_pretrained_model: imagenet_resnet9_gn_mp.npz
 # ckpt:
 #   logdir: radimagenet_resnet9_ckpt
 #   keep_ckpts: 10
@@ -43,14 +44,22 @@ test_augmentations:
         - 0.24865805
 model:
   name: resnet9
-  in_channels: 1
-  num_classes: 165
+  in_channels: 3
+  num_classes: 1000
   conv: conv
   activation: mish
   normalization: gn
   pooling: maxpool
+  pretrained_model_changes:
+    in_channels: 1
+    num_classes: 165
   extra_args:
     scale_norm: True
+unfreeze_schedule:
+  trigger_points:
+    - 2
+    - 4
+    - 6
 optim:
   name: nadam
 ema:
@@ -61,7 +70,7 @@ hyperparams:
   batch_size: 60
   batch_size_test: 128
   lr: 2e-3
-  overfit: 10
+  # overfit: 10
   # momentum: 0.9
 metrics:
   main: 
