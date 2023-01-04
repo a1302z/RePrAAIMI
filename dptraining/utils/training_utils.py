@@ -1,7 +1,7 @@
 import wandb
 import time
 import contextlib
-from typing import Callable
+from typing import Callable, Union, Any
 
 import numpy as np
 
@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path.cwd()))
 
 from dptraining.config import Config, DatasetTask
 from dptraining.privacy import ClipAndAccumulateGrads
+from dptraining.utils import NEED_RAW_PREDICTIONS
 
 N_DEVICES = local_device_count()
 
@@ -226,14 +227,21 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
     return time.time() - start_time
 
 
-def calculate_metrics(task, metrics, loss_fn, correct, predicted, binary_reduction):
-    loss = loss_fn(predicted, correct).item()
+def calculate_metrics(
+    task, metrics, loss_fn, correct, raw_prediction, binary_reduction
+):
+    loss = loss_fn(raw_prediction, correct).item()
     if task in [DatasetTask.classification, DatasetTask.reconstruction]:
         if binary_reduction:
-            predicted = np.where(predicted > 0.5, 1, 0)
+            predicted = np.where(raw_prediction > 0.5, 1, 0)
         else:
-            predicted = predicted.argmax(axis=1)
+            predicted = raw_prediction.argmax(axis=1)
         correct, predicted = correct.squeeze(), predicted.squeeze()
+    elif task == DatasetTask.segmentation:
+        if binary_reduction:
+            predicted = np.where(raw_prediction > 0.5, 1.0, 0.0)
+        else:
+            predicted = np.argmax(raw_prediction, axis=1, keepdims=True)
     if np.iscomplexobj(correct):
         correct = np.abs(correct)
     if np.iscomplexobj(predicted):
@@ -244,10 +252,19 @@ def calculate_metrics(task, metrics, loss_fn, correct, predicted, binary_reducti
         main_metric_fn[0],
         loss
         if main_metric_fn[0] == "loss" and main_metric_fn[1] is None
-        else main_metric_fn[1](correct, predicted),
+        else (
+            main_metric_fn[1](correct, raw_prediction)
+            if main_metric_fn[0] in NEED_RAW_PREDICTIONS
+            else main_metric_fn[1](correct, predicted)
+        ),
     )
     logging_metrics = {
-        func_name: lfn(correct, predicted) for func_name, lfn in logging_fns.items()
+        func_name: (
+            lfn(correct, raw_prediction)
+            if func_name in NEED_RAW_PREDICTIONS
+            else lfn(correct, predicted)
+        )
+        for func_name, lfn in logging_fns.items()
     }
     if main_metric[0] != "loss":
         logging_metrics["loss"] = loss
@@ -266,7 +283,7 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
     dataset_split: str,
     metrics: tuple,
     loss_fn: Callable,
-):
+) -> float:
     ctx_mngr = (model_vars).replicate() if parallel else contextlib.suppress()
     per_batch_metrics = (
         config.metrics.per_batch_metrics
@@ -317,7 +334,11 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
     if per_batch_metrics:
         main_metric = (
             metrics[0][0],
-            np.mean([batch_metric[1] for batch_metric in main_metric_list]),
+            summarise_dict_metrics(
+                [batch_metric[1] for batch_metric in main_metric_list]
+            )
+            if isinstance(main_metric_list[0][1], dict)
+            else np.mean([batch_metric[1] for batch_metric in main_metric_list]),
         )
         logging_metrics = summarise_batch_metrics(
             metrics[1].keys(), logging_metric_list
@@ -344,8 +365,27 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
     return main_metric[1]
 
 
-def summarise_batch_metrics(metric_names, metric_list):
+def summarise_dict_metrics(metric_dict_list: list[dict[Any, float]]) -> dict:
+    assert all(
+        (
+            set(metric_dict_list[0].keys()) == set(metric_dict_list[i].keys())
+            for i in range(1, len(metric_dict_list))
+        )
+    ), "Cannot summarise metrics with different keys"
+    metric_dict = {
+        k: np.mean([m[k] for m in metric_dict_list]) for k in metric_dict_list[0].keys()
+    }
+    return metric_dict
+
+
+def summarise_batch_metrics(
+    metric_names: list[str], metric_list: list[Union[float, dict[Any, float]]]
+) -> dict[str, Union[float, dict[Any, float]]]:
     return {
-        func_name: np.mean([metric[func_name] for metric in metric_list])
+        func_name: (
+            summarise_dict_metrics([metric[func_name] for metric in metric_list])
+            if isinstance(metric_list[0][func_name], dict)
+            else np.mean([metric[func_name] for metric in metric_list])
+        )
         for func_name in metric_names
     }

@@ -171,6 +171,7 @@ class LossConfig:
     type: LossType = MISSING
     reduction: LossReduction = MISSING
     binary_loss: bool = MISSING
+    class_weights: Optional[list[float]] = None
 
 
 @dataclass

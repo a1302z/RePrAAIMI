@@ -1,13 +1,14 @@
 defaults:
   - base_config
   - _self_
-project: msd
+project: msd_dp
 general:
   log_wandb: False
   parallel: False
   eval_train: True
   make_save_str_unique: True
   eval_init: True
+  # use_pretrained_model: msd_pancreas_unet_4-1-convwsnw_mp_gn_mish_dainty-jazz-3_2023-01-03_15-13-57.npz
 # ckpt:
 #   logdir: msd_ckpts
 #   keep_ckpts: 2
@@ -45,14 +46,14 @@ model:
   pooling: maxpool
   normalization: gn
   extra_args:
-    out_channels: 1
-    channels: 16
+    out_channels: 3
+    channels: 4
 optim:
   name: nadam
 loss: 
   type: dice
   reduction: mean
-  binary_loss: True
+  binary_loss: False
 ema:
   use_ema: False
   decay: 0.999
@@ -66,13 +67,11 @@ hyperparams:
   # overfit: 2
 metrics:
   main:     
-    fscore:
-      binary: True
-      threshold: 0.5
+    fscore_avg:
   logging:
+    fscore_avg:
+    weighted_fscore_avg:
     fscore:
-      binary: True
-      threshold: 0.5
     mean_squared_error:
     # mean_absolute_error:
   per_batch_metrics: True
@@ -82,7 +81,9 @@ scheduler:
   patience: 20
   min_delta: 0.01
   factor: 0.5
-# earlystopping:
-#   mode: maximize
-#   patience: 100
-#   min_delta: 0.01
+DP:
+  epsilon: 8.0
+  max_per_sample_grad_norm: 1.0
+  delta: 8e-7
+  norm_acc: False
+  grad_acc_steps: 8

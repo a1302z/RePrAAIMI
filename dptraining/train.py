@@ -139,7 +139,8 @@ def main(
             )
         else:
             predict_lambda = lambda x: objax.functional.softmax(  # pylint:disable=unnecessary-lambda-assignment
-                model(x, training=False)
+                model(x, training=False),
+                axis=1 if config.dataset.task == DatasetTask.segmentation else -1,
             )
     else:
         predict_lambda = partial(model, training=False)

@@ -3,6 +3,7 @@ from sklearn import metrics as sklearnmetrics
 from skimage import metrics as skimagemetrics
 from functools import partial
 from types import FunctionType
+from numpy import array
 
 from omegaconf import OmegaConf, DictConfig
 
@@ -13,7 +14,7 @@ from dptraining.utils.loss import (
     L1Loss,
     L2Regularization,
     DiceLoss,
-    f_score_loss,
+    f_score,
 )
 from dptraining.config import Config, SchedulerType, LossType
 from dptraining.utils.scheduler import (
@@ -98,6 +99,9 @@ def retrieve_func_dict(func):
     return {name: getattr(func, name) for name in dir(func) if name[0] != "_"}
 
 
+NEED_RAW_PREDICTIONS: tuple[str] = ("fscore", "fscore_avg", "weighted_fscore_avg")
+
+
 def make_metrics(config: Config):
     if not config.metrics:
         warn("no metrics defined in config", category=UserWarning)
@@ -111,12 +115,36 @@ def make_metrics(config: Config):
     if config.loss.type == LossType.dice:
 
         def fscore(*args, **kwargs) -> float:
-            return 1.0 - f_score_loss(*args, **kwargs)
+            f_scores = f_score(
+                *args,
+                **kwargs,
+                as_loss_fn=False,
+            )
+            return {i: f_scores[i] for i in range(f_scores.shape[0])}
+
+        def fscore_avg(*args, **kwargs) -> float:
+            return f_score(
+                *args,
+                **kwargs,
+                as_loss_fn=False,
+            ).mean()
+
+        def weighted_fscore_avg(*args, **kwargs) -> float:
+            return 1.0 - f_score(
+                *args,
+                **kwargs,
+                class_weights=array(config.loss.class_weights)
+                if config.loss.class_weights
+                else None,
+                as_loss_fn=True,
+            )
 
         all_funcs["fscore"] = fscore
+        all_funcs["fscore_avg"] = fscore_avg
+        all_funcs["weighted_fscore_avg"] = weighted_fscore_avg
 
     if isinstance(config.metrics.main, str):
-        if config.metrics.main == "loss":
+        if config.metricsFalse.main == "loss":
             main_metric = ("loss", None)
         else:
             main_metric = (

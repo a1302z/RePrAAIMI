@@ -67,7 +67,7 @@ def f_scores_from_confidence(
 
 
 # loss is batchwise, for samplewise dice loss use jax.vmap + jnp.mean
-def f_score_loss(
+def f_score(
     labels: JaxArray,
     confidence_or_logits: JaxArray,
     beta: Union[JaxArray, float] = 1,
@@ -75,7 +75,8 @@ def f_score_loss(
     binary: bool = False,
     logits: bool = False,
     epsilon: float = 1e-5,
-    threshold: Optional[float] = None,
+    # threshold: Optional[float] = None,
+    as_loss_fn: bool = True,
 ):
     beta = jnp.squeeze(beta)
     assert beta.size == 1
@@ -100,11 +101,11 @@ def f_score_loss(
         else:
             class_weights = class_weights[1:]
 
-    if threshold:
-        if binary:
-            confidence_value = jnp.where(confidence_value > threshold, 1.0, 0.0)
-        else:
-            confidence_value = jnp.argmax(confidence_value, axis=-1, keepdims=True)
+    # if threshold:
+    #     if binary:
+    #         confidence_value = jnp.where(confidence_value > threshold, 1.0, 0.0)
+    #     else:
+    #         confidence_value = jnp.argmax(confidence_value, axis=-1, keepdims=True)
 
     f_score_values = f_scores_from_confidence(
         confidence=confidence_value,
@@ -115,7 +116,11 @@ def f_score_loss(
         binary=False,
     )
 
-    return 1 - jnp.average(f_score_values, -1, class_weights)
+    return (
+        1 - jnp.average(f_score_values, -1, class_weights)
+        if as_loss_fn
+        else f_score_values
+    )
 
 
 class LossFunctionCreator(abc.ABC):
@@ -289,15 +294,25 @@ class L2Regularization(LossFunctionCreator):
 
 
 class DiceLoss(LossFunctionCreator):
+    def __init__(self, config: Config) -> None:
+        super().__init__(config)
+        self._class_weights = (
+            jnp.array(config.loss.class_weights)
+            if config.loss.class_weights is not None
+            else None
+        )
+
     def create_train_loss_fn(self, model_vars, model):
         @objax.Function.with_vars(model_vars)
         def loss_fn(inpt, label):
             logit = model(inpt, training=True)
-            loss = f_score_loss(
+            loss = f_score(
                 confidence_or_logits=logit,
                 labels=label,
                 logits=True,
                 binary=self._config.binary_loss,
+                class_weights=self._class_weights,
+                as_loss_fn=True,
             )
             match self._config.reduction:
                 case LossReduction.sum:
@@ -311,11 +326,13 @@ class DiceLoss(LossFunctionCreator):
 
     def create_test_loss_fn(self):
         def loss_fn(predicted, correct):
-            loss = f_score_loss(
+            loss = f_score(
                 confidence_or_logits=predicted,
                 labels=correct,
                 logits=False,
                 binary=self._config.binary_loss,
+                class_weights=self._class_weights,
+                as_loss_fn=True,
             )
             match self._config.reduction:
                 case LossReduction.sum:
