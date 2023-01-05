@@ -63,6 +63,7 @@ class MSD(Dataset):
         data_stats: DataStats = None,
         cache_files: bool = False,
         ct_window: CTWindow = CTWindow(-150, 200),
+        assume_same_settings: bool = False,
     ) -> None:
         super().__init__()
         assert (slice_thickness is not None) or (
@@ -78,6 +79,15 @@ class MSD(Dataset):
         self.cache: bool = cache_files
         self.cached_files: Optional[mp.Array]
         self.ct_window: CTWindow = ct_window
+        self.assume_same_settings: bool = assume_same_settings
+        if self.assume_same_settings:
+            assert all(
+                [
+                    file.is_file()
+                    for _, img_file, label_file in self.matched_labeled_scans
+                    for file in self.create_new_filenames(img_file, label_file)
+                ]
+            ), "Not all data files are already precomputed. Set assume_same_settings to False"
         # self.slice_thicknesses = mp.Array(
         #     ctypes.c_float, [0.0] * len(self.matched_labeled_scans), lock=True
         # )
@@ -106,9 +116,13 @@ class MSD(Dataset):
         _, img_file, label_file = self.matched_labeled_scans[index]
         # print(f"{index} cached: {self.cached_files[index]}")
         # t0 = time()
-        if self.cache and self.cached_files[index]:
-            scan_path, label_path = self.create_new_filenames(img_file, label_file)
-            scan, label = self.load_np_files(scan_path, label_path)
+        new_scan_path, new_label_path = self.create_new_filenames(img_file, label_file)
+        if (self.cache and self.cached_files[index]) or (
+            self.assume_same_settings
+            and new_scan_path.is_file()
+            and new_label_path.is_file()
+        ):
+            scan, label = self.load_np_files(new_scan_path, new_label_path)
         else:
             scan, label = self.load_nifti_files(index, img_file, label_file)
         scan = self.transform(scan) if self.transform is not None else scan
@@ -369,6 +383,7 @@ class MSDCreator(DataLoaderCreator):
                 data_stats=config.dataset.msd.data_stats,
                 cache_files=config.dataset.msd.cache,
                 ct_window=config.dataset.msd.ct_window,
+                assume_same_settings=config.dataset.msd.assume_same_settings,
             )
             for smls, tf in zip(split_matched_labeled_scans, transforms)
         )

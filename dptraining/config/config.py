@@ -106,6 +106,7 @@ class MSDConfig:
     test_split: float = MISSING
     resolution: Optional[int] = None
     datasplit_seed: Optional[int] = 0
+    assume_same_settings: bool = False
 
 
 @dataclass
