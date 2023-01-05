@@ -119,6 +119,20 @@ class RandomHorizontalFlipsJax(Transform):
         )
 
 
+class RandomZFlipsJax(Transform):
+    def __init__(self, flip_prob=0.5) -> None:
+        super().__init__()
+        self._flip_prob = flip_prob
+
+    def __call__(self, x):
+        return jax.lax.cond(
+            objax.random.uniform(()) > self._flip_prob,
+            lambda t: t,
+            lambda t: t[:, :, :, ::-1],
+            operand=x,
+        )
+
+
 class RandomVerticalFlipsJaxBatch(Transform):
     def __init__(self, flip_prob=0.5) -> None:
         super().__init__()

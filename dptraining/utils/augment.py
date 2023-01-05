@@ -14,6 +14,7 @@ from dptraining.utils.transform import (
     PILToNumpy,
     RandomHorizontalFlipsJax,
     RandomHorizontalFlipsJaxBatch,
+    RandomZFlipsJax,
     RandomImageShiftsJax,
     RandomImageShiftsJaxBatch,
     RandomVerticalFlipsJax,
@@ -169,6 +170,7 @@ class Transformation:
     _mapping: dict[str, Callable] = {
         "random_horizontal_flips": RandomHorizontalFlipsJax,
         "random_vertical_flips": RandomVerticalFlipsJax,
+        "random_z_flips": RandomZFlipsJax,
         "random_img_shift": RandomImageShiftsJax,
         "random_horizontal_flips_batch": RandomHorizontalFlipsJaxBatch,
         "random_vertical_flips_batch": RandomVerticalFlipsJaxBatch,
