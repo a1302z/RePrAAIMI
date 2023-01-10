@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Optional, Union, Iterable
 import objax
 import jax
 import jax.numpy as jn
@@ -208,6 +208,25 @@ class RandomImageShiftsJaxBatch(Transform):
         )
         offset = objax.random.randint((2,), 0, self._max_shift)
         return jax.lax.dynamic_slice(x_pad, (0, 0, offset[0], offset[1]), img_shape)
+
+
+class CenterCrop(Transform):
+    def __init__(self, crop_size: Union[tuple[int], int]) -> None:
+        super().__init__()
+        self._crop_size: Union[tuple[int], int] = crop_size
+
+    def __call__(self, x):
+        s = x.shape[1:]
+        center = (s_i // 2 for s_i in s)
+        crop = (
+            (self._crop_size // 2 for _ in s)
+            if isinstance(self._crop_size, int)
+            else (c_i // 2 for c_i in self._crop_size)
+        )
+        crop_coordinates = (slice(None),) + tuple(
+            slice(c_i - cp_i, c_i + cp_i) for c_i, cp_i in zip(center, crop)
+        )
+        return x[crop_coordinates]
 
 
 class MakeComplexOnlyReal(Transform):
