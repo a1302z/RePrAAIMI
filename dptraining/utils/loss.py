@@ -1,11 +1,38 @@
 import abc
-from typing import Callable, Sequence, Optional, Union
+from typing import Callable, Sequence, Union
 from dptraining.config import Config
 from dptraining.config.config import LossReduction
 import objax
 from objax.typing import JaxArray
 
 from jax import numpy as jnp, vmap, nn
+
+
+def create_reduction_and_weight_functions(config: Config) -> tuple[Callable, Callable]:
+    class_weights = (
+        jnp.array(config.loss.class_weights)
+        if config.loss.class_weights is not None
+        else None
+    )
+    if class_weights is not None:
+
+        def weight_loss(loss, labels):
+            return loss * class_weights[labels]
+
+    else:
+
+        def weight_loss(loss, _):
+            return loss
+
+    match config.loss.reduction:
+        case LossReduction.sum:
+            reduce_loss = jnp.sum
+        case LossReduction.mean:
+            reduce_loss = jnp.mean
+        case _ as unsupported:
+            raise RuntimeError(f"Unsupported loss reduction '{unsupported}'")
+
+    return weight_loss, reduce_loss
 
 
 def f_score_from_counts(
@@ -126,6 +153,9 @@ def f_score(
 class LossFunctionCreator(abc.ABC):
     def __init__(self, config: Config) -> None:
         self._config = config.loss
+        self._weight_loss, self._reduce_loss = create_reduction_and_weight_functions(
+            config
+        )
 
     @abc.abstractmethod
     def create_train_loss_fn(self, model_vars, model) -> Callable:
@@ -163,6 +193,9 @@ class CombinedLoss(LossFunctionCreator):
 
 
 class CrossEntropy(LossFunctionCreator):
+    def __init__(self, config: Config) -> None:
+        super().__init__(config)
+
     def create_train_loss_fn(self, model_vars, model):
         if self._config.binary_loss:
 
@@ -172,15 +205,9 @@ class CrossEntropy(LossFunctionCreator):
                 loss = objax.functional.loss.sigmoid_cross_entropy_logits(
                     logit.squeeze(), label
                 )
-                match self._config.reduction:
-                    case LossReduction.sum:
-                        return loss.sum()
-                    case LossReduction.mean:
-                        return loss.mean()
-                    case _ as unsupported:
-                        raise RuntimeError(
-                            f"Unsupported loss reduction '{unsupported}'"
-                        )
+                loss = self._weight_loss(loss, label)
+                loss = self._reduce_loss(loss)
+                return loss
 
             return loss_fn
         else:
@@ -189,15 +216,9 @@ class CrossEntropy(LossFunctionCreator):
             def loss_fn(inpt, label):
                 logit = model(inpt, training=True)
                 loss = objax.functional.loss.cross_entropy_logits_sparse(logit, label)
-                match self._config.reduction:
-                    case LossReduction.sum:
-                        return loss.sum()
-                    case LossReduction.mean:
-                        return loss.mean()
-                    case _ as unsupported:
-                        raise RuntimeError(
-                            f"Unsupported loss reduction '{unsupported}'"
-                        )
+                loss = self._weight_loss(loss, label)
+                loss = self._reduce_loss(loss)
+                return loss
 
             return loss_fn
 
@@ -208,13 +229,9 @@ class CrossEntropy(LossFunctionCreator):
                 loss = objax.functional.loss.sigmoid_cross_entropy_logits(
                     predicted.squeeze(), correct
                 )
-                match self._config.reduction:
-                    case LossReduction.sum:
-                        return loss.sum()
-                    case LossReduction.mean:
-                        return loss.mean()
-                    case _ as reduction:
-                        raise RuntimeError(f"Not supported loss reduction: {reduction}")
+                loss = self._weight_loss(loss, correct)
+                loss = self._reduce_loss(loss)
+                return loss
 
             return loss_fn
         else:
@@ -223,13 +240,9 @@ class CrossEntropy(LossFunctionCreator):
                 loss = objax.functional.loss.cross_entropy_logits_sparse(
                     predicted, correct
                 )
-                match self._config.reduction:
-                    case LossReduction.sum:
-                        return loss.sum()
-                    case LossReduction.mean:
-                        return loss.mean()
-                    case _ as reduction:
-                        raise RuntimeError(f"Not supported loss reduction: {reduction}")
+                loss = self._weight_loss(loss, correct)
+                loss = self._reduce_loss(loss)
+                return loss
 
             return loss_fn
 
@@ -240,26 +253,18 @@ class L1Loss(LossFunctionCreator):
         def loss_fn(inpt, label):
             logit = model(inpt, training=True)
             loss = objax.functional.loss.mean_absolute_error(logit, label)
-            match self._config.reduction:
-                case LossReduction.sum:
-                    return loss.sum()
-                case LossReduction.mean:
-                    return loss.mean()
-                case _ as reduction:
-                    raise RuntimeError(f"Not supported loss reduction: {reduction}")
+            loss = self._weight_loss(loss, label)
+            loss = self._reduce_loss(loss)
+            return loss
 
         return loss_fn
 
     def create_test_loss_fn(self):
         def loss_fn(predicted, correct):
             loss = objax.functional.loss.mean_absolute_error(predicted, correct)
-            match self._config.reduction:
-                case LossReduction.sum:
-                    return loss.sum()
-                case LossReduction.mean:
-                    return loss.mean()
-                case _ as reduction:
-                    raise RuntimeError(f"Not supported loss reduction: {reduction}")
+            loss = self._weight_loss(loss, correct)
+            loss = self._reduce_loss(loss)
+            return loss
 
         return loss_fn
 
@@ -314,13 +319,8 @@ class DiceLoss(LossFunctionCreator):
                 class_weights=self._class_weights,
                 as_loss_fn=True,
             )
-            match self._config.reduction:
-                case LossReduction.sum:
-                    return loss.sum()
-                case LossReduction.mean:
-                    return loss.mean()
-                case _ as unsupported:
-                    raise RuntimeError(f"Unsupported loss reduction '{unsupported}'")
+            loss = self._reduce_loss(loss)
+            return loss
 
         return loss_fn
 
@@ -334,12 +334,7 @@ class DiceLoss(LossFunctionCreator):
                 class_weights=self._class_weights,
                 as_loss_fn=True,
             )
-            match self._config.reduction:
-                case LossReduction.sum:
-                    return loss.sum()
-                case LossReduction.mean:
-                    return loss.mean()
-                case _ as reduction:
-                    raise RuntimeError(f"Not supported loss reduction: {reduction}")
+            loss = self._reduce_loss(loss)
+            return loss
 
         return loss_fn
