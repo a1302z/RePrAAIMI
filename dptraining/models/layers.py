@@ -1,6 +1,6 @@
 from functools import partial
 from typing import Callable, Union, Tuple, Optional
-from objax import Module, nn, TrainVar, util
+from objax import Module, nn, TrainVar, util, TrainRef
 from objax.typing import JaxArray, ConvPaddingInt
 from objax.constants import ConvPadding
 from objax.functional import flatten
@@ -21,40 +21,75 @@ class Flatten(Module):
 
 class ConvWS2D(nn.Conv2D):
     def __call__(self, x: JaxArray) -> JaxArray:
-        self.w.assign(self.w.value - self.w.value.mean(axis=(0, 1, 2), keepdims=True))
-        self.w.assign(self.w.value / self.w.value.std(axis=(0, 1, 2), keepdims=True))
-        return super().__call__(x)
+        weight = self.w.value
+        weight -= weight.mean(axis=(0, 1, 2), keepdims=True)
+        weight /= weight.std(axis=(0, 1, 2), keepdims=True)
+        output = lax.conv_general_dilated(
+            x,
+            weight,
+            self.strides,
+            self.padding,
+            rhs_dilation=self.dilations,
+            feature_group_count=self.groups,
+            dimension_numbers=("NCHW", "HWIO", "NCHW"),
+        )
+        if self.b is not None:
+            output += self.b.value
+        return output
 
 
 class ConvCentering2D(nn.Conv2D):
     def __call__(self, x: JaxArray) -> JaxArray:
-        self.w.assign(
-            self.w.value - jn.mean(self.w.value, axis=(0, 1, 2), keepdims=True)
+        weight = self.w.value - jn.mean(self.w.value, axis=(0, 1, 2), keepdims=True)
+        output = lax.conv_general_dilated(
+            x,
+            weight,
+            self.strides,
+            self.padding,
+            rhs_dilation=self.dilations,
+            feature_group_count=self.groups,
+            dimension_numbers=("NCHW", "HWIO", "NCHW"),
         )
-        return super().__call__(x)
-        # output = lax.conv_general_dilated(
-        #     x,
-        #     weight,
-        #     self.strides,
-        #     self.padding,
-        #     rhs_dilation=self.dilations,
-        #     feature_group_count=self.groups,
-        #     dimension_numbers=("NCHW", "HWIO", "NCHW"),
-        # )
-        # return output
+        if self.b is not None:
+            output += self.b.value
+        return output
 
 
 class ConvWSTranspose2D(nn.ConvTranspose2D):
     def __call__(self, x: JaxArray) -> JaxArray:
-        self.w.assign(self.w.value - self.w.value.mean(axis=(0, 1, 2), keepdims=True))
-        self.w.assign(self.w.value / self.w.value.std(axis=(0, 1, 2), keepdims=True))
-        return super().__call__(x)
+        weight = self.w.value
+        weight -= weight.mean(axis=(0, 1, 2), keepdims=True)
+        weight /= weight.std(axis=(0, 1, 2), keepdims=True)
+        y = lax.conv_transpose(
+            x,
+            weight,
+            self.strides,
+            self.padding,
+            rhs_dilation=self.dilations,
+            dimension_numbers=("NCHW", "HWIO", "NCHW"),
+            transpose_kernel=True,
+        )
+        if self.b is not None:
+            y += self.b.value
+        return y
 
 
 class ConvCenteringTranspose2D(nn.ConvTranspose2D):
     def __call__(self, x: JaxArray) -> JaxArray:
-        self.w.assign(self.w - jn.mean(self.w.value, axis=(0, 1, 2), keepdims=True))
-        return super().__call__(x)
+        weight = self.w.value
+        weight -= weight.mean(axis=(0, 1, 2), keepdims=True)
+        y = lax.conv_transpose(
+            x,
+            weight,
+            self.strides,
+            self.padding,
+            rhs_dilation=self.dilations,
+            dimension_numbers=("NCHW", "HWIO", "NCHW"),
+            transpose_kernel=True,
+        )
+        if self.b is not None:
+            y += self.b.value
+        return y
 
 
 class AdaptivePooling(Module):
@@ -91,7 +126,7 @@ class AdaptivePooling(Module):
 
 
 class Conv3D(Module):
-    """Applies a 2D convolution on a 4D-input batch of shape (N,C,H,W,D)."""
+    """Applies a 3D convolution on a 4D-input batch of shape (N,C,H,W,D)."""
 
     def __init__(
         self,
@@ -265,40 +300,76 @@ class ConvTranspose3D(Conv3D):
 
 class ConvWS3D(Conv3D):
     def __call__(self, x: JaxArray) -> JaxArray:
-        self.weight.assign(
-            self.weight.value - self.weight.value.mean(axis=(0, 1, 2, 3), keepdims=True)
+        weight = self.weight.value
+        weight -= weight.mean(axis=(0, 1, 2, 3), keepdims=True)
+        weight /= weight.std(axis=(0, 1, 2, 3), keepdims=True)
+        out = lax.conv_transpose(
+            x,
+            weight,
+            self.strides,
+            self.padding,
+            rhs_dilation=self.dilations,
+            dimension_numbers=("NCHWD", "HWDIO", "NCHWD"),
+            transpose_kernel=True,
         )
-        self.weight.assign(
-            self.weight.value / self.weight.value.std(axis=(0, 1, 2, 3), keepdims=True)
-        )
-        return super().__call__(x)
+        if self.bias is not None:
+            out += self.bias.value
+        return out
 
 
 class ConvCentering3D(Conv3D):
     def __call__(self, x: JaxArray) -> JaxArray:
-        self.weight.assign(
-            self.weight - jn.mean(self.weight.value, axis=(0, 1, 2, 3), keepdims=True)
+        weight = self.weight.value
+        weight -= weight.mean(axis=(0, 1, 2, 3), keepdims=True)
+        out = lax.conv_transpose(
+            x,
+            weight,
+            self.strides,
+            self.padding,
+            rhs_dilation=self.dilations,
+            dimension_numbers=("NCHWD", "HWDIO", "NCHWD"),
+            transpose_kernel=True,
         )
-        return super().__call__(x)
+        if self.bias is not None:
+            out += self.bias.value
+        return out
 
 
 class ConvWSTranspose3D(ConvTranspose3D):
     def __call__(self, x: JaxArray) -> JaxArray:
-        self.weight.assign(
-            self.weight.value - self.weight.value.mean(axis=(0, 1, 2, 3), keepdims=True)
+        weight = self.weight.value
+        weight -= weight.mean(axis=(0, 1, 2, 3), keepdims=True)
+        weight /= weight.std(axis=(0, 1, 2, 3), keepdims=True)
+        out = lax.conv_transpose(
+            x,
+            weight,
+            self.strides,
+            self.padding,
+            rhs_dilation=self.dilations,
+            dimension_numbers=("NCHWD", "HWDIO", "NCHWD"),
+            transpose_kernel=True,
         )
-        self.weight.assign(
-            self.weight.value / self.weight.value.std(axis=(0, 1, 2, 3), keepdims=True)
-        )
-        return super().__call__(x)
+        if self.bias is not None:
+            out += self.bias.value
+        return out
 
 
 class ConvCenteringTranspose3D(ConvTranspose3D):
     def __call__(self, x: JaxArray) -> JaxArray:
-        self.weight.assign(
-            self.weight - jn.mean(self.weight.value, axis=(0, 1, 2, 3), keepdims=True)
+        weight = self.weight.value
+        weight -= weight.mean(axis=(0, 1, 2, 3), keepdims=True)
+        out = lax.conv_transpose(
+            x,
+            weight,
+            self.strides,
+            self.padding,
+            rhs_dilation=self.dilations,
+            dimension_numbers=("NCHWD", "HWDIO", "NCHWD"),
+            transpose_kernel=True,
         )
-        return super().__call__(x)
+        if self.bias is not None:
+            out += self.bias.value
+        return out
 
 
 class BatchNorm3D(nn.BatchNorm):

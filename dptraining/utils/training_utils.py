@@ -86,9 +86,8 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
                 vc=train_vars,
             )
         else:
-            # pass
-            calc_grads = objax.Jit(calc_grads)
-            apply_grads = objax.Jit(apply_grads)
+            calc_grads = objax.Jit(calc_grads, vc=train_vars)
+            apply_grads = objax.Jit(apply_grads, vc=train_vars)
 
         # @objax.Function.with_vars(train_vars)
         def train_op(  # pylint:disable=inconsistent-return-statements
@@ -146,9 +145,11 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
             return loss, grads
 
         if parallel:
-            train_op = objax.Parallel(train_op, reduce=np.mean, vc=train_vars)
+            train_op = objax.Parallel(
+                train_op, reduce=np.mean, vc=train_vars, static_argnums=(2,)
+            )
         else:
-            train_op = objax.Jit(train_op, static_argnums=(3,))
+            train_op = objax.Jit(train_op, vc=train_vars, static_argnums=(2,))
 
     return train_op
 
