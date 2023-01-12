@@ -94,13 +94,13 @@ def make_unfreezing_schedule(
             match len(epoch_triggers):
                 case 2:
                     search_terms = (
-                        (".classifier("),
+                        (".classifier(",),
                         (".classifier(", ".res2(", ".conv4(", ".res3(", ".conv3("),
                         all_keys,
                     )
                 case 3:
                     search_terms = (
-                        (".classifier("),
+                        (".classifier(",),
                         (
                             ".classifier(",
                             ".res2(",
