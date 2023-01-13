@@ -203,7 +203,7 @@ class CrossEntropy(LossFunctionCreator):
             def loss_fn(inpt, label):
                 logit = model(inpt, training=True)
                 loss = objax.functional.loss.sigmoid_cross_entropy_logits(
-                    logit.squeeze(), label
+                    logit.squeeze(axis=1), label
                 )
                 loss = self._weight_loss(loss, label)
                 loss = self._reduce_loss(loss)
@@ -227,7 +227,7 @@ class CrossEntropy(LossFunctionCreator):
 
             def loss_fn(predicted, correct):
                 loss = objax.functional.loss.sigmoid_cross_entropy_logits(
-                    predicted.squeeze(), correct
+                    predicted.squeeze(axis=1), correct
                 )
                 loss = self._weight_loss(loss, correct)
                 loss = self._reduce_loss(loss)

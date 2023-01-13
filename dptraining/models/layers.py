@@ -299,18 +299,18 @@ class ConvTranspose3D(Conv3D):
 
 
 class ConvWS3D(Conv3D):
-    def __call__(self, x: JaxArray) -> JaxArray:
+    def __call__(self, inpt: JaxArray) -> JaxArray:
         weight = self.weight.value
         weight -= weight.mean(axis=(0, 1, 2, 3), keepdims=True)
         weight /= weight.std(axis=(0, 1, 2, 3), keepdims=True)
-        out = lax.conv_transpose(
-            x,
-            weight,
+        out = lax.conv_general_dilated(
+            inpt,
+            self.weight.value,
             self.strides,
             self.padding,
             rhs_dilation=self.dilations,
+            feature_group_count=self.groups,
             dimension_numbers=("NCHWD", "HWDIO", "NCHWD"),
-            transpose_kernel=True,
         )
         if self.bias is not None:
             out += self.bias.value
@@ -318,17 +318,17 @@ class ConvWS3D(Conv3D):
 
 
 class ConvCentering3D(Conv3D):
-    def __call__(self, x: JaxArray) -> JaxArray:
+    def __call__(self, inpt: JaxArray) -> JaxArray:
         weight = self.weight.value
         weight -= weight.mean(axis=(0, 1, 2, 3), keepdims=True)
-        out = lax.conv_transpose(
-            x,
-            weight,
+        out = lax.conv_general_dilated(
+            inpt,
+            self.weight.value,
             self.strides,
             self.padding,
             rhs_dilation=self.dilations,
+            feature_group_count=self.groups,
             dimension_numbers=("NCHWD", "HWDIO", "NCHWD"),
-            transpose_kernel=True,
         )
         if self.bias is not None:
             out += self.bias.value
