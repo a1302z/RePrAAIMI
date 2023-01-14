@@ -41,6 +41,7 @@ class UnfreezingScheduler:
     def __init__(
         self,
         total_model_vars: VarCollection,
+        must_train_vars: VarCollection,
         epoch_triggers: list[int],
         unfreeze_keys: list[list[str]],
     ) -> None:
@@ -70,6 +71,7 @@ class UnfreezingScheduler:
             )
         )
         self.total_model_vars: VarCollection = total_model_vars
+        self.must_train_vars: VarCollection = must_train_vars
         self.epoch_triggers: list[int] = epoch_triggers
         self.unfreeze_keys: list[list[str]] = unfreeze_keys
 
@@ -77,7 +79,8 @@ class UnfreezingScheduler:
         i = bisect_right(self.epoch_triggers, epoch)
         keys = self.unfreeze_keys[i]
         model_vars = VarCollection(
-            **{k: v for k, v in self.total_model_vars.items() if k in keys}
+            **{k: v for k, v in self.total_model_vars.items() if k in keys},
+            **{k: v for k, v in self.must_train_vars.items() if k not in keys},
         )
         return model_vars
 
@@ -86,6 +89,7 @@ def make_unfreezing_schedule(
     model_name: ModelName,
     epoch_triggers: list[int],
     model_vars: VarCollection,
+    must_train_vars: VarCollection,
 ) -> UnfreezingScheduler:
     unfreeze_keys: list[list[str]] = []
     all_keys = list(model_vars.keys())
@@ -119,4 +123,6 @@ def make_unfreezing_schedule(
             ]
         case other:
             raise ValueError(f"No Scheduler for {other} yet defined.")
-    return UnfreezingScheduler(model_vars, epoch_triggers, unfreeze_keys)
+    return UnfreezingScheduler(
+        model_vars, must_train_vars, epoch_triggers, unfreeze_keys
+    )

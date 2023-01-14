@@ -590,7 +590,7 @@ def make_complex_model_from_config(config: ModelConfig) -> Callable:
 
 
 def modify_architecture_from_pretrained_model(config: Config, model: Callable):
-    model_vars: dict[str, BaseVar] = {}
+    new_model_vars: dict[str, BaseVar] = {}
     if config.model.in_channels != config.model.pretrained_model_changes.in_channels:
         if config.model.complex:
             new_layer: Callable = make_complex_conv_from_config(config.model)
@@ -601,8 +601,8 @@ def modify_architecture_from_pretrained_model(config: Config, model: Callable):
             config.model.in_channels,
             k=1,
         )
-        model_vars = {
-            f"adaptchannellayer_{layer_name}": layer_param
+        new_model_vars = {
+            layer_name: layer_param
             for layer_name, layer_param in new_layer.vars().items()
         }
         match config.model.name:
@@ -626,11 +626,13 @@ def modify_architecture_from_pretrained_model(config: Config, model: Callable):
                     config.model.pretrained_model_changes.num_classes,
                 )
                 model.classifier = new_layer
+                add_name = "(ResNet9).classifier"
             case ModelName.smoothnet:
                 new_layer = new_layer(
                     128, config.model.pretrained_model_changes.num_classes
                 )
                 model.fc3 = new_layer
+                add_name = "(SmoothNet).fc3"
             case ModelName.wide_resnet:
                 new_layer = new_layer(
                     model[-1].shape[0]
@@ -639,15 +641,17 @@ def modify_architecture_from_pretrained_model(config: Config, model: Callable):
                     config.model.pretrained_model_changes.num_classes,
                 )
                 model[-1] = new_layer
+                add_name = f"(WideResNet)[{len(model)-1}]"
             case other:
                 raise ValueError(
                     f"Change of number of out classes not yet supported for {other}"
                 )
 
         for layer_name, layer_param in new_layer.vars().items():
-            model_vars[f"class_fc_{layer_name}"] = layer_param
+            new_model_vars[f"{add_name}{layer_name}"] = layer_param
+    new_layer_vars = VarCollection(**new_model_vars)
+    # total_vars =
     if config.model.pretrained_model_changes.only_finetune:
-        model_vars = VarCollection(**model_vars)
+        return new_layer_vars, new_layer_vars
     else:
-        model_vars = model.vars()
-    return model_vars
+        return model.vars(), new_layer_vars

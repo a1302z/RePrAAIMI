@@ -85,17 +85,18 @@ def main(
     if config.hyperparams.overfit is not None:
         val_loader = train_loader
         test_loader = train_loader
+    model = make_model_from_config(config.model)
     if config.general.use_pretrained_model is not None:
         print(f"Loading model from {config.general.use_pretrained_model}")
-        model = make_model_from_config(config.model)
         objax.io.load_var_collection(config.general.use_pretrained_model, model.vars())
         if config.model.pretrained_model_changes is not None:
-            model_vars = modify_architecture_from_pretrained_model(config, model)
+            model_vars, must_train_vars = modify_architecture_from_pretrained_model(
+                config, model
+            )
         else:  # assuming pretrained model is exactly like current model
-            model_vars = model.vars()
+            model_vars, must_train_vars = model.vars(), model.vars()
     else:
-        model: Callable = make_model_from_config(config.model)
-        model_vars = model.vars()
+        model_vars, must_train_vars = model.vars(), model.vars()
     n_train_vars_total: int = get_num_params(model_vars)
     if config.general.log_wandb:
         wandb.log({"total_model_vars": n_train_vars_total})
@@ -104,7 +105,7 @@ def main(
 
     if config.unfreeze_schedule is not None:
         unfreeze_schedule = make_unfreezing_schedule(
-            config.model.name, config.unfreeze_schedule.trigger_points, model_vars
+            config.model.name, config.unfreeze_schedule.trigger_points, model_vars, must_train_vars
         )
         model_vars = unfreeze_schedule(0)
     else:
