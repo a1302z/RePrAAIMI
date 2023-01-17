@@ -76,10 +76,10 @@ def main(
     if config.general.log_wandb:
         config_dict = OmegaConf.to_container(config)
         run = wandb.init(
-            project=config_dict["project"],
             config=config_dict,
             settings=wandb.Settings(start_method="thread"),
             reinit=True,
+            **config_dict["wandb"],
         )
     train_loader, val_loader, test_loader = make_loader_from_config(config)
     if config.hyperparams.overfit is not None:

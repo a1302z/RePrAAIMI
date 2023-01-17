@@ -1,14 +1,15 @@
 defaults:
   - base_config
   - _self_
-project: msd_dp
 general:
   log_wandb: False
   parallel: False
   eval_train: True
   make_save_str_unique: True
   eval_init: True
-  # use_pretrained_model: msd_pancreas_unet_4-1-convwsnw_mp_gn_mish_dainty-jazz-3_2023-01-03_15-13-57.npz
+  # use_pretrained_model: msd_pancreas_unet_4-3-convwsnw_mp_gn_mish_resilient-flower-4_2023-01-04_11-51-58.npz
+wandb:
+  project: msd_dp
 # ckpt:
 #   logdir: msd_ckpts
 #   keep_ckpts: 2
@@ -32,6 +33,17 @@ dataset:
     ct_window: 
       low: -150
       high: 200
+    assume_same_settings: True
+# augmentations:
+#   consecutive_augmentations:
+#     multiplicity: 16
+#     consecutive_augmentations:
+#       random_horizontal_flips:
+#         flip_prob: 0.2
+#       random_vertical_flips:
+#         flip_prob: 0.2
+#       random_z_flips:
+#         flip_prob: 0.2
 loader: 
   num_workers: 16
   prefetch_factor: 2
@@ -58,7 +70,7 @@ ema:
   use_ema: False
   decay: 0.999
 hyperparams:
-  epochs: 10
+  epochs: 50
   batch_size: 1
   batch_size_test: 1
   lr: 2e-3

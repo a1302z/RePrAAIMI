@@ -47,17 +47,17 @@ model:
   normalization: gn
   extra_args:
     out_channels: 3
-    channels: 4
+    channels: 16
 optim:
   name: nadam
 loss: 
   type: dice
   reduction: mean
   binary_loss: False
-  class_weights: 
-    - 0.2
-    - 0.4
-    - 0.4
+  # class_weights: 
+  #   - 1e-2
+  #   - 0.5
+  #   - 1.0
 ema:
   use_ema: False
   decay: 0.999
@@ -79,12 +79,12 @@ metrics:
     mean_squared_error:
     # mean_absolute_error:
   per_batch_metrics: True
-scheduler:
-  type: reduceonplateau
-  normalize_lr: False
-  patience: 20
-  min_delta: 0.01
-  factor: 0.5
+# scheduler:
+#   type: reduceonplateau
+#   normalize_lr: False
+#   patience: 20
+#   min_delta: 0.01
+#   factor: 0.5
 # earlystopping:
 #   mode: maximize
 #   patience: 100

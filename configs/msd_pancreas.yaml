@@ -1,18 +1,19 @@
 defaults:
   - base_config
   - _self_
-project: msd_pretraining
 general:
   log_wandb: False
   parallel: False
   eval_train: True
   make_save_str_unique: True
   eval_init: True
-  save_path: msd_pancreas_unet_4-1-convwsnw_mp_gn_mish.npz
-# ckpt:
-#   logdir: msd_ckpts
-#   keep_ckpts: 2
-#   makedir: True
+  save_path: msd_pancreas_unet_4-3-convwsnw_mp_gn_mish.npz
+wandb:
+  project: msd_pretraining
+checkpoint:
+  logdir: msd_pancreas_unet_4-3-convwsnw_mp_gn_mish
+  keep_ckpts: 50
+  makedir: True
 dataset: 
   task: segmentation
   name: msd
@@ -75,12 +76,12 @@ metrics:
     mean_squared_error:
     # mean_absolute_error:
   per_batch_metrics: True
-scheduler:
-  type: reduceonplateau
-  normalize_lr: False
-  patience: 20
-  min_delta: 0.01
-  factor: 0.5
+# scheduler:
+#   type: reduceonplateau
+#   normalize_lr: False
+#   patience: 20
+#   min_delta: 0.01
+#   factor: 0.5
 # earlystopping:
 #   mode: maximize
 #   patience: 100

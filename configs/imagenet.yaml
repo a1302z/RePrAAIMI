@@ -1,13 +1,14 @@
 defaults:
   - base_config
   - _self_
-project: imagenet
 general:
   log_wandb: False
   parallel: False
   eval_train: False
-  save_path: imagenet_resnet9_gn_mp.npz
-  make_save_str_unique: True
+  save_path: imagenet_resnet9_convws_nw_gn_mp_sn.npz
+  make_save_str_unique: False
+wandb:
+  project: imagenet
 dataset: 
   task: classification
   name: imagenet
@@ -75,7 +76,7 @@ model:
   name: resnet9
   in_channels: 3
   num_classes: 1000
-  conv: conv
+  conv: convws_nw
   activation: mish
   normalization: gn
   pooling: maxpool

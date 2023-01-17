@@ -98,6 +98,9 @@ loss:
   type: cse
   reduction: sum
   binary_loss: True
+  class_weights:
+    - 0.1
+    - 0.9
 scheduler:
   type: reduceonplateau
   normalize_lr: False

@@ -1,11 +1,12 @@
 defaults:
   - base_config
   - _self_
-project: cifar-DP-complex
 general:
   log_wandb: False
   parallel: False
   eval_train: True
+wandb:
+  project: cifar-DP-complex
 dataset: 
   task: classification
   name: CIFAR10

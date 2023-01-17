@@ -1,17 +1,19 @@
 defaults:
   - base_config
   - _self_
-project: radimagenet
 general:
   log_wandb: False
   parallel: False
   eval_train: True
   # save_path: radimagenet_resnet9.npz
   make_save_str_unique: True
+  use_pretrained_model: imagenet_resnet9_convws_nw_gn_mp_sn.npz
 # checkpoint:
 #   logdir: radimagenet_resnet9_ckpt
 #   keep_ckpts: 10
 #   makedir: True
+wandb:
+  project: radimagenet
 dataset: 
   name: radimagenet
   task: classification
@@ -43,14 +45,25 @@ test_augmentations:
         - 0.24865805
 model:
   name: resnet9
-  in_channels: 1
-  num_classes: 165
-  conv: conv
+  in_channels: 3
+  num_classes: 1000
+  conv: convws_nw
   activation: mish
   normalization: gn
   pooling: maxpool
   extra_args:
     scale_norm: True
+  #   depth: 40
+  #   width: 4
+  pretrained_model_changes:
+    in_channels: 1
+    num_classes: 165
+    only_finetune: False
+unfreeze_schedule:
+  trigger_points: 
+    - 1
+    - 2
+    - 3
 optim:
   name: nadam
 ema:
@@ -58,7 +71,7 @@ ema:
   decay: 0.995
 hyperparams:
   epochs: 10
-  batch_size: 60
+  batch_size: 64
   batch_size_test: 128
   lr: 2e-3
   # overfit: 10
@@ -70,17 +83,18 @@ metrics:
     classification_report:
       output_dict: True
       zero_division: 0
+    matthews_corrcoef:
 loss: 
   type: cse
   reduction: sum
   binary_loss: False
-scheduler:
-  type: reduceonplateau
-  normalize_lr: False
-  patience: 5
-  min_delta: 0.01
-  factor: 0.9
-earlystopping:
-  mode: maximize
-  patience: 100
-  min_delta: 0.01
+# scheduler:
+#   type: reduceonplateau
+#   normalize_lr: False
+#   patience: 5
+#   min_delta: 0.01
+#   factor: 0.9
+# earlystopping:
+#   mode: maximize
+#   patience: 100
+#   min_delta: 0.01

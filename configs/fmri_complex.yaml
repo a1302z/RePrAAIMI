@@ -1,12 +1,13 @@
 defaults:
   - base_config
   - _self_
-project: fmri
 general:
   log_wandb: False
   parallel: False
   eval_train: False
   make_save_str_unique: True
+wandb:
+  project: fmri
 # checkpoint:
 #   logdir: fmri_ckpts
 #   keep_ckpts: 2

@@ -1,13 +1,14 @@
 defaults:
   - base_config
   - _self_
-project: cifar-DP
 general:
   log_wandb: False
   parallel: False
   eval_train: True
   use_pretrained_model: 
   save_path: cifar10dp.npz
+wandb:
+  project: cifar-DP
 # checkpoint:
 #   logdir: cifar10dpckpts
 #   keep_ckpts: 2

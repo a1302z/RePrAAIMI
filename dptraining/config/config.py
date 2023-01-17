@@ -26,6 +26,20 @@ class GeneralConfig:
     eval_init: bool = False
 
 
+@dataclass
+class WandBConfig:
+    project: str = MISSING
+    entity: Optional[str] = None
+    notes: Optional[str] = None
+    group: Optional[str] = None
+    magic: Optional[bool] = None
+    config_exclude_keys: Optional[list[str]] = None
+    config_include_keys: Optional[list[str]] = None
+    tags: Optional[list[str]] = None
+    name: Optional[str] = None
+    save_code: Optional[bool] = None
+
+
 class DatasetName(Enum):
     CIFAR10 = 1
     imagenet = 2
@@ -237,8 +251,8 @@ class DPConfig:
 
 @dataclass
 class Config:
-    project: str = MISSING
     general: GeneralConfig = GeneralConfig()
+    wandb: WandBConfig = WandBConfig()
     dataset: DatasetConfig = DatasetConfig()
     checkpoint: dict[str, Any] = field(default_factory=dict)
     train_transforms: dict[str, Any] = field(default_factory=dict)

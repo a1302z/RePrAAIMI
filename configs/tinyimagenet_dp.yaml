@@ -1,11 +1,12 @@
 defaults:
   - base_config
   - _self_
-project: tinyimagenet-dp
 general:
   log_wandb: False
   parallel: False
   eval_train: False
+wandb:
+  project: tinyimagenet-dp
 dataset: 
   task: classification
   name: tinyimagenet
