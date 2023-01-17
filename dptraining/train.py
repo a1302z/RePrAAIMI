@@ -105,12 +105,16 @@ def main(
 
     if config.unfreeze_schedule is not None:
         unfreeze_schedule = make_unfreezing_schedule(
-            config.model.name, config.unfreeze_schedule.trigger_points, model_vars, must_train_vars
+            config.model.name,
+            config.unfreeze_schedule.trigger_points,
+            model_vars,
+            must_train_vars,
         )
-        model_vars = unfreeze_schedule(0)
+        model_vars, _ = unfreeze_schedule(0)
     else:
         unfreeze_schedule = (
-            lambda _: model_vars  # pylint:disable=unnecessary-lambda-assignment
+            lambda _: model_vars,
+            False,  # pylint:disable=unnecessary-lambda-assignment
         )
     n_train_vars_cur: int = get_num_params(model_vars)
     if config.general.log_wandb:
@@ -367,8 +371,9 @@ def main(
             else:
                 print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})")
         if config.unfreeze_schedule is not None:
-            model_vars = unfreeze_schedule(epoch + 1)
-            train_op, train_vars = make_train_op(model_vars)
+            model_vars, fresh_model_vars = unfreeze_schedule(epoch + 1)
+            if fresh_model_vars:
+                train_op, train_vars = make_train_op(model_vars)
             n_train_vars_cur = get_num_params(model_vars)
             if config.general.log_wandb:
                 wandb.log({"num_trained_vars": n_train_vars_cur})

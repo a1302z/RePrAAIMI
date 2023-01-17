@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Union, Iterable
+from typing import Optional, Union
 import objax
 import jax
 import jax.numpy as jn

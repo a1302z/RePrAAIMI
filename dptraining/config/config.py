@@ -201,8 +201,8 @@ class SchedulerType(Enum):
 
 @dataclass
 class SchedulerConfig:
-    type: SchedulerType = MISSING
-    normalize_lr: bool = MISSING
+    type: SchedulerType = SchedulerType.const
+    normalize_lr: bool = False
     mode: str = "maximize"
     cumulative_delta: bool = True
     min_delta: float = MISSING

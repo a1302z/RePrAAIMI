@@ -82,7 +82,7 @@ class UnfreezingScheduler:
             **{k: v for k, v in self.total_model_vars.items() if k in keys},
             **{k: v for k, v in self.must_train_vars.items() if k not in keys},
         )
-        return model_vars
+        return model_vars, self.epoch_triggers[i - 1] == epoch
 
 
 def make_unfreezing_schedule(

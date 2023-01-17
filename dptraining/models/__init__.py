@@ -2,9 +2,10 @@ import inspect
 import warnings
 from copy import deepcopy
 from functools import partial
-from typing import Callable, Union
+from typing import Callable
 
 from objax import functional, nn, VarCollection, BaseVar
+from objax.util import class_name
 from omegaconf import OmegaConf
 
 from dptraining.config import Config, ModelConfig, get_allowed_values
@@ -591,27 +592,32 @@ def make_complex_model_from_config(config: ModelConfig) -> Callable:
 
 def modify_architecture_from_pretrained_model(config: Config, model: Callable):
     new_model_vars: dict[str, BaseVar] = {}
+    layer_config: ModelConfig = deepcopy(config.model)
+    layer_config.conv = Conv.conv
     if config.model.in_channels != config.model.pretrained_model_changes.in_channels:
         if config.model.complex:
-            new_layer: Callable = make_complex_conv_from_config(config.model)
+            new_layer: Callable = make_complex_conv_from_config(layer_config)
         else:
-            new_layer: Callable = make_real_conv_from_config(config.model)
+            new_layer: Callable = make_real_conv_from_config(layer_config)
         new_layer = new_layer(  # pylint:disable=not-callable
             config.model.pretrained_model_changes.in_channels,
             config.model.in_channels,
             k=1,
         )
-        new_model_vars = {
-            layer_name: layer_param
-            for layer_name, layer_param in new_layer.vars().items()
-        }
         match config.model.name:
             case ModelName.resnet9:
-                model.conv1 = nn.Sequential([new_layer, model.conv1])
+                model.conv1[0] = nn.Sequential([new_layer, model.conv1[0]])
+                add_name = "(ResNet9).conv1(Sequential)[0]"
             case ModelName.smoothnet:
                 model.stage_zero = nn.Sequential([new_layer, model.stage_zero])
+                add_name = "(SmoothNet).conv1"
             case _:  # e.g. resnet18, wide_resnet
                 model = nn.Sequential([new_layer, model])
+                add_name = f"({class_name(model)})[1]"
+        new_model_vars = {
+            f"{add_name}(Sequential)[0]{layer_name}": layer_param
+            for layer_name, layer_param in new_layer.vars().items()
+        }
     if config.model.num_classes != config.model.pretrained_model_changes.num_classes:
         if config.model.complex:
             new_layer = ComplexLinear
