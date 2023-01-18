@@ -113,7 +113,10 @@ class ConvWSTranspose2D(nn.ConvTranspose2D):
     ):
         assert (k > 1 if isinstance(k, int) else any((k_i > 1 for k_i in k))) or (
             nin > 1
-        ), "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+        ), (
+            "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+            "Use normal conv instead"
+        )
         super().__init__(nin, nout, k, strides, dilations, padding, use_bias, w_init)
 
     def __call__(self, x: JaxArray) -> JaxArray:
@@ -148,7 +151,10 @@ class ConvCenteringTranspose2D(nn.ConvTranspose2D):
     ):
         assert (k > 1 if isinstance(k, int) else any((k_i > 1 for k_i in k))) or (
             nin > 1
-        ), "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+        ), (
+            "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+            "Use normal conv instead"
+        )
         super().__init__(nin, nout, k, strides, dilations, padding, use_bias, w_init)
 
     def __call__(self, x: JaxArray) -> JaxArray:
@@ -333,7 +339,10 @@ class ConvTranspose3D(Conv3D):
         """
         assert (k > 1 if isinstance(k, int) else any((k_i > 1 for k_i in k))) or (
             nin > 1
-        ), "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+        ), (
+            "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+            "Use normal conv instead"
+        )
         super().__init__(
             nin=nout,
             nout=nin,
@@ -392,7 +401,10 @@ class ConvWS3D(Conv3D):
     ):
         assert (k > 1 if isinstance(k, int) else any((k_i > 1 for k_i in k))) or (
             nin // groups > 1
-        ), "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+        ), (
+            "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+            "Use normal conv instead"
+        )
         super().__init__(
             nin, nout, k, strides, dilations, groups, padding, use_bias, w_init
         )
@@ -430,7 +442,10 @@ class ConvCentering3D(Conv3D):
     ):
         assert (k > 1 if isinstance(k, int) else any((k_i > 1 for k_i in k))) or (
             nin // groups > 1
-        ), "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+        ), (
+            "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+            "Use normal conv instead"
+        )
         super().__init__(
             nin, nout, k, strides, dilations, groups, padding, use_bias, w_init
         )
@@ -466,7 +481,10 @@ class ConvWSTranspose3D(ConvTranspose3D):
     ):
         assert (k > 1 if isinstance(k, int) else any((k_i > 1 for k_i in k))) or (
             nin > 1
-        ), "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+        ), (
+            "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+            "Use normal conv instead"
+        )
         super().__init__(nin, nout, k, strides, dilations, padding, use_bias, w_init)
 
     def __call__(self, x: JaxArray) -> JaxArray:
@@ -501,7 +519,10 @@ class ConvCenteringTranspose3D(ConvTranspose3D):
     ):
         assert (k > 1 if isinstance(k, int) else any((k_i > 1 for k_i in k))) or (
             nin > 1
-        ), "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+        ), (
+            "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+            "Use normal conv instead"
+        )
         super().__init__(nin, nout, k, strides, dilations, padding, use_bias, w_init)
 
     def __call__(self, x: JaxArray) -> JaxArray:
