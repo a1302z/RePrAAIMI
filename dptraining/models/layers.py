@@ -20,6 +20,28 @@ class Flatten(Module):
 
 
 class ConvWS2D(nn.Conv2D):
+    def __init__(
+        self,
+        nin: int,
+        nout: int,
+        k: Union[Tuple[int, int], int],
+        strides: Union[Tuple[int, int], int] = 1,
+        dilations: Union[Tuple[int, int], int] = 1,
+        groups: int = 1,
+        padding: Union[ConvPadding, str, ConvPaddingInt] = ConvPadding.SAME,
+        use_bias: bool = True,
+        w_init: Callable = nn.init.kaiming_normal,
+    ):
+        assert (k > 1 if isinstance(k, int) else any((k_i > 1 for k_i in k))) or (
+            nin // groups > 1
+        ), (
+            "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+            "Use normal conv instead"
+        )
+        super().__init__(
+            nin, nout, k, strides, dilations, groups, padding, use_bias, w_init
+        )
+
     def __call__(self, x: JaxArray) -> JaxArray:
         weight = self.w.value
         weight -= weight.mean(axis=(0, 1, 2), keepdims=True)
@@ -39,6 +61,28 @@ class ConvWS2D(nn.Conv2D):
 
 
 class ConvCentering2D(nn.Conv2D):
+    def __init__(
+        self,
+        nin: int,
+        nout: int,
+        k: Union[Tuple[int, int], int],
+        strides: Union[Tuple[int, int], int] = 1,
+        dilations: Union[Tuple[int, int], int] = 1,
+        groups: int = 1,
+        padding: Union[ConvPadding, str, ConvPaddingInt] = ConvPadding.SAME,
+        use_bias: bool = True,
+        w_init: Callable = nn.init.kaiming_normal,
+    ):
+        assert (k > 1 if isinstance(k, int) else any((k_i > 1 for k_i in k))) or (
+            nin // groups > 1
+        ), (
+            "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+            "Use normal conv instead"
+        )
+        super().__init__(
+            nin, nout, k, strides, dilations, groups, padding, use_bias, w_init
+        )
+
     def __call__(self, x: JaxArray) -> JaxArray:
         weight = self.w.value - jn.mean(self.w.value, axis=(0, 1, 2), keepdims=True)
         output = lax.conv_general_dilated(
@@ -56,6 +100,22 @@ class ConvCentering2D(nn.Conv2D):
 
 
 class ConvWSTranspose2D(nn.ConvTranspose2D):
+    def __init__(
+        self,
+        nin: int,
+        nout: int,
+        k: Union[Tuple[int, int], int],
+        strides: Union[Tuple[int, int], int] = 1,
+        dilations: Union[Tuple[int, int], int] = 1,
+        padding: Union[ConvPadding, str, ConvPaddingInt] = ConvPadding.SAME,
+        use_bias: bool = True,
+        w_init: Callable = nn.init.kaiming_normal,
+    ):
+        assert (k > 1 if isinstance(k, int) else any((k_i > 1 for k_i in k))) or (
+            nin > 1
+        ), "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+        super().__init__(nin, nout, k, strides, dilations, padding, use_bias, w_init)
+
     def __call__(self, x: JaxArray) -> JaxArray:
         weight = self.w.value
         weight -= weight.mean(axis=(0, 1, 2), keepdims=True)
@@ -75,6 +135,22 @@ class ConvWSTranspose2D(nn.ConvTranspose2D):
 
 
 class ConvCenteringTranspose2D(nn.ConvTranspose2D):
+    def __init__(
+        self,
+        nin: int,
+        nout: int,
+        k: Union[Tuple[int, int], int],
+        strides: Union[Tuple[int, int], int] = 1,
+        dilations: Union[Tuple[int, int], int] = 1,
+        padding: Union[ConvPadding, str, ConvPaddingInt] = ConvPadding.SAME,
+        use_bias: bool = True,
+        w_init: Callable = nn.init.kaiming_normal,
+    ):
+        assert (k > 1 if isinstance(k, int) else any((k_i > 1 for k_i in k))) or (
+            nin > 1
+        ), "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+        super().__init__(nin, nout, k, strides, dilations, padding, use_bias, w_init)
+
     def __call__(self, x: JaxArray) -> JaxArray:
         weight = self.w.value
         weight -= weight.mean(axis=(0, 1, 2), keepdims=True)
@@ -255,6 +331,9 @@ class ConvTranspose3D(Conv3D):
             w_init: initializer for convolution kernel (a function that takes in a HWDIO shape and
                 returns a 4D matrix).
         """
+        assert (k > 1 if isinstance(k, int) else any((k_i > 1 for k_i in k))) or (
+            nin > 1
+        ), "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
         super().__init__(
             nin=nout,
             nout=nin,
@@ -299,6 +378,25 @@ class ConvTranspose3D(Conv3D):
 
 
 class ConvWS3D(Conv3D):
+    def __init__(
+        self,
+        nin: int,
+        nout: int,
+        k: Union[Tuple[int, int, int], int],
+        strides: Union[Tuple[int, int, int], int] = 1,
+        dilations: Union[Tuple[int, int, int], int] = 1,
+        groups: int = 1,
+        padding: Union[ConvPadding, str, ConvPaddingInt] = ConvPadding.SAME,
+        use_bias: bool = True,
+        w_init: Callable = nn.init.kaiming_normal,
+    ):
+        assert (k > 1 if isinstance(k, int) else any((k_i > 1 for k_i in k))) or (
+            nin // groups > 1
+        ), "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+        super().__init__(
+            nin, nout, k, strides, dilations, groups, padding, use_bias, w_init
+        )
+
     def __call__(self, inpt: JaxArray) -> JaxArray:
         weight = self.weight.value
         weight -= weight.mean(axis=(0, 1, 2, 3), keepdims=True)
@@ -318,6 +416,25 @@ class ConvWS3D(Conv3D):
 
 
 class ConvCentering3D(Conv3D):
+    def __init__(
+        self,
+        nin: int,
+        nout: int,
+        k: Union[Tuple[int, int, int], int],
+        strides: Union[Tuple[int, int, int], int] = 1,
+        dilations: Union[Tuple[int, int, int], int] = 1,
+        groups: int = 1,
+        padding: Union[ConvPadding, str, ConvPaddingInt] = ConvPadding.SAME,
+        use_bias: bool = True,
+        w_init: Callable = nn.init.kaiming_normal,
+    ):
+        assert (k > 1 if isinstance(k, int) else any((k_i > 1 for k_i in k))) or (
+            nin // groups > 1
+        ), "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+        super().__init__(
+            nin, nout, k, strides, dilations, groups, padding, use_bias, w_init
+        )
+
     def __call__(self, inpt: JaxArray) -> JaxArray:
         weight = self.weight.value
         weight -= weight.mean(axis=(0, 1, 2, 3), keepdims=True)
@@ -336,6 +453,22 @@ class ConvCentering3D(Conv3D):
 
 
 class ConvWSTranspose3D(ConvTranspose3D):
+    def __init__(
+        self,
+        nin: int,
+        nout: int,
+        k: Union[Tuple[int, int, int], int],
+        strides: Union[Tuple[int, int, int], int] = 1,
+        dilations: Union[Tuple[int, int, int], int] = 1,
+        padding: Union[ConvPadding, str, ConvPaddingInt] = ConvPadding.SAME,
+        use_bias: bool = True,
+        w_init: Callable = nn.init.kaiming_normal,
+    ):
+        assert (k > 1 if isinstance(k, int) else any((k_i > 1 for k_i in k))) or (
+            nin > 1
+        ), "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+        super().__init__(nin, nout, k, strides, dilations, padding, use_bias, w_init)
+
     def __call__(self, x: JaxArray) -> JaxArray:
         weight = self.weight.value
         weight -= weight.mean(axis=(0, 1, 2, 3), keepdims=True)
@@ -355,6 +488,22 @@ class ConvWSTranspose3D(ConvTranspose3D):
 
 
 class ConvCenteringTranspose3D(ConvTranspose3D):
+    def __init__(
+        self,
+        nin: int,
+        nout: int,
+        k: Union[Tuple[int, int, int], int],
+        strides: Union[Tuple[int, int, int], int] = 1,
+        dilations: Union[Tuple[int, int, int], int] = 1,
+        padding: Union[ConvPadding, str, ConvPaddingInt] = ConvPadding.SAME,
+        use_bias: bool = True,
+        w_init: Callable = nn.init.kaiming_normal,
+    ):
+        assert (k > 1 if isinstance(k, int) else any((k_i > 1 for k_i in k))) or (
+            nin > 1
+        ), "Normalizing weights of a conv layer with k=1 and nin=1 is not defined"
+        super().__init__(nin, nout, k, strides, dilations, padding, use_bias, w_init)
+
     def __call__(self, x: JaxArray) -> JaxArray:
         weight = self.weight.value
         weight -= weight.mean(axis=(0, 1, 2, 3), keepdims=True)
