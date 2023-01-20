@@ -47,7 +47,8 @@ class DatasetName(Enum):
     fastmri = 4
     radimagenet = 5
     msd = 6
-    ham10000 = 7
+    ukbb_seg = 7
+    ham10000 = 8
 
 
 class MSDSubtask(Enum):
@@ -109,8 +110,7 @@ class RadimagenetConfig:
 
 
 @dataclass
-class MSDConfig:
-    subtask: Optional[MSDSubtask] = MISSING
+class NiftiSegmentationConfig:
     slice_thickness: Optional[float] = None
     n_slices: Optional[int] = None
     cache: bool = False
@@ -121,6 +121,10 @@ class MSDConfig:
     resolution: Optional[int] = None
     datasplit_seed: Optional[int] = 0
     assume_same_settings: bool = False
+    msd_subtask: MSDSubtask = MISSING
+    new_data_root: Optional[str] = None
+    image_file_root: Optional[str] = None
+    label_file_root: Optional[str] = None
 
 
 @dataclass
@@ -141,7 +145,7 @@ class DatasetConfig:
     test_split: float = 0.1
     radimagenet: Optional[RadimagenetConfig] = None
     fmri: Optional[FmriConfig] = None
-    msd: Optional[MSDConfig] = None
+    nifti_seg_options: Optional[NiftiSegmentationConfig] = None
     ham: Optional[HAM10000] = None
 
 

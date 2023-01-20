@@ -10,7 +10,7 @@ from dptraining.datasets.imagenet import ImageNetCreator
 from dptraining.datasets.radimagenet import RadImageNetCreator
 from dptraining.datasets.fmri import FMRICreator
 from dptraining.datasets.tinyimagenet import TinyImageNetCreator
-from dptraining.datasets.msd import MSDCreator
+from dptraining.datasets.nifti.creator import NiftiSegCreator
 from dptraining.datasets.ham10000 import HAM10000Creator
 from dptraining.datasets.utils import (
     collate_np_classification,
@@ -36,7 +36,9 @@ def select_creator(config):
         case DatasetName.radimagenet:
             creator = RadImageNetCreator
         case DatasetName.msd:
-            creator = MSDCreator
+            creator = NiftiSegCreator
+        case DatasetName.ukbb_seg:
+            creator = NiftiSegCreator
         case DatasetName.ham10000:
             creator = HAM10000Creator
         case _ as unsupported:
