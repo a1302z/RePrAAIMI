@@ -1,7 +1,6 @@
 defaults:
   - base_config
   - _self_
-project: ham10000
 general:
   log_wandb: False
   parallel: False
@@ -9,6 +8,8 @@ general:
   # save_path: 
   # make_save_str_unique: True
   use_pretrained_model: imagenet_resnet9_convws_nw_gn_mp_sn.npz
+wandb:
+  project: ham10000
 # ckpt:
 #   logdir: _resnet9_ckpt
 #   keep_ckpts: 10

@@ -1,7 +1,6 @@
 defaults:
   - base_config
   - _self_
-project: msd
 general:
   log_wandb: False
   parallel: False
@@ -9,6 +8,8 @@ general:
   make_save_str_unique: True
   eval_init: True
   # save_path: msd_liver_unet_4-3-convwsnw_mp_gn_mish.npz
+wandb:
+  project: msd
 # checkpoint:
 #   logdir: msd_liver_unet_4-3-convwsnw_mp_gn_mish
 #   keep_ckpts: 10
