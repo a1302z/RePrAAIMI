@@ -21,7 +21,7 @@ augmentations:
       random_vertical_flips:
         flip_prob: 0.5
 model:
-  name: resnet50
+  name: smoothnet
   in_channels: 1
   num_classes: 2
   conv: convws_nw
