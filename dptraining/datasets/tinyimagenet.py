@@ -130,6 +130,9 @@ class TinyImageNetCreator(DataLoaderCreator):
                 val_ds, lengths, generator=Generator().manual_seed(42)
             )
         test_ds = TinyImageNet(**test_kwargs)
+        print('train', train_ds)
+        print('validation', val_ds)
+        print('test', test_ds)
         return train_ds, val_ds, test_ds
 
 

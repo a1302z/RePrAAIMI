@@ -110,6 +110,9 @@ class CIFAR10Creator(DataLoaderCreator):
             train_ds.targets = train_targets
             val_ds.data = val_data
             val_ds.targets = val_targets
+        print('train', type(train_ds[0]))
+        print('validation',train_ds[0])
+        print('test', type(train_ds))
         return train_ds, val_ds, test_ds
 
     @staticmethod

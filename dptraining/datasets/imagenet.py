@@ -47,4 +47,7 @@ class ImageNetCreator(DataLoaderCreator):
                 val_ds, lengths, generator=Generator().manual_seed(42)
             )
         test_ds = ImageNet(**test_kwargs)
+        print('train', train_ds)
+        print('validation', type(val_ds))
+        print('test', test_ds)
         return train_ds, val_ds, test_ds

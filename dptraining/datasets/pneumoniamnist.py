@@ -36,4 +36,7 @@ class pneumoniamnistCreator(DataLoaderCreator):
         train_ds = DataClass(**train_kwargs)
         val_ds = DataClass(**val_kwargs)
         test_ds = DataClass(**test_kwargs)
+        #print('train', type(train_ds))
+        #print('validation', type(train_ds[0]))
+        #print('test', train_ds[0])
         return train_ds, val_ds, test_ds
