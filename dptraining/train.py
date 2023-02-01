@@ -273,9 +273,9 @@ def main(
             break
 
     # never do test parallel as this could emit some test samples and thus distort results
-    metric = test(
+    '''metric = test(
         config, test_loader, predict_op_jit, test_aug, model_vars, False, "test"
-    )
+    )'''
     if config["general"]["log_wandb"]:
         run.finish()
     else:
