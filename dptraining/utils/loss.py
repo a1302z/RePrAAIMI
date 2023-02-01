@@ -4,7 +4,7 @@ from typing import Callable
 import objax
 
 from jax import numpy as jnp
-
+import numpy as np
 
 class Reduction(Enum):
     SUM = 0
@@ -47,7 +47,9 @@ class CSELogitsSparse(LossFunctionCreator):
         @objax.Function.with_vars(model_vars)
         def loss_fn(inpt, label):
             logit = model(inpt, training=True)
-            loss = objax.functional.loss.cross_entropy_logits_sparse(logit, label)
+            logit = logit.astype(np.int)
+            loss = objax.functional.loss.sigmoid_cross_entropy_logits(logit,label)
+            #loss = objax.functional.loss.cross_entropy_logits_sparse(logit, label)
             if self._reduction == Reduction.SUM:
                 return loss.sum()
             elif self._reduction == Reduction.MEAN:

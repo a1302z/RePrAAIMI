@@ -261,8 +261,7 @@ def test(  # pylint:disable=too-many-arguments
             if i + 1 >= max_batches:
                 break
     correct = np.concatenate(correct)
-    predicted = np.concatenate(predicted).argmax(axis=1)
-
+    predicted = np.concatenate(predicted)#.argmax(axis=1)
     if config["general"]["log_wandb"]:
         wandb.log(
             {
@@ -271,11 +270,5 @@ def test(  # pylint:disable=too-many-arguments
                 )
             }
         )
-    else:
-        print(f"{dataset_split} evaluation:")
-        print(
-            metrics.classification_report(
-                correct, predicted, output_dict=False, zero_division=0
-            )
-        )
+
     return score_fn(correct, predicted)
