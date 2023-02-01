@@ -4,6 +4,17 @@ from objax import nn, functional, Module
 from functools import partial
 from jax import numpy as jnp
 
+from objax.nn import Conv2D
+import objax
+import functools
+from typing import Callable, Sequence, Union, Optional
+from jax import numpy as jn
+import objax
+from objax.constants import ConvPadding
+from objax.nn import Conv2D
+from objax.typing import JaxArray, ConvPaddingInt
+import torch
+
 from dptraining.models.layers import is_groupnorm, AdaptivePooling
 
 
@@ -231,6 +242,8 @@ class SmoothNet(Module):
         dsc: whether depthwise seperable convolutions are used or normal convolutions
     """
 
+
+    '''    
     def __init__(
         self,
         norm_groups: int = 8,
@@ -247,6 +260,19 @@ class SmoothNet(Module):
         ),
         linear_cls: Module = nn.Linear,
         out_func: Callable = lambda x: x,
+    ):
+    '''
+    def __init__(
+        self,
+        nin: int,
+        nout: int,
+        stride: Union[int, Sequence[int]],
+        use_projection: bool,
+        bottleneck: bool,
+        conv_layer: objax.Module = Conv2D,
+        normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
+        activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
+        scale_norm: bool = False,
     ):
         super().__init__()
 

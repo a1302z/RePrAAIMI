@@ -31,6 +31,7 @@ import objax
 from objax.constants import ConvPadding
 from objax.nn import Conv2D
 from objax.typing import JaxArray, ConvPaddingInt
+import torch
 
 try:
     # Imports tensorflow when loading model weights from pretrained keras model.
@@ -390,6 +391,37 @@ class ResNet50(ResNetV2):
             conv_layer=conv_layer,
         )
 
+class RAD_ResNet50(ResNetV2):
+    """Implementation of ResNet v2 with 50 layers."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        num_classes: int,
+        conv_layer: objax.Module = Conv2D,
+        normalization_fn: Callable[..., objax.Module] = objax.nn.BatchNorm2D,
+        activation_fn: Callable[[JaxArray], JaxArray] = objax.functional.relu,
+        scale_norm: bool = False,
+    ):
+        """Creates ResNet50 instance.
+
+        Args:
+            in_channels: number of channels in the input image.
+            num_classes: number of output classes.
+            normalization_fn: module which used as normalization function.
+            activation_fn: activation function.
+        """
+        super().__init__(
+            in_channels=in_channels,
+            num_classes=num_classes,
+            blocks_per_group=(3, 4, 6, 3),
+            group_strides=(2, 2, 2, 1),
+            bottleneck=True,
+            normalization_fn=normalization_fn,
+            activation_fn=activation_fn,
+            scale_norm=scale_norm,
+            conv_layer=conv_layer,
+        )
 
 class ResNet101(ResNetV2):
     """Implementation of ResNet v2 with 101 layers."""
