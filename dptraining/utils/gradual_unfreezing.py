@@ -123,7 +123,7 @@ def make_unfreezing_schedule(
                 for st in search_terms
             ]
         case ModelName.wide_resnet:
-            assert len(epoch_triggers) == 4
+            assert len(epoch_triggers) == 3
             N = len(model)
             blocks_per_group = (len(model) - 4) // 6
             unfreeze_keys = (
