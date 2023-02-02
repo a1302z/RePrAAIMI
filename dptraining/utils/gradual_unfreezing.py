@@ -126,27 +126,27 @@ def make_unfreezing_schedule(
             assert len(epoch_triggers) == 3
             N = len(model)
             blocks_per_group = (len(model) - 4) // 6
-            unfreeze_keys = (
-                (
+            unfreeze_keys = [
+                [
                     key
                     for key in model_vars.keys()
                     for i in range(N - 4, N)
                     if f"(WideResNet)[{i}]" in key
-                ),
-                (
+                ],
+                [
                     key
                     for key in model_vars.keys()
                     for i in [0, *range(N - (4 + blocks_per_group), N)]
                     if f"(WideResNet)[{i}]" in key
-                ),
-                (
+                ],
+                [
                     key
                     for key in model_vars.keys()
                     for i in [0, *range(N - (4 + 2 * blocks_per_group), N)]
                     if f"(WideResNet)[{i}]" in key
-                ),
-                (key for key in model_vars.keys()),
-            )
+                ],
+                [key for key in model_vars.keys()],
+            ]
         case other:
             raise ValueError(f"No Scheduler for {other} yet defined.")
     return UnfreezingScheduler(
