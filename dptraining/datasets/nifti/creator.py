@@ -89,6 +89,7 @@ def make_dataset(config: Config, transforms, scan_files, label_files):
             cache_files=config.dataset.nifti_seg_options.cache,
             ct_window=config.dataset.nifti_seg_options.ct_window,
             assume_same_settings=config.dataset.nifti_seg_options.assume_same_settings,
+            normalize_per_ct=config.dataset.nifti_seg_options.normalize_per_scan,
         )
         for smls, tf in zip(split_matched_labeled_scans, transforms)
     )

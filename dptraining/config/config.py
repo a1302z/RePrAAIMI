@@ -125,6 +125,7 @@ class NiftiSegmentationConfig:
     new_data_root: Optional[str] = None
     image_file_root: Optional[str] = None
     label_file_root: Optional[str] = None
+    normalize_per_scan: bool = False
 
 
 @dataclass

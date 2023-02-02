@@ -19,10 +19,10 @@ dataset:
   name: msd
   root: ./data/MSD/
   train_val_split: 0.9
-  msd:
+  nifti_seg_options:
     test_split: 0.1
     resolution: 128
-    subtask: liver
+    msd_subtask: liver
     cache: True
     # slice_thickness: 1.0
     normalization_type: gaussian

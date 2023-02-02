@@ -37,6 +37,7 @@ class NiftiSegmentationDataset(Dataset):
         cache_files: bool = False,
         ct_window: CTWindow = CTWindow(-150, 200),
         assume_same_settings: bool = False,
+        normalize_per_ct: bool = False,
     ) -> None:
         super().__init__()
         assert (slice_thickness is None) or (
@@ -52,6 +53,7 @@ class NiftiSegmentationDataset(Dataset):
         self.cache: bool = cache_files
         self.cached_files: Optional[mp.Array]
         self.ct_window: CTWindow = ct_window
+        self.normalize_per_ct: bool = normalize_per_ct
         self.assume_same_settings: bool = assume_same_settings
         if self.assume_same_settings:
             assert all(
@@ -104,6 +106,8 @@ class NiftiSegmentationDataset(Dataset):
         label = (
             self.label_transform(label) if self.label_transform is not None else label
         )
+        if self.normalize_per_ct:
+            scan = (scan - scan.mean()) / scan.std()
         # t1 = time()
         # print(f"\t Loading took {t1-t0:.1f} seconds")
         return (
