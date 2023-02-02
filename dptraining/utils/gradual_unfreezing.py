@@ -1,7 +1,7 @@
 from bisect import bisect_right
 
 
-from objax import VarCollection
+from objax import VarCollection, Module
 
 from dptraining.config.model import ModelName
 
@@ -90,6 +90,7 @@ def make_unfreezing_schedule(
     epoch_triggers: list[int],
     model_vars: VarCollection,
     must_train_vars: VarCollection,
+    model: Module,
 ) -> UnfreezingScheduler:
     unfreeze_keys: list[list[str]] = []
     all_keys = list(model_vars.keys())
@@ -121,6 +122,31 @@ def make_unfreezing_schedule(
                 [k for k in all_keys if any((term in k for term in st))]
                 for st in search_terms
             ]
+        case ModelName.wide_resnet:
+            assert len(epoch_triggers) == 4
+            N = len(model)
+            blocks_per_group = (len(model) - 4) // 6
+            unfreeze_keys = (
+                (
+                    key
+                    for key in model_vars.keys()
+                    for i in range(N - 4, N)
+                    if f"(WideResNet)[{i}]" in key
+                ),
+                (
+                    key
+                    for key in model_vars.keys()
+                    for i in [0, *range(N - (4 + blocks_per_group), N)]
+                    if f"(WideResNet)[{i}]" in key
+                ),
+                (
+                    key
+                    for key in model_vars.keys()
+                    for i in [0, *range(N - (4 + 2 * blocks_per_group), N)]
+                    if f"(WideResNet)[{i}]" in key
+                ),
+                (key for key in model_vars.keys()),
+            )
         case other:
             raise ValueError(f"No Scheduler for {other} yet defined.")
     return UnfreezingScheduler(

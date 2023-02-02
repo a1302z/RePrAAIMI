@@ -109,6 +109,7 @@ def main(
             config.unfreeze_schedule.trigger_points,
             model_vars,
             must_train_vars,
+            model,
         )
         model_vars, _ = unfreeze_schedule(0)
     else:

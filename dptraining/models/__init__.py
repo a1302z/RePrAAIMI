@@ -612,8 +612,8 @@ def modify_architecture_from_pretrained_model(config: Config, model: Callable):
                 model.stage_zero = nn.Sequential([new_layer, model.stage_zero])
                 add_name = "(SmoothNet).conv1"
             case _:  # e.g. resnet18, wide_resnet
-                model = nn.Sequential([new_layer, model])
-                add_name = f"({class_name(model)})[1]"
+                model[0] = nn.Sequential([new_layer, model[0]])
+                add_name = f"({class_name(model).split('.')[-1]})[0]"
         new_model_vars = {
             f"{add_name}(Sequential)[0]{layer_name}": layer_param
             for layer_name, layer_param in new_layer.vars().items()
