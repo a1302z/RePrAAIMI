@@ -28,10 +28,10 @@ loader:
 # test_augmentations:
 model:
   complex: False
-  name: smoothnet
+  name: resnet9
   in_channels: 3
   num_classes: 10
-  conv: conv
+  conv: convws_nw
   activation: mish
   normalization: gn
   pooling: avgpool
@@ -52,6 +52,7 @@ hyperparams:
   batch_size_test: 512
   lr: 2e-3
   # momentum: 0.9
+  grad_acc_steps: 2
 scheduler:
   type: reduceonplateau
   normalize_lr: False

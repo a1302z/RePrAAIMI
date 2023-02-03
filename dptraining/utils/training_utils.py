@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path.cwd()))
 
 from dptraining.config import Config, DatasetTask
 from dptraining.privacy import ClipAndAccumulateGrads
+from dptraining.optim import AccumulateGrad
 from dptraining.utils import NEED_RAW_PREDICTIONS
 
 N_DEVICES = local_device_count()
@@ -35,7 +36,7 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
     ema=None,
 ):
     if grad_accumulation:
-        assert isinstance(grad_calc, ClipAndAccumulateGrads)
+        assert isinstance(grad_calc, (ClipAndAccumulateGrads, AccumulateGrad))
 
         @objax.Function.with_vars(train_vars)
         def calc_grads(image_batch, label_batch):
@@ -49,12 +50,14 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
                 label_batch = jn.repeat(
                     label_batch[:, jn.newaxis], n_augmentations, axis=1
                 )
-            else:
+                if not isinstance(grad_calc, ClipAndAccumulateGrads):
+                    ibs = image_batch.shape
+                    image_batch = image_batch.reshape(ibs[0] * ibs[1], *ibs[2:])
+                    label_batch = label_batch.flatten()
+            elif isinstance(grad_calc, ClipAndAccumulateGrads):
                 image_batch = image_batch[:, jn.newaxis, ...]
                 label_batch = label_batch[:, jn.newaxis, ...]
-            clipped_grad, loss_value = grad_calc.calc_per_sample_grads(
-                image_batch, label_batch
-            )
+            clipped_grad, loss_value = grad_calc(image_batch, label_batch)
             grad_calc.accumulate_grad(clipped_grad, loss_value)
             if parallel:
                 loss_value = objax.functional.parallel.psum(loss_value)
@@ -67,8 +70,11 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
             grad_calc.reset_accumulated_grads()
             if parallel:
                 grads = objax.functional.parallel.psum(grads)
-            grads = grad_calc.add_noise(grads, noise, objax.random.DEFAULT_GENERATOR)
-            grads = [gx / effective_batch_size for gx in grads]
+            if isinstance(grad_calc, ClipAndAccumulateGrads):
+                grads = grad_calc.add_noise(
+                    grads, noise, objax.random.DEFAULT_GENERATOR
+                )
+                grads = [gx / effective_batch_size for gx in grads]
             opt(learning_rate, grads)
             if ema is not None:
                 ema()
@@ -155,17 +161,22 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
 
 
 def create_loss_gradient(config: Config, model_vars, loss_fn):
-    if not config.DP:
-        loss_gv = objax.GradValues(loss_fn, model_vars)
-    else:
+    if config.hyperparams.grad_acc_steps > 1 and not config.DP:
+        loss_gv = AccumulateGrad(
+            loss_fn,
+            model_vars,
+        )
+    elif config.DP:
         loss_gv = ClipAndAccumulateGrads(
             loss_fn,
             model_vars,
             config.DP.max_per_sample_grad_norm,
             batch_axis=(0, 0),
             use_norm_accumulation=config.DP.norm_acc,
-            gradient_accumulation_steps=config.DP.grad_acc_steps,
+            gradient_accumulation_steps=config.hyperparams.grad_acc_steps,
         )
+    else:
+        loss_gv = objax.GradValues(loss_fn, model_vars)
 
     return loss_gv
 

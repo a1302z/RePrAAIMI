@@ -65,6 +65,7 @@ hyperparams:
   batch_size_test: 512
   lr: 2e-3
   # momentum: 0.9
+  grad_acc_steps: 8
 scheduler:
   type: reduceonplateau
   normalize_lr: False
@@ -81,6 +82,5 @@ DP:
   max_per_sample_grad_norm: 1.0
   delta: 1e-5
   norm_acc: False
-  grad_acc_steps: 8
   rsqrt_noise_adapt: False
   glrt_assumption: False

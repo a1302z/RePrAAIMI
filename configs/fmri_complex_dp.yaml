@@ -59,6 +59,7 @@ hyperparams:
   # momentum: 0.9
   # l2regularization: 1e-5
   # overfit: 32
+  grad_acc_steps: 1
 metrics:
   main: 
     structural_similarity:
@@ -90,6 +91,5 @@ DP:
   max_per_sample_grad_norm: 1.0
   delta: 1e-5
   norm_acc: False
-  grad_acc_steps: 1
   rsqrt_noise_adapt: False
   glrt_assumption: False

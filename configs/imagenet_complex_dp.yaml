@@ -91,6 +91,7 @@ hyperparams:
   batch_size: 64
   batch_size_test: 256
   lr: 1e-3
+  grad_acc_steps: 64
 scheduler:
   type: reduceonplateau
   normalize_lr: False
@@ -102,5 +103,4 @@ DP:
   max_per_sample_grad_norm: 1.0
   delta: 8e-7
   norm_acc: False
-  grad_acc_steps: 64
   adapt_noise: True

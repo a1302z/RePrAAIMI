@@ -210,6 +210,7 @@ class HyperparamsConfig:
     lr: float = MISSING
     l2regularization: Optional[float] = None
     overfit: Optional[int] = None
+    grad_acc_steps: int = 1
 
 
 class SchedulerType(Enum):
@@ -249,7 +250,6 @@ class DPConfig:
     delta: float = MISSING
     sigma: Optional[float] = None
     norm_acc: bool = MISSING
-    grad_acc_steps: int = 1
     rsqrt_noise_adapt: bool = False
     glrt_assumption: bool = False
 

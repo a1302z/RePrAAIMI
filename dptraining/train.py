@@ -158,16 +158,18 @@ def main(
         predict_lambda, model.vars()  # pylint:disable=not-callable
     )
 
+    grad_acc = config.hyperparams.grad_acc_steps
     if not config.DP:
         sampling_rate, delta, sigma, final_epsilon, total_noise = 0, 0, 0, 0, 0
-        batch_expansion_factor, grad_acc = 1, 1
-        effective_batch_size = config.hyperparams.batch_size
+        batch_expansion_factor = 1
+        effective_batch_size = (
+            config.hyperparams.batch_size * config.hyperparams.grad_acc_steps
+        )
     else:
         delta = config.DP.delta
         eps_calc = EpsCalculator(config, train_loader)
         eps_calc.fill_config()
         sigma = config.DP.sigma
-        grad_acc = config.DP.grad_acc_steps
 
         total_noise, adapted_sigma = eps_calc.adapt_sigma()
 

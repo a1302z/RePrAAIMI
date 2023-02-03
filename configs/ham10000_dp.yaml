@@ -92,6 +92,7 @@ hyperparams:
   lr: 2e-3
   # overfit: 10
   # momentum: 0.9
+  grad_acc_steps: 1
 metrics:
   main: 
     matthews_corrcoef:
@@ -118,4 +119,3 @@ DP:
   max_per_sample_grad_norm: 1.0
   delta: 8e-7
   norm_acc: False
-  grad_acc_steps: 1

@@ -87,7 +87,7 @@ class EpsCalculator:
     @staticmethod
     def get_grad_acc(config: Config):
         # devices = device_count() if config.general.parallel else 1
-        return config.DP.grad_acc_steps
+        return config.hyperparams.grad_acc_steps
 
     @staticmethod
     def calc_effective_batch_size(config: Config):

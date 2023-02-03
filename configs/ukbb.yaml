@@ -7,43 +7,34 @@ general:
   eval_train: True
   make_save_str_unique: True
   eval_init: True
-  # use_pretrained_model: msd_pancreas_unet_4-3-convwsnw_mp_gn_mish_resilient-flower-4_2023-01-04_11-51-58.npz
+  # save_path:
 wandb:
-  project: msd_dp
-# ckpt:
-#   logdir: msd_ckpts
-#   keep_ckpts: 2
+  project: ukbb
+# checkpoint:
+#   logdir:
+#   keep_ckpts: 10
 #   makedir: True
 dataset: 
   task: segmentation
-  name: msd
-  root: ./data/MSD/
+  name: ukbb_seg
+  root: ./data/mini_ukbb/
   train_val_split: 0.9
-  msd:
+  nifti_seg_options:
+    image_file_root: ./data/mini_ukbb/niftis/
+    label_file_root: ./data/mini_ukbb/segmentations/
+    new_data_root: ./data/mini_ukbb/
     test_split: 0.1
-    resolution: 128
-    subtask: liver
+    # resolution: 128
     cache: True
     # slice_thickness: 1.0
     normalization_type: gaussian
-    n_slices: 50
+    # n_slices: 50
     data_stats:
-      mean: -81.91
-      std: 8.736
-    ct_window: 
-      low: -150
-      high: 200
-    assume_same_settings: True
-# augmentations:
-#   consecutive_augmentations:
-#     multiplicity: 16
-#     consecutive_augmentations:
-#       random_horizontal_flips:
-#         flip_prob: 0.2
-#       random_vertical_flips:
-#         flip_prob: 0.2
-#       random_z_flips:
-#         flip_prob: 0.2
+      mean: 66.0
+      std: 143.1
+    # ct_window: 
+    #   low: -150
+    #   high: 200
 loader: 
   num_workers: 16
   prefetch_factor: 2
@@ -58,26 +49,29 @@ model:
   pooling: maxpool
   normalization: gn
   extra_args:
-    out_channels: 3
-    channels: 4
+    out_channels: 6
+    channels: 16
 optim:
   name: nadam
 loss: 
   type: dice
   reduction: mean
   binary_loss: False
+  # class_weights: 
+  #   - 1e-2
+  #   - 0.5
+  #   - 1.0
 ema:
   use_ema: False
   decay: 0.999
 hyperparams:
-  epochs: 50
+  epochs: 10
   batch_size: 1
   batch_size_test: 1
   lr: 2e-3
   # momentum: 0.9
   # l2regularization: 1e-5
   # overfit: 2
-  grad_acc_steps: 8
 metrics:
   main:     
     fscore_avg:
@@ -88,14 +82,13 @@ metrics:
     mean_squared_error:
     # mean_absolute_error:
   per_batch_metrics: True
-scheduler:
-  type: reduceonplateau
-  normalize_lr: False
-  patience: 20
-  min_delta: 0.01
-  factor: 0.5
-DP:
-  epsilon: 8.0
-  max_per_sample_grad_norm: 1.0
-  delta: 8e-7
-  norm_acc: False
+# scheduler:
+#   type: reduceonplateau
+#   normalize_lr: False
+#   patience: 20
+#   min_delta: 0.01
+#   factor: 0.5
+# earlystopping:
+#   mode: maximize
+#   patience: 100
+#   min_delta: 0.01
