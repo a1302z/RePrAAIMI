@@ -48,8 +48,8 @@ class CSELogitsSparse(LossFunctionCreator):
         def loss_fn(inpt, label):
             logit = model(inpt, training=True)
             logit = logit.astype(np.int)
-            loss = objax.functional.loss.sigmoid_cross_entropy_logits(logit,label)
-            #loss = objax.functional.loss.cross_entropy_logits_sparse(logit, label)
+            loss = objax.functional.loss.sigmoid_cross_entropy_logits(logit,label)  #for MIMIC-CXR
+            #loss = objax.functional.loss.cross_entropy_logits_sparse(logit, label) #For MedMNIST
             if self._reduction == Reduction.SUM:
                 return loss.sum()
             elif self._reduction == Reduction.MEAN:
