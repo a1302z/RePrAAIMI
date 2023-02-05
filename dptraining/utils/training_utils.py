@@ -260,6 +260,20 @@ def test(  # pylint:disable=too-many-arguments
             predicted.append(y_pred)
             if i + 1 >= max_batches:
                 break
+                
+    pathologies = ["Enlarged Cardiomediastinum",
+                            "Cardiomegaly",
+                            "Lung Opacity",
+                            "Lung Lesion",
+                            "Edema",
+                            "Consolidation",
+                            "Pneumonia",
+                            "Atelectasis",
+                            "Pneumothorax",
+                            "Pleural Effusion",
+                            "Pleural Other",
+                            "Fracture",
+                            "Support Devices"]            
     correct = np.concatenate(correct)
     predicted = np.concatenate(predicted)#.argmax(axis=1)
     if config["general"]["log_wandb"]:
