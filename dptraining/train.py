@@ -13,8 +13,8 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path.cwd()))
 
 
-#os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 # os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 
 
@@ -31,7 +31,7 @@ def main(
     if isinstance(config, omegaconf.dictconfig.DictConfig):
         config = OmegaConf.to_container(config)
     if "cpu" in config["general"] and config["general"]["cpu"]:
-        os.environ["CUDA_VISIBLE_DEVICES"] = ""
+        os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 
     # This is absolutely disgusting but necessary to disable gpu training
     import objax
