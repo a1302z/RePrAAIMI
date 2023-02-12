@@ -13,8 +13,8 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path.cwd()))
 
 
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-# os.environ["CUDA_VISIBLE_DEVICES"] = "4"
+#os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 # os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 
 
