@@ -1,4 +1,4 @@
-project: MIMIC-DP
+project: MIMIC-DP-SMOOTH
 general:
   log_wandb: False
   parallel: False
