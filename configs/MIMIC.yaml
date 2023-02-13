@@ -22,7 +22,7 @@ model:
   name: resnet9
   in_channels: 1
   num_classes: 13
-  conv: conv
+  conv: convws_nw
   activation: mish
   normalization: gn
   pooling: avgpool
