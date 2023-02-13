@@ -1,4 +1,4 @@
-project: MIMIC-DP
+project: MIMIC-DP-LONG
 general:
   log_wandb: False
   parallel: False
