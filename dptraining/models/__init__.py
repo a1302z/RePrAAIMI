@@ -286,7 +286,8 @@ def make_normal_model_from_config(config: dict) -> Callable:
             )
 
             objax.io.load_var_collection('radimagenet_resnet9_gn_maxpool.npz', model.vars())
-            model.classifier = nn.Linear(4*256, 13) 
+            n_classes = config["model"]["num_classes"]
+            model.classifier = nn.Linear(4*256, n_classes) 
             return model
         case "smoothnet":
             already_defined = (
