@@ -32,7 +32,7 @@ from dptraining.models import resnet_v2, wide_resnet
 from dptraining.models.complex.converter import ComplexModelConverter
 
 
-SUPPORTED_MODELS = ("cifar10model", "resnet18", "resnet9", "smoothnet", "wide_resnet",'resnet50')
+SUPPORTED_MODELS = ("cifar10model", "resnet18", "resnet9", "smoothnet", "wide_resnet",'resnet50','radimagenet_resnet9')
 SUPPORTED_NORMALIZATION = ("bn", "gn")
 SUPPORTED_CONV = ("conv", "convws", "convws_nw")
 SUPPORTED_ACTIVATION = ("relu", "selu", "leakyrelu", "mish")
@@ -264,6 +264,30 @@ def make_normal_model_from_config(config: dict) -> Callable:
                 pool_func=partial(make_pooling_from_config(config), size=2),
                 **kwargs,
             )
+
+        case "radimagenet_resnet9":
+            already_defined = (
+                "in_channels",
+                "num_classes",
+                "conv_cls",
+                "norm_cls",
+                "act_func",
+                "pool_func",
+            )
+            kwargs = get_kwargs(ResNet9, already_defined, config["model"])
+            model =  ResNet9(
+                config["model"]["in_channels"],
+                165,#config["model"]["num_classes"]
+                conv_cls=make_conv_from_config(config),
+                norm_cls=make_normalization_from_config(config),
+                act_func=make_activation_from_config(config),
+                pool_func=partial(make_pooling_from_config(config), size=2),
+                **kwargs,
+            )
+
+            objax.io.load_var_collection('radimagenet_resnet9_gn_maxpool.npz', model.vars())
+            model.classifier = nn.Linear(4*256, 13) 
+            return model
         case "smoothnet":
             already_defined = (
                 "in_channels",
