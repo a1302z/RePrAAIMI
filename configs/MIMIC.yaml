@@ -21,7 +21,7 @@ model:
   complex: False
   name: resnet9
   in_channels: 1
-  num_classes: 2
+  num_classes: 13
   conv: conv
   activation: mish
   normalization: gn
