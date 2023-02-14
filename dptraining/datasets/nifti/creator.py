@@ -1,7 +1,11 @@
 from pathlib import Path
 from random import seed, shuffle
 from typing import Tuple
-
+from itertools import compress
+from tqdm import tqdm
+import nibabel as nib
+import numpy as np
+from pickle import dump, load
 from torch.utils.data import Dataset
 
 
@@ -32,6 +36,109 @@ def find_niftis_folder_id(
 
 def reduce_to_available_files(labeled_scans, available_files):
     return {k: v for k, v in labeled_scans.items() if k in available_files}
+
+
+def filter_niftis(config, scan_files, label_files):
+    assert scan_files.keys() == label_files.keys()
+    if config.dataset.nifti_seg_options.filter_options:
+        if config.dataset.nifti_seg_options.filter_options.reuse_filtered_files:
+            with open(
+                config.dataset.nifti_seg_options.filter_options.reuse_filtered_files,
+                "rb",
+            ) as fp:
+                valid_keys = load(fp)
+                old_size, new_size = len(scan_files), len(valid_keys)
+                scan_files = {idf: scan_files[idf] for idf in valid_keys}
+                label_files = {idf: label_files[idf] for idf in valid_keys}
+        else:
+            keep_entries = []
+            for file_id, img_path in tqdm(
+                scan_files.items(),
+                total=len(scan_files),
+                leave=False,
+                desc="Filtering niftis",
+            ):
+                label_path = label_files[file_id]
+                img_path, label_path = Path(img_path), Path(label_path)
+                keep_entry = True
+                if img_path.is_symlink():
+                    img_path = img_path.readlink()
+                if label_path.is_symlink():
+                    label_path = label_path.readlink()
+                img_file: nib.Nifti1Image = nib.load(img_path)
+                label_file: nib.Nifti1Image = nib.load(label_path)
+                if (
+                    config.dataset.nifti_seg_options.filter_options.resolution
+                    is not None
+                ):
+                    img_shape = img_file.header.get_data_shape()
+                    label_shape = label_file.header.get_data_shape()
+                    keep_entry &= img_shape == label_shape
+                    keep_entry &= (
+                        img_shape
+                        == config.dataset.nifti_seg_options.filter_options.resolution
+                    )
+                if (
+                    keep_entry
+                    and config.dataset.nifti_seg_options.filter_options.min_pixels_per_organ
+                ):
+                    labels, counts = np.unique(
+                        label_file.get_data().flatten(), return_counts=True
+                    )
+                    keep_entry &= np.all(
+                        labels
+                        == np.array(
+                            range(
+                                len(
+                                    config.dataset.nifti_seg_options.filter_options.min_pixels_per_organ
+                                )
+                            )
+                        )
+                    )
+                    keep_entry &= np.all(
+                        np.greater_equal(
+                            counts,
+                            np.array(
+                                config.dataset.nifti_seg_options.filter_options.min_pixels_per_organ
+                            ),
+                        )
+                    )
+                if (
+                    keep_entry
+                    and config.dataset.nifti_seg_options.filter_options.length_threshold
+                ):
+                    first_non_zero = np.nonzero(label_file.get_data().sum(axis=(0, 1)))[
+                        0
+                    ][0]
+                    keep_entry &= (
+                        first_non_zero
+                        > config.dataset.nifti_seg_options.filter_options.length_threshold
+                    )
+
+                keep_entries.append(keep_entry)
+            old_size, new_size = len(keep_entries), sum(keep_entries)
+            if new_size < old_size:
+                scan_files = {
+                    idf: scan_files[idf]
+                    for idf in list(compress(scan_files, keep_entries))
+                }
+                label_files = {
+                    idf: label_files[idf]
+                    for idf in list(compress(label_files, keep_entries))
+                }
+            if config.dataset.nifti_seg_options.filter_options.save_filtered_files:
+                with open(
+                    config.dataset.nifti_seg_options.filter_options.save_filtered_files,
+                    "wb",
+                ) as fp:
+                    dump(list(scan_files.keys()), fp)
+
+        if new_size < old_size:
+            print(f"\tFiltering reduced dataset from {old_size} to {new_size}")
+            assert scan_files.keys() == label_files.keys()
+        else:
+            print(f"\tNo files were removed due to filtering")
+    return scan_files, label_files
 
 
 def make_dataset(config: Config, transforms, scan_files, label_files):
@@ -147,6 +254,8 @@ class NiftiSegCreator(DataLoaderCreator):
             )
         scan_files = reduce_to_available_files(scan_files, available_files)
         label_files = reduce_to_available_files(label_files, available_files)
+
+        scan_files, label_files = filter_niftis(config, scan_files, label_files)
 
         train_ds, val_ds, test_ds = make_dataset(
             config, transforms, scan_files, label_files

@@ -2,6 +2,7 @@ from enum import Enum
 from dataclasses import dataclass, field
 from typing import Any, Optional
 from psutil import cpu_count
+from pathlib import Path
 
 from omegaconf import MISSING
 
@@ -110,6 +111,15 @@ class RadimagenetConfig:
 
 
 @dataclass
+class FilterOptionsNifti:
+    resolution: Optional[tuple[int, int, int]] = None
+    min_pixels_per_organ: Optional[tuple[int]] = None
+    length_threshold: Optional[int] = None
+    save_filtered_files: Optional[Path] = None
+    reuse_filtered_files: Optional[Path] = None
+
+
+@dataclass
 class NiftiSegmentationConfig:
     slice_thickness: Optional[float] = None
     n_slices: Optional[int] = None
@@ -126,6 +136,7 @@ class NiftiSegmentationConfig:
     image_file_root: Optional[str] = None
     label_file_root: Optional[str] = None
     normalize_per_scan: bool = False
+    filter_options: Optional[FilterOptionsNifti] = None
 
 
 @dataclass

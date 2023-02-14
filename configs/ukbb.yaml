@@ -32,6 +32,21 @@ dataset:
     data_stats:
       mean: 66.0
       std: 143.1
+    filter_options:
+      resolution:
+        - 224
+        - 168
+        - 363
+      min_pixels_per_organ:
+        - 0
+        - 1000
+        - 1000
+        - 1000
+        - 1000
+        - 1000
+      length_threshold: 100
+      save_filtered_files: "./filtered_nifti_keys"
+      reuse_filtered_files: "./filtered_nifti_keys"
     # ct_window: 
     #   low: -150
     #   high: 200
