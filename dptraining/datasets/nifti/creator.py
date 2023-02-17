@@ -1,6 +1,6 @@
 from pathlib import Path
 from random import seed, shuffle
-from typing import Tuple
+from typing import Tuple, Optional
 from itertools import compress
 from tqdm import tqdm
 import nibabel as nib
@@ -67,6 +67,7 @@ def filter_niftis(config, scan_files, label_files):
                     label_path = label_path.readlink()
                 img_file: nib.Nifti1Image = nib.load(img_path)
                 label_file: nib.Nifti1Image = nib.load(label_path)
+                label_fdata: Optional[np.array] = None
                 if (
                     config.dataset.nifti_seg_options.filter_options.resolution
                     is not None
@@ -82,8 +83,10 @@ def filter_niftis(config, scan_files, label_files):
                     keep_entry
                     and config.dataset.nifti_seg_options.filter_options.min_pixels_per_organ
                 ):
+                    if label_fdata is None:
+                        label_fdata = label_file.get_fdata()
                     labels, counts = np.unique(
-                        label_file.get_data().flatten(), return_counts=True
+                        label_fdata.flatten(), return_counts=True
                     )
                     keep_entry &= np.all(
                         labels
@@ -95,21 +98,22 @@ def filter_niftis(config, scan_files, label_files):
                             )
                         )
                     )
-                    keep_entry &= np.all(
-                        np.greater_equal(
-                            counts,
-                            np.array(
-                                config.dataset.nifti_seg_options.filter_options.min_pixels_per_organ
-                            ),
+                    if keep_entry:
+                        keep_entry &= np.all(
+                            np.greater_equal(
+                                counts,
+                                np.array(
+                                    config.dataset.nifti_seg_options.filter_options.min_pixels_per_organ
+                                ),
+                            )
                         )
-                    )
                 if (
                     keep_entry
                     and config.dataset.nifti_seg_options.filter_options.length_threshold
                 ):
-                    first_non_zero = np.nonzero(label_file.get_data().sum(axis=(0, 1)))[
-                        0
-                    ][0]
+                    if label_fdata is None:
+                        label_fdata = label_file.get_fdata()
+                    first_non_zero = np.nonzero(label_fdata.sum(axis=(0, 1)))[0][0]
                     keep_entry &= (
                         first_non_zero
                         > config.dataset.nifti_seg_options.filter_options.length_threshold
@@ -175,7 +179,7 @@ def make_dataset(config: Config, transforms, scan_files, label_files):
     for directory, files in zip(subdirs, split_files):
         scan_subdir, label_subdir = mk_subdirectories(directory, ["images", "labels"])
         sub_matched_labeled_scans = []
-        for (name, scan_path, label_path) in files:
+        for name, scan_path, label_path in files:
             new_scan_path = scan_subdir / name
             new_label_path = label_subdir / name
             if not new_scan_path.is_symlink():
@@ -205,7 +209,6 @@ def make_dataset(config: Config, transforms, scan_files, label_files):
 
 
 class NiftiSegCreator(DataLoaderCreator):
-
     subtask_paths = {
         1: "Task01_BrainTumour",
         2: "Task02_Heart",
