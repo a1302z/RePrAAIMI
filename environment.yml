@@ -19,6 +19,7 @@ dependencies:
   - matplotlib
   - conda-forge::h5py
   - conda-forge::pandas
+  - conda-forge::opacus
   - black
   - pytest
   - pylint

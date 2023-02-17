@@ -263,6 +263,8 @@ class DPConfig:
     norm_acc: bool = MISSING
     rsqrt_noise_adapt: bool = False
     glrt_assumption: bool = False
+    mechanism: str = "gdp"
+    eps_tol: float = 1e-5
 
 
 @dataclass

@@ -2,11 +2,13 @@ from enum import Enum
 from functools import partial
 
 from jax.lax import rsqrt
-from objax.privacy.dpsgd import analyze_dp
 from scipy.optimize import minimize_scalar
 
 from dptraining.config import Config
 from dptraining.privacy.find_noise_mult import new_noise_multi
+
+
+from opacus.accountants.utils import get_noise_multiplier
 
 
 class NoiseCalcMode(Enum):
@@ -14,10 +16,12 @@ class NoiseCalcMode(Enum):
     EPOCHS = 2
 
 
-def epsilon_opt_func(*args, epsilon=None, opt_keyword=None, **kwargs):
+def epsilon_opt_func_opacus(
+    *args, accountant, epsilon=None, opt_keyword=None, **kwargs
+):
     kwargs = {opt_keyword: args[0], **kwargs}
-    calc_eps = analyze_dp(**kwargs)
-    return abs(epsilon - calc_eps)
+    accountant.history = [(kwargs["sigma"], kwargs["sampling_rate"], kwargs["steps"])]
+    return abs(epsilon - accountant.get_epsilon(delta=kwargs["delta"]))
 
 
 class EpsCalculator:
@@ -53,27 +57,24 @@ class EpsCalculator:
                 "You need to specify either one of sigma or epochs in the config"
             )
 
-    def fill_config(self, tol=1e-5) -> float:
+    def fill_config(self, accountant, tol=1e-5) -> float:
         if self._mode == NoiseCalcMode.SIGMA:
-            result = minimize_scalar(
-                partial(
-                    epsilon_opt_func,
-                    epsilon=self._eps,
-                    q=self._sampling_rate,
-                    steps=self._steps,
-                    delta=self._delta,
-                    opt_keyword="noise_multiplier",
-                ),
-                tol=tol,
+            self._config.DP.sigma = get_noise_multiplier(
+                target_epsilon=self._eps,
+                target_delta=self._delta,
+                sample_rate=self.sampling_rate,
+                steps=self._steps,
+                accountant=self._config.DP.mechanism,
+                epsilon_tolerance=tol,
             )
-            self._config.DP.sigma = float(result.x)
         elif self._mode == NoiseCalcMode.EPOCHS:
             result = minimize_scalar(
                 partial(
-                    epsilon_opt_func,
+                    epsilon_opt_func_opacus,
+                    accountant=accountant,
                     epsilon=self._eps,
-                    noise_multiplier=self._sigma,
-                    q=self._sampling_rate,
+                    sigma=self._sigma,
+                    sampling_rate=self._sampling_rate,
                     delta=self._delta,
                     opt_keyword="steps",
                 ),

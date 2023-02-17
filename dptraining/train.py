@@ -10,6 +10,7 @@ import wandb
 from omegaconf import OmegaConf
 from tqdm import tqdm
 from datetime import datetime
+from opacus.accountants import create_accountant, IAccountant
 
 sys.path.insert(0, str(Path.cwd()))
 
@@ -29,7 +30,6 @@ load_config_store()
 def main(
     config: Config,
 ):  # pylint:disable=too-many-locals,too-many-branches,too-many-statements
-
     if config.general.cpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
@@ -166,9 +166,21 @@ def main(
             config.hyperparams.batch_size * config.hyperparams.grad_acc_steps
         )
     else:
+        accountant: IAccountant = create_accountant(mechanism=config.DP.mechanism)
         delta = config.DP.delta
         eps_calc = EpsCalculator(config, train_loader)
-        eps_calc.fill_config()
+        try:
+            eps_calc.fill_config(accountant=accountant, tol=config.DP.eps_tol)
+        except ValueError as e:
+            if (
+                config.DP.mechanism == "gdp"
+                and str(e) == "f(a) and f(b) must have different signs"
+            ):
+                raise ValueError(
+                    f"Value error probably due to high epsilon while using GDP."
+                )
+            else:
+                raise e
         sigma = config.DP.sigma
 
         total_noise, adapted_sigma = eps_calc.adapt_sigma()
@@ -176,12 +188,13 @@ def main(
         effective_batch_size = EpsCalculator.calc_effective_batch_size(config)
         batch_expansion_factor = EpsCalculator.get_grad_acc(config)
         sampling_rate: float = effective_batch_size / len(train_loader.dataset)
-        final_epsilon = objax.privacy.dpsgd.analyze_dp(
-            q=sampling_rate,
-            noise_multiplier=sigma,
-            steps=(len(train_loader) // batch_expansion_factor)
-            * config.hyperparams.epochs,
-            delta=delta,
+
+        def analyse_epsilon(steps: int, sigma=sigma):
+            accountant.history = [(sigma, sampling_rate, steps)]
+            return accountant.get_epsilon(delta=delta)
+
+        final_epsilon = analyse_epsilon(
+            (len(train_loader) // batch_expansion_factor) * config.hyperparams.epochs
         )
 
         print(
@@ -363,11 +376,8 @@ def main(
         else:
             metric = None
         if config.DP:
-            epsilon = objax.privacy.dpsgd.analyze_dp(
-                q=sampling_rate,
-                noise_multiplier=sigma,
-                steps=((len(train_loader) // batch_expansion_factor) * (epoch + 1)),
-                delta=delta,
+            epsilon = analyse_epsilon(
+                (len(train_loader) // batch_expansion_factor) * (epoch + 1)
             )
             if config.general.log_wandb:
                 wandb.log({"epsilon": epsilon})
