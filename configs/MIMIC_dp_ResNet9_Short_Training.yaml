@@ -60,6 +60,6 @@ DP:
   disable_dp: False
   epsilon: 7.5
   max_per_sample_grad_norm: 1.0
-  delta: 3e-7
+  delta: 3e-6
   norm_acc: False
   grad_acc_steps: 64
