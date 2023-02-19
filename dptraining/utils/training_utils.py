@@ -265,7 +265,7 @@ def test(  # pylint:disable=too-many-arguments
     correct = np.concatenate(correct)                     #for MedMNIST
     predicted = np.concatenate(predicted).argmax(axis=1)
     
-    #correct = np.concatenate(correct).#argmax(axis=1)  
+    #correct = np.concatenate(correct)  
     #predicted = np.concatenate(predicted).argmax(axis=1)   #for MIMIC-CXR
     if config["general"]["log_wandb"]:
         wandb.log(
