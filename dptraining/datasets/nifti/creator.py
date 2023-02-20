@@ -260,6 +260,13 @@ class NiftiSegCreator(DataLoaderCreator):
 
         scan_files, label_files = filter_niftis(config, scan_files, label_files)
 
+        if config.dataset.nifti_seg_options.limit_dataset:
+            keys = list(scan_files.keys())[
+                : config.dataset.nifti_seg_options.limit_dataset
+            ]
+            scan_files = {key: scan_files[key] for key in keys}
+            label_files = {key: label_files[key] for key in keys}
+
         train_ds, val_ds, test_ds = make_dataset(
             config, transforms, scan_files, label_files
         )

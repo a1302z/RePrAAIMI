@@ -137,6 +137,7 @@ class NiftiSegmentationConfig:
     label_file_root: Optional[str] = None
     normalize_per_scan: bool = False
     filter_options: Optional[FilterOptionsNifti] = None
+    limit_dataset: Optional[int] = None
 
 
 @dataclass
