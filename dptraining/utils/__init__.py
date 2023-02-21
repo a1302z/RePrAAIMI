@@ -22,6 +22,7 @@ from dptraining.utils.scheduler import (
     ConstantSchedule,
     LinearSchedule,
     ReduceOnPlateau,
+    ManualSchedule,
 )
 from dptraining.utils.earlystopping import EarlyStopping
 from dptraining.utils.ema import ExponentialMovingAverage
@@ -32,12 +33,12 @@ def make_scheduler_from_config(config: Config):
     if config.scheduler.normalize_lr:
         config.hyperparams.lr *= config.hyperparams.batch_size
     match config.scheduler.type:
-        case SchedulerType.cosine:
-            scheduler = CosineSchedule(config.hyperparams.lr, config.hyperparams.epochs)
         case SchedulerType.const:
             scheduler = ConstantSchedule(
                 config.hyperparams.lr, config.hyperparams.epochs
             )
+        case SchedulerType.cosine:
+            scheduler = CosineSchedule(config.hyperparams.lr, config.hyperparams.epochs)
         case SchedulerType.reduceonplateau:
             scheduler = ReduceOnPlateau(
                 base_lr=config.hyperparams.lr,
@@ -46,6 +47,12 @@ def make_scheduler_from_config(config: Config):
                 min_delta=config.scheduler.min_delta,
                 cumulative_delta=config.scheduler.cumulative_delta,
                 mode=config.scheduler.mode,
+            )
+        case SchedulerType.manual:
+            scheduler = ManualSchedule(
+                base_lr=config.hyperparams.lr,
+                lr_list=config.scheduler.lr_list,
+                epochs=config.scheduler.epoch_triggers,
             )
         case _:
             raise ValueError(f"{config.scheduler.type} scheduler not supported.")

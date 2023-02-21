@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import numpy as np
+from bisect import bisect_right
 
 from dptraining.utils.misc import StateDictObjectMetricTracker
 
@@ -15,15 +16,31 @@ class Schedule(ABC):
     def update_score(self, score: float) -> None:
         pass
 
+    def __iter__(self):
+        return self
+
+
+class ManualSchedule(Schedule):
+    def __init__(self, base_lr: float, lr_list: list[float], epochs: list[int]) -> None:
+        super().__init__(base_lr)
+        self.lr_list: list[float] = lr_list
+        self.epochs: list[int] = epochs
+        assert len(self.lr_list) == len(
+            self.epochs
+        ), "Number of epoch steps and given learning rates must be the same"
+        self._steps: int = 0
+
+    def __next__(self) -> float:
+        i = bisect_right(self.epochs, self._steps)
+        self._steps += 1
+        return self.lr_list[i - 1] if i > 0 else self._base_lr
+
 
 class LinearSchedule(Schedule):
     def __init__(self, base_lr, max_steps: int) -> None:
         super().__init__(base_lr)
         self._max_steps: int = max_steps
         self._steps: int = 0
-
-    def __iter__(self):
-        return self
 
     def __next__(self) -> float:
         if self._steps < self._max_steps:
@@ -93,9 +110,6 @@ class ReduceOnPlateau(
 
     def __next__(self) -> float:
         return self._base_lr
-
-    def __iter__(self):
-        return self
 
     def _adapt_lr(self):
         self._base_lr *= self.factor

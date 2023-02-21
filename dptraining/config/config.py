@@ -226,9 +226,10 @@ class HyperparamsConfig:
 
 
 class SchedulerType(Enum):
-    cosine = 1
-    const = 2
+    const = 1
+    cosine = 2
     reduceonplateau = 3
+    manual = 4
 
 
 @dataclass
@@ -240,6 +241,8 @@ class SchedulerConfig:
     min_delta: float = MISSING
     patience: int = MISSING
     factor: float = MISSING
+    epoch_triggers: list[int] = MISSING
+    lr_list: list[float] = MISSING
 
 
 @dataclass
