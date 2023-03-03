@@ -1,12 +1,14 @@
 from pathlib import Path
 from random import seed, shuffle
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Callable
 from itertools import compress
 from tqdm import tqdm
 import nibabel as nib
 import numpy as np
 from pickle import dump, load
 from torch.utils.data import Dataset
+import h5py
+import nibabel as nib
 
 
 from dptraining.config import Config, DatasetName
@@ -38,7 +40,12 @@ def reduce_to_available_files(labeled_scans, available_files):
     return {k: v for k, v in labeled_scans.items() if k in available_files}
 
 
-def filter_niftis(config, scan_files, label_files):
+def filter_niftis(
+    config: Config,
+    scan_files: dict[str, Path],
+    label_files: dict[str, Path],
+    database_file: Optional[h5py.File] = None,
+):
     assert scan_files.keys() == label_files.keys()
     if config.dataset.nifti_seg_options.filter_options:
         if config.dataset.nifti_seg_options.filter_options.reuse_filtered_files:
@@ -58,22 +65,29 @@ def filter_niftis(config, scan_files, label_files):
                 leave=False,
                 desc="Filtering niftis",
             ):
-                label_path = label_files[file_id]
-                img_path, label_path = Path(img_path), Path(label_path)
                 keep_entry = True
-                if img_path.is_symlink():
-                    img_path = img_path.readlink()
-                if label_path.is_symlink():
-                    label_path = label_path.readlink()
-                img_file: nib.Nifti1Image = nib.load(img_path)
-                label_file: nib.Nifti1Image = nib.load(label_path)
-                label_fdata: Optional[np.array] = None
+                if database_file:
+                    data = database_file[file_id]["img_label_pair"]
+                    img_shape = label_shape = data.shape[1:]
+                    label_fdata = np.asarray(data)[1:].squeeze(0)
+                else:
+                    label_path = label_files[file_id]
+                    img_path, label_path = Path(img_path), Path(label_path)
+                    if img_path.is_symlink():
+                        img_path = img_path.readlink()
+                    if label_path.is_symlink():
+                        label_path = label_path.readlink()
+                    img_file: nib.Nifti1Image = nib.load(img_path)
+                    label_file: nib.Nifti1Image = nib.load(label_path)
+                    img_shape, label_shape = (
+                        img_file.header.get_data_shape(),
+                        label_file.header.get_data_shape(),
+                    )
+                    label_fdata: Optional[np.array] = None
                 if (
                     config.dataset.nifti_seg_options.filter_options.resolution
                     is not None
                 ):
-                    img_shape = img_file.header.get_data_shape()
-                    label_shape = label_file.header.get_data_shape()
                     keep_entry &= img_shape == label_shape
                     keep_entry &= (
                         img_shape
@@ -143,9 +157,60 @@ def filter_niftis(config, scan_files, label_files):
         else:
             print(f"\tNo files were removed due to filtering")
     return scan_files, label_files
+def create_database(config, scan_files, label_files):
+    database_file = None
+    if config.dataset.nifti_seg_options.database:
+        if config.dataset.nifti_seg_options.filter_options.resolution is None:
+            raise ValueError(
+                f"We do not support database creation for datasets with different image sizes yet"
+            )
+        if config.dataset.nifti_seg_options.database is not None:
+            if config.dataset.nifti_seg_options.database.is_file():
+                print(
+                    f"Reusing {config.dataset.nifti_seg_options.database}. If this is not intended "
+                    "please change the filename"
+                )
+            else:
+                with h5py.File(config.dataset.nifti_seg_options.database, "w") as database_file:
+                    for file_name in tqdm(
+                        scan_files.keys(),
+                        total=len(scan_files),
+                        leave=False,
+                        desc="Create database",
+                    ):
+                        img_path, label_path = (
+                            scan_files[file_name],
+                            label_files[file_name],
+                        )
+                        data = np.stack(
+                            [
+                                nib.load(img_path).get_fdata(),
+                                nib.load(label_path).get_fdata(),
+                            ],
+                            axis=0,
+                        )
+                        grp = database_file.create_group(file_name)
+                        grp.create_dataset(
+                            "img_label_pair",
+                            shape=data.shape,
+                            dtype=data.dtype,
+                            data=data,
+                        )
+
+            database_file = h5py.File(
+                config.dataset.nifti_seg_options.database, "r"
+            )
+            
+    return database_file
 
 
-def make_dataset(config: Config, transforms, scan_files, label_files):
+def make_dataset(
+    config: Config,
+    transforms: Optional[Callable],
+    scan_files: dict[str, Path],
+    label_files: dict[str, Path],
+    database_file: Optional[h5py.File] = None,
+):
     seed(config.dataset.nifti_seg_options.datasplit_seed)
 
     train_split, test_split = (
@@ -201,6 +266,7 @@ def make_dataset(config: Config, transforms, scan_files, label_files):
             ct_window=config.dataset.nifti_seg_options.ct_window,
             assume_same_settings=config.dataset.nifti_seg_options.assume_same_settings,
             normalize_per_ct=config.dataset.nifti_seg_options.normalize_per_scan,
+            database_file=database_file,
         )
         for smls, tf in zip(split_matched_labeled_scans, transforms)
     )
@@ -258,7 +324,11 @@ class NiftiSegCreator(DataLoaderCreator):
         scan_files = reduce_to_available_files(scan_files, available_files)
         label_files = reduce_to_available_files(label_files, available_files)
 
-        scan_files, label_files = filter_niftis(config, scan_files, label_files)
+        database_file: Optional[h5py.File] = None
+        database_file = create_database(config, scan_files, label_files)
+        scan_files, label_files = filter_niftis(
+            config, scan_files, label_files, database_file
+        )
 
         if config.dataset.nifti_seg_options.limit_dataset:
             keys = list(scan_files.keys())[
@@ -268,6 +338,8 @@ class NiftiSegCreator(DataLoaderCreator):
             label_files = {key: label_files[key] for key in keys}
 
         train_ds, val_ds, test_ds = make_dataset(
-            config, transforms, scan_files, label_files
+            config, transforms, scan_files, label_files, database_file
         )
         return train_ds, val_ds, test_ds
+
+    

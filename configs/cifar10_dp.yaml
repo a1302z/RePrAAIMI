@@ -60,7 +60,7 @@ ema:
   use_ema: True
   decay: 0.04
 hyperparams:
-  epochs: 5
+  epochs: 10
   batch_size: 512
   batch_size_test: 512
   lr: 2e-3
@@ -84,3 +84,4 @@ DP:
   norm_acc: False
   rsqrt_noise_adapt: False
   glrt_assumption: False
+  mechanism: rdp

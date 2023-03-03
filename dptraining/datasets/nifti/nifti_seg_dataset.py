@@ -8,6 +8,7 @@ import multiprocessing as mp
 import nibabel as nib
 import numpy as np
 from torch.utils.data import Dataset
+from h5py import File as h5file
 
 
 from dptraining.config import Normalization, DataStats, CTWindow
@@ -20,7 +21,6 @@ from dptraining.datasets.nifti.nifti_utils import (
 
 
 class NiftiSegmentationDataset(Dataset):
-
     # resolution: 256 / window: (-150, 200) / thickness: 3mm
     # Mean: -81.909645        Std: 8.735866
 
@@ -38,6 +38,7 @@ class NiftiSegmentationDataset(Dataset):
         ct_window: CTWindow = CTWindow(-150, 200),
         assume_same_settings: bool = False,
         normalize_per_ct: bool = False,
+        database_file: Optional[h5file] = None,
     ) -> None:
         super().__init__()
         assert (slice_thickness is None) or (
@@ -55,6 +56,14 @@ class NiftiSegmentationDataset(Dataset):
         self.ct_window: CTWindow = ct_window
         self.normalize_per_ct: bool = normalize_per_ct
         self.assume_same_settings: bool = assume_same_settings
+        self.database: Optional[h5file] = database_file
+        self.database_needs_correction: bool = not (
+            self.resolution is None and self.n_slices is None and data_stats is None
+        )
+        self.corrected_database_entry: bool = False
+        assert not (
+            self.cache and self.database is not None
+        ), "numpy caching and h5database are mutually exclusive"
         if self.assume_same_settings:
             assert all(
                 [
@@ -67,7 +76,7 @@ class NiftiSegmentationDataset(Dataset):
         #     ctypes.c_float, [0.0] * len(self.matched_labeled_scans), lock=True
         # )
 
-        if self.cache:
+        if self.cache and not self.database:
             # self.cached_files = [False for _ in self.matched_labeled_scans]
             self.cached_files = mp.Array(
                 ctypes.c_bool, [False] * len(self.matched_labeled_scans), lock=True
@@ -90,7 +99,7 @@ class NiftiSegmentationDataset(Dataset):
         return len(self.matched_labeled_scans)
 
     def __getitem__(self, index: int) -> Tuple[np.array, np.array]:
-        _, img_file, label_file = self.matched_labeled_scans[index]
+        file_key, img_file, label_file = self.matched_labeled_scans[index]
         # print(f"{index} cached: {self.cached_files[index]}")
         # t0 = time()
         new_scan_path, new_label_path = self.create_new_filenames(img_file, label_file)
@@ -100,8 +109,23 @@ class NiftiSegmentationDataset(Dataset):
             and new_label_path.is_file()
         ):
             scan, label = self.load_np_files(new_scan_path, new_label_path)
+        elif self.database and (
+            self.corrected_database_entry or not self.database_needs_correction
+        ):
+            data = self.database[file_key][
+                "corrected_img_label_pair"
+                if self.database_needs_correction
+                else "img_label_pair"
+            ]
+            scan, label = data[0], data[1]
         else:
             scan, label = self.load_nifti_files(index, img_file, label_file)
+            if self.database:
+                data = np.stack([scan, label], axis=0)
+                self.database[file_key].create_dataset(
+                    "corrected_img_label_pair", data.shape, data.dtype, data
+                )
+                self.corrected_database_entry = True
         scan = self.transform(scan) if self.transform is not None else scan
         label = (
             self.label_transform(label) if self.label_transform is not None else label
