@@ -272,6 +272,22 @@ class DPConfig:
     eps_tol: float = 1e-5
 
 
+class AttackType(Enum):
+    MIA_STANDARD = 0
+    MIA_INFORMED = 1  # For now only this is supported
+    RECON_INFORMED = 2
+    RECON_GB = 3
+
+
+@dataclass
+class AttackConfig:
+    type: AttackType = MISSING
+    N_fixed_dataset: int = MISSING
+    N_shadow_train: int = MISSING
+    N_shadow_eval: Optional[int] = None
+    N_attack_eval: Optional[int] = None
+
+
 @dataclass
 class Config:
     general: GeneralConfig = GeneralConfig()
@@ -296,3 +312,4 @@ class Config:
     unfreeze_schedule: Optional[UnfreezingSchedule] = None
     metrics: dict[str, Any] = field(default_factory=dict)
     DP: Optional[DPConfig] = None
+    attack: Optional[AttackConfig] = None

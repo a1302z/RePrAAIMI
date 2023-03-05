@@ -1,23 +1,26 @@
 import wandb
-import time
 import contextlib
-from typing import Callable, Union, Any
+from typing import Callable
 
 import numpy as np
 
 import objax
 import sys
-
+from time import time
 from jax import numpy as jn, local_device_count
 from pathlib import Path
 from tqdm import tqdm
 
 sys.path.insert(0, str(Path.cwd()))
 
-from dptraining.config import Config, DatasetTask
+from dptraining.config import Config
 from dptraining.privacy import ClipAndAccumulateGrads
 from dptraining.optim import AccumulateGrad
-from dptraining.utils import NEED_RAW_PREDICTIONS
+from dptraining.utils.metrics import (
+    calculate_metrics,
+    summarise_batch_metrics,
+    summarise_dict_metrics,
+)
 
 N_DEVICES = local_device_count()
 
@@ -190,7 +193,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
     parallel,
     grad_acc: int,
 ):
-    start_time = time.time()
+    start_time = time()
     max_batches = (
         config.hyperparams.overfit
         if config.hyperparams.overfit is not None
@@ -236,52 +239,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
 
             if i + 1 >= max_batches:
                 break
-    return time.time() - start_time
-
-
-def calculate_metrics(
-    task, metrics, loss_fn, correct, raw_prediction, binary_reduction
-):
-    loss = loss_fn(raw_prediction, correct).item()
-    if task in [DatasetTask.classification, DatasetTask.reconstruction]:
-        if binary_reduction:
-            predicted = np.where(raw_prediction > 0.5, 1, 0)
-        else:
-            predicted = raw_prediction.argmax(axis=1)
-        correct, predicted = correct.squeeze(), predicted.squeeze()
-    elif task == DatasetTask.segmentation:
-        if binary_reduction:
-            predicted = np.where(raw_prediction > 0.5, 1.0, 0.0)
-        else:
-            predicted = np.argmax(raw_prediction, axis=1, keepdims=True)
-    if np.iscomplexobj(correct):
-        correct = np.abs(correct)
-    if np.iscomplexobj(predicted):
-        predicted = np.abs(predicted)
-
-    main_metric_fn, logging_fns = metrics
-    main_metric = (
-        main_metric_fn[0],
-        loss
-        if main_metric_fn[0] == "loss" and main_metric_fn[1] is None
-        else (
-            main_metric_fn[1](correct, raw_prediction)
-            if main_metric_fn[0] in NEED_RAW_PREDICTIONS
-            else main_metric_fn[1](correct, predicted)
-        ),
-    )
-    logging_metrics = {
-        func_name: (
-            lfn(correct, raw_prediction)
-            if func_name in NEED_RAW_PREDICTIONS
-            else lfn(correct, predicted)
-        )
-        for func_name, lfn in logging_fns.items()
-    }
-    if main_metric[0] != "loss":
-        logging_metrics["loss"] = loss
-    logging_metrics[f"{main_metric[0]}"] = main_metric[1]
-    return main_metric, logging_metrics
+    return time() - start_time
 
 
 def test(  # pylint:disable=too-many-arguments,too-many-branches
@@ -375,29 +333,3 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
         for name, value in logging_metrics.items():
             print(f"\t{name}: {value}")
     return main_metric[1]
-
-
-def summarise_dict_metrics(metric_dict_list: list[dict[Any, float]]) -> dict:
-    assert all(
-        (
-            set(metric_dict_list[0].keys()) == set(metric_dict_list[i].keys())
-            for i in range(1, len(metric_dict_list))
-        )
-    ), "Cannot summarise metrics with different keys"
-    metric_dict = {
-        k: np.mean([m[k] for m in metric_dict_list]) for k in metric_dict_list[0].keys()
-    }
-    return metric_dict
-
-
-def summarise_batch_metrics(
-    metric_names: list[str], metric_list: list[Union[float, dict[Any, float]]]
-) -> dict[str, Union[float, dict[Any, float]]]:
-    return {
-        func_name: (
-            summarise_dict_metrics([metric[func_name] for metric in metric_list])
-            if isinstance(metric_list[0][func_name], dict)
-            else np.mean([metric[func_name] for metric in metric_list])
-        )
-        for func_name in metric_names
-    }
