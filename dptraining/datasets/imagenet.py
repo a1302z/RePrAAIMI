@@ -44,10 +44,14 @@ class ImageNetCreator(DataLoaderCreator):
             #     raise ValueError(f"train_val_split {train_val_split} could not be parsed.")
             # We do it like that to avoid problems when train and val transforms are different
             train_ds, _ = random_split(
-                train_ds, lengths, generator=Generator().manual_seed(42)
+                train_ds,
+                lengths,
+                generator=Generator().manual_seed(config.dataset.datasplit_seed),
             )
             _, val_ds = random_split(
-                val_ds, lengths, generator=Generator().manual_seed(42)
+                val_ds,
+                lengths,
+                generator=Generator().manual_seed(config.dataset.datasplit_seed),
             )
         test_ds = ImageNet(**test_kwargs)
         return train_ds, val_ds, test_ds

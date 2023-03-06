@@ -5,6 +5,7 @@ from contextlib import suppress
 from jax import numpy as jn, local_device_count
 from typing import Callable
 import wandb
+from objax import TrainRef, Module
 
 from dptraining.config import Config
 from dptraining.utils.metrics import (
@@ -14,6 +15,20 @@ from dptraining.utils.metrics import (
 )
 
 N_DEVICES = local_device_count()
+
+
+def flatten_weights(model: Module) -> tuple[dict[str, np.array], list[str], np.array]:
+    data, names, seen, flat_data = {}, [], set(), []
+    for k, v in model.vars().items():
+        if isinstance(v, TrainRef):
+            v = v.ref
+        if id(v) not in seen:
+            names.append(k)
+            data[str(len(data))] = v.value
+            flat_data.append(v.value.flatten())
+            seen.add(id(v))
+    flat_data = np.concatenate(flat_data)
+    return data, names, flat_data
 
 
 def train(  # pylint:disable=too-many-arguments,duplicate-code
@@ -109,11 +124,13 @@ def test_multi_dataset(  # pylint:disable=too-many-arguments,too-many-branches
         None,
     )
     if per_batch_metrics:
-        main_metric_lists, logging_metric_lists = [[]] * len(predict_ops), [[]] * len(
-            predict_ops
-        )
+        main_metric_lists, logging_metric_lists = [
+            [] for _ in range(len(predict_ops))
+        ], [[] for _ in range(len(predict_ops))]
     else:
-        correct_lists, scores_lists = [[]] * len(predict_ops), [[]] * len(predict_ops)
+        correct_lists, scores_lists = [[] for _ in range(len(predict_ops))], [
+            [] for _ in range(len(predict_ops))
+        ]
     with ctx_mngr:
         max_batches = (
             config.hyperparams.overfit

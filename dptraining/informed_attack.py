@@ -11,6 +11,7 @@ from omegaconf import OmegaConf
 from tqdm import tqdm
 from datetime import datetime
 from opacus.accountants import create_accountant, IAccountant
+from torch import save
 
 sys.path.insert(0, str(Path.cwd()))
 
@@ -59,7 +60,7 @@ def main(
         # test,
         # train,
     )
-    from dptraining.utils.attack_utils import train, test_multi_dataset
+    from dptraining.utils.attack_utils import train, test_multi_dataset, flatten_weights
     from dptraining.utils.gradual_unfreezing import make_unfreezing_schedule
     from dptraining.utils.misc import get_num_params
 
@@ -146,14 +147,14 @@ def main(
     # else:
     #     print(f"Num trained params: {n_train_vars_cur:,}")
 
-    # identifying_model_str = ""
-    # if config.general.make_save_str_unique:
-    #     if config.general.log_wandb:
-    #         identifying_model_str += (
-    #             f"_{wandb.run.name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
-    #         )
-    #     else:
-    #         identifying_model_str += f"_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+    identifying_model_str = ""
+    if config.general.make_save_str_unique:
+        if config.general.log_wandb:
+            identifying_model_str += (
+                f"_{wandb.run.name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+            )
+        else:
+            identifying_model_str += f"_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
 
     # if config.checkpoint:
     #     config.checkpoint.logdir += identifying_model_str
@@ -163,28 +164,24 @@ def main(
 
     if config.dataset.task in (DatasetTask.classification, DatasetTask.segmentation):
         if config.loss.binary_loss:
-            predict_lambdas = [
-                lambda x: objax.functional.sigmoid(  # pylint:disable=unnecessary-lambda-assignment
-                    model(x, training=False)
-                )
-                for model, _, _ in models
-            ]
+            predict_lambda = lambda model, x: objax.functional.sigmoid(  # pylint:disable=unnecessary-lambda-assignment
+                model(x, training=False)
+            )
         else:
-            predict_lambdas = [
-                lambda x: objax.functional.softmax(  # pylint:disable=unnecessary-lambda-assignment
-                    model(x, training=False),
-                    axis=1 if config.dataset.task == DatasetTask.segmentation else -1,
-                )
-                for model, _, _ in models
-            ]
+            predict_lambda = lambda model, x: objax.functional.softmax(  # pylint:disable=unnecessary-lambda-assignment
+                model(x, training=False),
+                axis=1 if config.dataset.task == DatasetTask.segmentation else -1,
+            )
     else:
-        predict_lambdas = [partial(model, training=False) for model, _, _ in models]
+        predict_lambda = lambda model, x: model(x, training=False)
     # predict_op_parallel = objax.Parallel(
     #     predict_lambda, model.vars(), reduce=np.concatenate
     # )
     predict_ops_jit = [
-        objax.Jit(predict_lambda, model.vars())  # pylint:disable=not-callable
-        for predict_lambda, (model, _, _) in zip(predict_lambdas, models)
+        objax.Jit(
+            partial(predict_lambda, model), model.vars()
+        )  # pylint:disable=not-callable
+        for model, _, _ in models
     ]
 
     grad_acc = config.hyperparams.grad_acc_steps
@@ -343,33 +340,35 @@ def main(
         )
     else:
         epoch_iter = range(config.hyperparams.epochs)
-    # if config.general.eval_init: TODO: enable this again
-    #     if config.general.eval_train:
-    #         metrics = test(
-    #             config,
-    #             train_loader,
-    #             predict_op_parallel if config.general.parallel else predict_op_jit,
-    #             test_aug,
-    #             test_label_aug,
-    #             model.vars(),
-    #             config.general.parallel,
-    #             "train",
-    #             metrics=metric_fns,
-    #             loss_fn=test_loss_fn,
-    #         )
-    #     if val_loader is not None:
-    #         metric = test(
-    #             config,
-    #             val_loader,
-    #             predict_op_parallel if config.general.parallel else predict_op_jit,
-    #             test_aug,
-    #             test_label_aug,
-    #             model.vars(),
-    #             config.general.parallel,
-    #             "val",
-    #             metrics=metric_fns,
-    #             loss_fn=test_loss_fn,
-    #         )
+    if config.general.eval_init:
+        if config.general.eval_train:
+            metrics = test_multi_dataset(
+                config,
+                shadow_train_loader,
+                predict_ops_jit,
+                test_aug,
+                test_label_aug,
+                model_vars,
+                config.general.parallel,
+                "train",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
+                multi_dataset=True,
+            )
+        if shadow_eval_loader is not None:
+            metric = test_multi_dataset(
+                config,
+                shadow_eval_loader,
+                predict_ops_jit,
+                test_aug,
+                test_label_aug,
+                model_vars,
+                config.general.parallel,
+                "val",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
+                multi_dataset=False,
+            )
     for epoch, learning_rate in zip(epoch_iter, scheduler):
         cur_epoch_time = train(
             config,
@@ -413,17 +412,17 @@ def main(
                 loss_fn=test_loss_fn,
                 multi_dataset=False,
             )
-    #         scheduler.update_score(metric)
-    #     else:
-    #         metric = None
-    #     if config.DP:
-    #         epsilon = analyse_epsilon(
-    #             (len(train_loader) // batch_expansion_factor) * (epoch + 1)
-    #         )
-    #         if config.general.log_wandb:
-    #             wandb.log({"epsilon": epsilon})
-    #         else:
-    #             print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})")
+            scheduler.update_score(metric)
+        else:
+            metric = None
+        if config.DP:
+            epsilon = analyse_epsilon(
+                (len(shadow_train_loader) // batch_expansion_factor) * (epoch + 1)
+            )
+            if config.general.log_wandb:
+                wandb.log({"epsilon": epsilon})
+            else:
+                print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})")
     #     if config.unfreeze_schedule is not None:
     #         model_vars, fresh_model_vars = unfreeze_schedule(epoch + 1)
     #         if fresh_model_vars:
@@ -439,7 +438,7 @@ def main(
     #         print("Early Stopping was activated -> Stopping Training")
     #         break
 
-    # # never do test parallel as this could emit some test samples and thus distort results
+    # no need for testing in attack scenario, val set must do
     # metric = test(
     #     config,
     #     test_loader,
@@ -452,22 +451,46 @@ def main(
     #     metrics=metric_fns,
     #     loss_fn=test_loss_fn,
     # )
-    # if config.general.save_path:
-    #     save_path: Path = Path(config.general.save_path)
-    #     save_path = save_path.parent / (
-    #         save_path.stem + identifying_model_str + save_path.suffix
-    #     )
+    if config.general.save_path:
+        save_path: Path = Path(config.general.save_path)
+        save_path = save_path.parent / (
+            save_path.stem + identifying_model_str + save_path.suffix
+        )
+        # save shadow models and indices as training dataset
+        all_weights = np.stack(
+            [flatten_weights(model)[2] for model, _, _ in models], axis=0
+        )
+        target_imgs_labels = shadow_train_loader.dataset[-1]
+        target_imgs = np.stack(
+            [target_img for target_img, _ in target_imgs_labels], axis=0
+        )
+        target_labels = np.stack(
+            [target_label for _, target_label in target_imgs_labels], axis=0
+        )
+        save_dict = {
+            "config": OmegaConf.to_container(config),
+            "general": {
+                "fixed_indices": shadow_train_loader.dataset.indices,
+                "shadow_train_indices": shadow_train_loader.dataset.shadow_indices,
+                "shadow_eval_indices": shadow_eval_loader.dataset.indices,
+                "attack_eval_indices": attack_eval_loader.dataset.shadow_indices,
+            },
+            "weight_train_data": all_weights,
+            "reconstruction_targets": target_imgs,
+            "reconstruction_labels": target_labels,
+        }
+        save(save_dict, f"{save_path}.pt")
     #     print(f"Saving model to {config.general.save_path}")
     #     objax.io.save_var_collection(save_path, model.vars())
-    # if config.general.log_wandb:
-    #     run.finish()
-    # else:
-    #     print("Average epoch time (all epochs): ", np.average(epoch_time))
-    #     print("Median epoch time (all epochs): ", np.median(epoch_time))
-    #     if len(epoch_time) > 1:
-    #         print("Average epoch time (except first): ", np.average(epoch_time[1:]))
-    #         print("Median epoch time (except first): ", np.median(epoch_time[1:]))
-    #     print("Total training time (excluding evaluation): ", np.sum(epoch_time))
+    if config.general.log_wandb:
+        run.finish()
+    else:
+        print("Average epoch time (all epochs): ", np.average(epoch_time))
+        print("Median epoch time (all epochs): ", np.median(epoch_time))
+        if len(epoch_time) > 1:
+            print("Average epoch time (except first): ", np.average(epoch_time[1:]))
+            print("Median epoch time (except first): ", np.median(epoch_time[1:]))
+        print("Total training time (excluding evaluation): ", np.sum(epoch_time))
 
 
 if __name__ == "__main__":

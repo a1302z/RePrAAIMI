@@ -211,7 +211,7 @@ def make_dataset(
     label_files: dict[str, Path],
     database_file: Optional[h5py.File] = None,
 ):
-    seed(config.dataset.nifti_seg_options.datasplit_seed)
+    seed(config.dataset.datasplit_seed)
 
     train_split, test_split = (
         config.dataset.train_val_split,

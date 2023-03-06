@@ -102,7 +102,6 @@ class FmriConfig:
 
 @dataclass
 class RadimagenetConfig:
-    datasplit_seed: Optional[int] = 0
     modality: str = "all"
     normalize_by_modality: bool = False
     allowed_body_regions: str = "all"
@@ -129,7 +128,6 @@ class NiftiSegmentationConfig:
     ct_window: Optional[CTWindow] = None
     test_split: float = MISSING
     resolution: Optional[int] = None
-    datasplit_seed: Optional[int] = 0
     assume_same_settings: bool = False
     msd_subtask: MSDSubtask = MISSING
     new_data_root: Optional[str] = None
@@ -161,6 +159,7 @@ class DatasetConfig:
     fmri: Optional[FmriConfig] = None
     nifti_seg_options: Optional[NiftiSegmentationConfig] = None
     ham: Optional[HAM10000] = None
+    datasplit_seed: int = 0
 
 
 class LoaderCollateFn(Enum):

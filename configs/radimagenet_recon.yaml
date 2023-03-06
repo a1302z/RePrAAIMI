@@ -19,9 +19,9 @@ dataset:
   root: ./data/radiology_ai
   train_val_split: 0.8
   test_split: 0.1
+  datasplit_seed: 0
   radimagenet:
     normalize_by_modality: False
-    datasplit_seed: 0
     modality: all
     allowed_body_regions: all
     allowed_labels: all

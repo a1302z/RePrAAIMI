@@ -13,13 +13,13 @@ from sklearn.model_selection import train_test_split
 # sys.path.insert(0, str(Path.cwd()))
 
 from dptraining.datasets.base_creator import DataLoaderCreator
+from dptraining.config import Config
 
 
 IDENTITY = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
 
 
 class HAM10000(Dataset):
-
     FULL_RES_STATS = (
         np.array([0.7635, 0.5461, 0.5705]),
         np.array([0.3276, 0.3547, 0.3951]),
@@ -79,7 +79,7 @@ class HAM10000(Dataset):
 
 class HAM10000Creator(DataLoaderCreator):
     @staticmethod
-    def make_datasets(config: dict, transforms: Tuple) -> Tuple[Dataset, Dataset]:
+    def make_datasets(config: Config, transforms: Tuple) -> Tuple[Dataset, Dataset]:
         root = Path(config.dataset.root)
         test_split = config.dataset.test_split
         train_split = config.dataset.train_val_split
@@ -89,10 +89,18 @@ class HAM10000Creator(DataLoaderCreator):
         metadata["label"] = metadata.dx.map(label_assignment).astype(int)
         idcs, lbls = np.arange(len(metadata)), metadata.label.to_numpy()
         idcs_train, idcs_test, lbls_train, _ = train_test_split(
-            idcs, lbls, stratify=lbls, test_size=test_split
+            idcs,
+            lbls,
+            stratify=lbls,
+            test_size=test_split,
+            random_state=config.dataset.datasplit_seed,
         )
         idcs_train, idcs_val, _, _ = train_test_split(
-            idcs_train, lbls_train, stratify=lbls_train, train_size=train_split
+            idcs_train,
+            lbls_train,
+            stratify=lbls_train,
+            train_size=train_split,
+            random_state=config.dataset.datasplit_seed,
         )
         train_df = metadata.iloc[idcs_train]
         val_df = metadata.iloc[idcs_val]

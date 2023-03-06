@@ -126,10 +126,14 @@ class TinyImageNetCreator(DataLoaderCreator):
             n_train = int(train_val_split * len(train_ds))
             lengths = (n_train, len(train_ds) - n_train)
             train_ds, _ = random_split(
-                train_ds, lengths, generator=Generator().manual_seed(42)
+                train_ds,
+                lengths,
+                generator=Generator().manual_seed(config.dataset.datasplit_seed),
             )
             _, val_ds = random_split(
-                val_ds, lengths, generator=Generator().manual_seed(42)
+                val_ds,
+                lengths,
+                generator=Generator().manual_seed(config.dataset.datasplit_seed),
             )
         test_ds = TinyImageNet(**test_kwargs)
         return train_ds, val_ds, test_ds

@@ -19,9 +19,9 @@ dataset:
   root: ./data/radiology_ai
   train_val_split: 0.8
   test_split: 0.1
+  datasplit_seed: 0
   radimagenet:
     normalize_by_modality: True
-    datasplit_seed: 0
     modality: all
     allowed_body_regions: all
     allowed_labels: all
@@ -62,10 +62,10 @@ model:
     # depth: 40
     # width: 4
     scale_norm: True
-  # pretrained_model_changes:
-  #   in_channels: 1
-  #   num_classes: 165
-  #   only_finetune: True
+#   pretrained_model_changes:
+#     in_channels: 1
+#     num_classes: 165
+#     # only_finetune: True
 # unfreeze_schedule:
 #   trigger_points: 
 #     - 2
@@ -83,7 +83,7 @@ hyperparams:
   lr: 2e-3
   # overfit: 256
   # momentum: 0.9
-  grad_acc_steps: 64
+  grad_acc_steps: 120
 metrics:
   main: 
     accuracy_score: 
@@ -101,3 +101,4 @@ DP:
   max_per_sample_grad_norm: 1.0
   delta: 8e-7
   norm_acc: False
+  # mechanism: rdp

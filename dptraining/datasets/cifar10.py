@@ -106,7 +106,10 @@ class CIFAR10Creator(DataLoaderCreator):
             val_ds = None
         else:
             train_data, val_data, train_targets, val_targets = train_test_split(
-                train_ds.data, train_ds.targets, train_size=train_val_split
+                train_ds.data,
+                train_ds.targets,
+                train_size=train_val_split,
+                random_state=config.dataset.datasplit_seed,
             )
             train_ds.data = train_data
             train_ds.targets = train_targets

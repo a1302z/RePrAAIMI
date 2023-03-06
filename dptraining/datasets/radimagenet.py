@@ -127,7 +127,6 @@ class ExtendedImageFolder(ImageFolder):
         extensions: Optional[Tuple[str, ...]] = None,
         is_valid_file: Optional[Callable[[str], bool]] = None,
     ) -> List[Tuple[str, int]]:
-
         directory = Path(directory)
 
         both_none = extensions is None and is_valid_file is None
@@ -213,7 +212,6 @@ class ConcatExtendedImageFolder(ConcatDataset):
 
 
 class RadImageNet(Dataset):
-
     NORMLIZATION_TRANSFORMS = {
         modality: NormalizeNumpyImg(*stats) for modality, stats in STATS.items()
     }
@@ -377,11 +375,7 @@ class RadImageNetCreator(DataLoaderCreator):
         )
         val_split = 1.0 - train_split - test_split
         assert val_split > 0, "Train and test split are combined larger than 1"
-        seed = (
-            config.dataset.radimagenet.datasplit_seed
-            if config.dataset.radimagenet.datasplit_seed
-            else config.general.seed
-        )
+        seed = config.dataset.datasplit_seed
         copy_folder = (
             config.dataset.radimagenet.split_folder
             if config.dataset.radimagenet.split_folder
@@ -477,7 +471,6 @@ class RadImageNetCreator(DataLoaderCreator):
 
 
 if __name__ == "__main__":
-
     # from collections import Counter
 
     from dptraining.datasets.utils import collate_np_classification

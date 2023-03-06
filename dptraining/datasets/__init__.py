@@ -125,7 +125,11 @@ def get_random_idcs(max_idx: int):
     return idcs
 
 
-def make_attack_datasets(config: Config) -> tuple[Dataset]:
+def make_attack_datasets(
+    config: Config,
+) -> tuple[
+    FixedAndShadowDatasetFromOneSet, DataSubset, FixedAndShadowDatasetFromTwoSets
+]:
     train_ds, shadow_eval_dataset, attack_eval_dataset = make_dataset(config)
     attack_samples: int = config.attack.N_fixed_dataset + config.attack.N_shadow_train
     assert len(train_ds) > attack_samples, (
@@ -148,11 +152,12 @@ def make_attack_datasets(config: Config) -> tuple[Dataset]:
         if config.attack.N_attack_eval
         else np.arange(len(attack_eval_dataset)),
     )
-    if config.attack.N_shadow_eval:
-        shadow_eval_dataset = DataSubset(
-            shadow_eval_dataset,
-            get_random_idcs(len(shadow_eval_dataset))[: config.attack.N_shadow_eval],
-        )
+    shadow_eval_dataset = DataSubset(
+        shadow_eval_dataset,
+        get_random_idcs(len(shadow_eval_dataset))[: config.attack.N_shadow_eval]
+        if config.attack.N_shadow_eval
+        else np.arange(len(shadow_eval_dataset)),
+    )
 
     return shadow_train_dataset, shadow_eval_dataset, attack_eval_dataset
 

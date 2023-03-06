@@ -47,14 +47,14 @@ ema:
   use_ema: True
   decay: 0.995
 hyperparams:
-  epochs: 50
-  batch_size: 512
-  batch_size_test: 512
+  epochs: 2
+  batch_size: 101
+  batch_size_test: 101
   lr: 2e-3
   # momentum: 0.9
   grad_acc_steps: 2
 attack:
   type: MIA_INFORMED
-  N_fixed_dataset: 10000
+  N_fixed_dataset: 100
   N_shadow_train: 10
   

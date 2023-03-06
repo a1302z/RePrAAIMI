@@ -34,6 +34,7 @@ class FixedAndShadowDatasetFromOneSet(DataSubset):
 
     def __getitem__(self, index: Any) -> Any:
         data = None
+        index = index % (super().__len__() + 1)
         if index == super().__len__():
             data = [self.total_dataset[idx] for idx in self.shadow_indices]
         elif index < len(self.total_dataset):
