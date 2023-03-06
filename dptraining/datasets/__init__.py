@@ -184,7 +184,7 @@ def make_attack_dataloader(config: Config) -> tuple[DataLoader]:
         train_loader_kwargs["shuffle"] = True
     fixed_dataset_loader = DataLoader(shadow_train_dataset, **train_loader_kwargs)
     shadow_eval_loader = DataLoader(shadow_eval_dataset, **val_loader_kwargs)
-    attack_eval_loader = DataLoader(attack_eval_dataset, **test_loader_kwargs)
+    attack_eval_loader = DataLoader(attack_eval_dataset, **train_loader_kwargs)
     return fixed_dataset_loader, shadow_eval_loader, attack_eval_loader
 
 

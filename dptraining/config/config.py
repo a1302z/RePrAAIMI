@@ -285,6 +285,7 @@ class AttackConfig:
     N_shadow_train: int = MISSING
     N_shadow_eval: Optional[int] = None
     N_attack_eval: Optional[int] = None
+    use_saved_attack_data: Optional[Path] = None
 
 
 @dataclass

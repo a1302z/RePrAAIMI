@@ -15,6 +15,7 @@ class DataSubset(Dataset):
         return len(self.indices)
 
     def __getitem__(self, index: Any) -> Any:
+        index = index % self.__len__()
         return self.total_dataset[self.indices[index]]
 
 
@@ -65,6 +66,7 @@ class FixedAndShadowDatasetFromTwoSets(DataSubset):
 
     def __getitem__(self, index: Any) -> Any:
         data = None
+        index = index % (super().__len__() + 1)
         if index == super().__len__():
             data = [self.shadow_dataset[idx] for idx in self.shadow_indices]
         elif index < len(self.total_dataset):
@@ -85,6 +87,7 @@ class DataSubsetPlusOne(DataSubset):
         return super().__len__() + 1
 
     def __getitem__(self, index: Any) -> Any:
+        index = index % (super().__len__() + 1)
         if index == super().__len__():
             return self.total_dataset[self.shadow_idx]
         elif index < len(self.total_dataset):

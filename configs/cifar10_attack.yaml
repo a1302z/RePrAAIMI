@@ -4,7 +4,9 @@ defaults:
 general:
   log_wandb: False
   parallel: False
-  eval_train: True
+  eval_train: False
+  eval_init: False
+  save_path: cifar10_attack_data
 wandb:
   project: cifar
 dataset: 
@@ -57,4 +59,6 @@ attack:
   type: MIA_INFORMED
   N_fixed_dataset: 100
   N_shadow_train: 10
+  N_attack_eval: 10
+  # use_saved_attack_data: attack_training_data.pt
   

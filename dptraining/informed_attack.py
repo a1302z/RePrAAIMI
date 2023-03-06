@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 from functools import partial
+from itertools import chain
 
 import hydra
 import numpy as np
@@ -11,7 +12,7 @@ from omegaconf import OmegaConf
 from tqdm import tqdm
 from datetime import datetime
 from opacus.accountants import create_accountant, IAccountant
-from torch import save
+from torch import save as torchsave, load as torchload
 
 sys.path.insert(0, str(Path.cwd()))
 
@@ -60,7 +61,13 @@ def main(
         # test,
         # train,
     )
-    from dptraining.utils.attack_utils import train, test_multi_dataset, flatten_weights
+    from dptraining.utils.attack_utils import (
+        train,
+        test_multi_dataset,
+        flatten_weights,
+        create_N_models,
+        make_train_ops,
+    )
     from dptraining.utils.gradual_unfreezing import make_unfreezing_schedule
     from dptraining.utils.misc import get_num_params
 
@@ -83,414 +90,489 @@ def main(
             reinit=True,
             **config_dict["wandb"],
         )
-    ######################################################################
-    (
-        shadow_train_loader,
-        shadow_eval_loader,
-        attack_eval_loader,
-    ) = make_attack_dataloader(config)
-    ######################################################################
-
-    ######################################################################
-    # TODO: option to init all equally (e.g. deepcopy)
-    models = []
-    for _ in tqdm(
-        range(config.attack.N_shadow_train),
-        total=config.attack.N_shadow_train,
-        leave=False,
-        desc="Creating shadow models",
-    ):
-        model = make_model_from_config(config.model)
+    if config.attack.use_saved_attack_data is None:
         ######################################################################
-        if config.general.use_pretrained_model is not None:
-            print(f"Loading model from {config.general.use_pretrained_model}")
-            objax.io.load_var_collection(
-                config.general.use_pretrained_model, model.vars()
-            )
-            if config.model.pretrained_model_changes is not None:
-                model_vars, must_train_vars = modify_architecture_from_pretrained_model(
-                    config, model
-                )
-            else:  # assuming pretrained model is exactly like current model
-                model_vars, must_train_vars = model.vars(), model.vars()
-        else:
-            model_vars, must_train_vars = model.vars(), model.vars()
-        models.append((model, model_vars, must_train_vars))
-    del model, model_vars, must_train_vars
-    n_train_vars_total: int = get_num_params(models[0][1])
-    if config.general.log_wandb:
-        wandb.log({"total_model_vars": n_train_vars_total})
-    else:
-        print(f"Total model params: {n_train_vars_total:,}")
+        (
+            shadow_train_loader,
+            shadow_eval_loader,
+            attack_eval_loader,
+        ) = make_attack_dataloader(config)
+        ######################################################################
 
-    # if config.unfreeze_schedule is not None:
-    #     schedules = [
-    #         make_unfreezing_schedule(
-    #             config.model.name,
-    #             config.unfreeze_schedule.trigger_points,
-    #             model_vars,
-    #             must_train_vars,
-    #             model,
-    #         )
-    #         for _, model_vars, train_vars in models
-    #     ]
-    #     for model in models:
-    #         model[1] = unfreeze_schedule(0)
-    # else:
-    #     unfreeze_schedule = (
-    #         lambda _: False,
-    #         False,  # pylint:disable=unnecessary-lambda-assignment
-    #     )
-    # n_train_vars_cur: int = get_num_params(model_vars)
-    # if config.general.log_wandb:
-    #     wandb.log({"num_trained_vars": n_train_vars_cur})
-    # else:
-    #     print(f"Num trained params: {n_train_vars_cur:,}")
-
-    identifying_model_str = ""
-    if config.general.make_save_str_unique:
-        if config.general.log_wandb:
-            identifying_model_str += (
-                f"_{wandb.run.name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
-            )
-        else:
-            identifying_model_str += f"_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
-
-    # if config.checkpoint:
-    #     config.checkpoint.logdir += identifying_model_str
-    #     checkpoint = objax.io.Checkpoint(**OmegaConf.to_container(config.checkpoint))
-    # else:
-    #     checkpoint = None
-
-    if config.dataset.task in (DatasetTask.classification, DatasetTask.segmentation):
-        if config.loss.binary_loss:
-            predict_lambda = lambda model, x: objax.functional.sigmoid(  # pylint:disable=unnecessary-lambda-assignment
-                model(x, training=False)
-            )
-        else:
-            predict_lambda = lambda model, x: objax.functional.softmax(  # pylint:disable=unnecessary-lambda-assignment
-                model(x, training=False),
-                axis=1 if config.dataset.task == DatasetTask.segmentation else -1,
-            )
-    else:
-        predict_lambda = lambda model, x: model(x, training=False)
-    # predict_op_parallel = objax.Parallel(
-    #     predict_lambda, model.vars(), reduce=np.concatenate
-    # )
-    predict_ops_jit = [
-        objax.Jit(
-            partial(predict_lambda, model), model.vars()
-        )  # pylint:disable=not-callable
-        for model, _, _ in models
-    ]
-
-    grad_acc = config.hyperparams.grad_acc_steps
-    if not config.DP:
-        sampling_rate, delta, sigma, final_epsilon, total_noise = 0, 0, 0, 0, 0
-        batch_expansion_factor = 1
-        effective_batch_size = (
-            config.hyperparams.batch_size * config.hyperparams.grad_acc_steps
+        ######################################################################
+        # TODO: option to init all equally (e.g. deepcopy)
+        train_models = create_N_models(
+            config, len(shadow_train_loader.dataset.shadow_indices)
         )
-    else:
-        accountant: IAccountant = create_accountant(mechanism=config.DP.mechanism)
-        delta = config.DP.delta
-        eps_calc = EpsCalculator(config, len(shadow_train_loader))
-        try:
-            eps_calc.fill_config(accountant=accountant, tol=config.DP.eps_tol)
-        except ValueError as e:
-            if (
-                config.DP.mechanism == "gdp"
-                and str(e) == "f(a) and f(b) must have different signs"
-            ):
-                raise ValueError(
-                    f"Value error probably due to high epsilon while using GDP."
+        eval_models = create_N_models(
+            config, len(attack_eval_loader.dataset.shadow_indices)
+        )
+        n_train_vars_total: int = get_num_params(train_models[0][1])
+        if config.general.log_wandb:
+            wandb.log({"total_model_vars": n_train_vars_total})
+        else:
+            print(f"Total model params: {n_train_vars_total:,}")
+
+        # if config.unfreeze_schedule is not None:
+        #     schedules = [
+        #         make_unfreezing_schedule(
+        #             config.model.name,
+        #             config.unfreeze_schedule.trigger_points,
+        #             model_vars,
+        #             must_train_vars,
+        #             model,
+        #         )
+        #         for _, model_vars, train_vars in models
+        #     ]
+        #     for model in models:
+        #         model[1] = unfreeze_schedule(0)
+        # else:
+        #     unfreeze_schedule = (
+        #         lambda _: False,
+        #         False,  # pylint:disable=unnecessary-lambda-assignment
+        #     )
+        # n_train_vars_cur: int = get_num_params(model_vars)
+        # if config.general.log_wandb:
+        #     wandb.log({"num_trained_vars": n_train_vars_cur})
+        # else:
+        #     print(f"Num trained params: {n_train_vars_cur:,}")
+
+        identifying_model_str = ""
+        if config.general.make_save_str_unique:
+            if config.general.log_wandb:
+                identifying_model_str += (
+                    f"_{wandb.run.name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
                 )
             else:
-                raise e
-        sigma = config.DP.sigma
+                identifying_model_str += (
+                    f"_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+                )
 
-        total_noise, adapted_sigma = eps_calc.adapt_sigma()
+        # if config.checkpoint:
+        #     config.checkpoint.logdir += identifying_model_str
+        #     checkpoint = objax.io.Checkpoint(**OmegaConf.to_container(config.checkpoint))
+        # else:
+        #     checkpoint = None
 
-        effective_batch_size = EpsCalculator.calc_effective_batch_size(config)
-        batch_expansion_factor = EpsCalculator.get_grad_acc(config)
-        sampling_rate: float = effective_batch_size / len(shadow_train_loader.dataset)
+        if config.dataset.task in (
+            DatasetTask.classification,
+            DatasetTask.segmentation,
+        ):
+            if config.loss.binary_loss:
+                predict_lambda = lambda model, x: objax.functional.sigmoid(  # pylint:disable=unnecessary-lambda-assignment
+                    model(x, training=False)
+                )
+            else:
+                predict_lambda = lambda model, x: objax.functional.softmax(  # pylint:disable=unnecessary-lambda-assignment
+                    model(x, training=False),
+                    axis=1 if config.dataset.task == DatasetTask.segmentation else -1,
+                )
+        else:
+            predict_lambda = lambda model, x: model(x, training=False)
+        # predict_op_parallel = objax.Parallel(
+        #     predict_lambda, model.vars(), reduce=np.concatenate
+        # )
+        predict_ops_jit_train = [
+            objax.Jit(
+                partial(predict_lambda, model), model.vars()
+            )  # pylint:disable=not-callable
+            for model, _, _ in train_models
+        ]
+        predict_ops_jit_eval = [
+            objax.Jit(
+                partial(predict_lambda, model), model.vars()
+            )  # pylint:disable=not-callable
+            for model, _, _ in eval_models
+        ]
 
-        def analyse_epsilon(steps: int, sigma=sigma):
-            accountant.history = [(sigma, sampling_rate, steps)]
-            return accountant.get_epsilon(delta=delta)
-
-        final_epsilon = analyse_epsilon(
-            (shadow_train_loader // batch_expansion_factor) * config.hyperparams.epochs
-        )
-
-        print(
-            f"This training will lead to a final epsilon of {final_epsilon:.2f}"
-            f" for {config.hyperparams.epochs} epochs"
-            f" at a noise multiplier of {sigma:5f} and a delta of {delta}"
-        )
-        if config.DP.glrt_assumption:
-            print(f"Effective sigma due to glrt assumption is {adapted_sigma}")
-        assert (
-            config.hyperparams.overfit is None
-        ), "No overfitting in attacks. Control via attack.N_fixed_dataset parameter"
-        max_batches = (
-            # config.hyperparams.overfit
-            # if config.hyperparams.overfit is not None
-            # else
-            len(shadow_train_loader)
-        )
-        if max_batches % grad_acc != 0:
-            reduced_max_batches = max_batches - (max_batches % grad_acc)
-            assert reduced_max_batches > 0, (
-                f"The number of batches ({max_batches}) cannot be smaller "
-                f"than the number of gradient accumulation steps ({grad_acc})"
+        grad_acc = config.hyperparams.grad_acc_steps
+        if not config.DP:
+            sampling_rate, delta, sigma, final_epsilon, total_noise = 0, 0, 0, 0, 0
+            batch_expansion_factor = 1
+            effective_batch_size = (
+                config.hyperparams.batch_size * config.hyperparams.grad_acc_steps
             )
+        else:
+            accountant: IAccountant = create_accountant(mechanism=config.DP.mechanism)
+            delta = config.DP.delta
+            eps_calc = EpsCalculator(config, len(shadow_train_loader))
+            try:
+                eps_calc.fill_config(accountant=accountant, tol=config.DP.eps_tol)
+            except ValueError as e:
+                if (
+                    config.DP.mechanism == "gdp"
+                    and str(e) == "f(a) and f(b) must have different signs"
+                ):
+                    raise ValueError(
+                        f"Value error probably due to high epsilon while using GDP."
+                    )
+                else:
+                    raise e
+            sigma = config.DP.sigma
+
+            total_noise, adapted_sigma = eps_calc.adapt_sigma()
+
+            effective_batch_size = EpsCalculator.calc_effective_batch_size(config)
+            batch_expansion_factor = EpsCalculator.get_grad_acc(config)
+            sampling_rate: float = effective_batch_size / len(
+                shadow_train_loader.dataset
+            )
+
+            def analyse_epsilon(steps: int, sigma=sigma):
+                accountant.history = [(sigma, sampling_rate, steps)]
+                return accountant.get_epsilon(delta=delta)
+
+            final_epsilon = analyse_epsilon(
+                (shadow_train_loader // batch_expansion_factor)
+                * config.hyperparams.epochs
+            )
+
             print(
-                f"The number of batches per epoch will be reduced to "
-                f"{reduced_max_batches} as it's the highest number of "
-                f"batches ({max_batches}) which is evenly divisble by "
-                f"the number of gradient accumulation steps ({grad_acc})"
+                f"This training will lead to a final epsilon of {final_epsilon:.2f}"
+                f" for {config.hyperparams.epochs} epochs"
+                f" at a noise multiplier of {sigma:5f} and a delta of {delta}"
+            )
+            if config.DP.glrt_assumption:
+                print(f"Effective sigma due to glrt assumption is {adapted_sigma}")
+            assert (
+                config.hyperparams.overfit is None
+            ), "No overfitting in attacks. Control via attack.N_fixed_dataset parameter"
+            max_batches = (
+                # config.hyperparams.overfit
+                # if config.hyperparams.overfit is not None
+                # else
+                len(shadow_train_loader)
+            )
+            if max_batches % grad_acc != 0:
+                reduced_max_batches = max_batches - (max_batches % grad_acc)
+                assert reduced_max_batches > 0, (
+                    f"The number of batches ({max_batches}) cannot be smaller "
+                    f"than the number of gradient accumulation steps ({grad_acc})"
+                )
+                print(
+                    f"The number of batches per epoch will be reduced to "
+                    f"{reduced_max_batches} as it's the highest number of "
+                    f"batches ({max_batches}) which is evenly divisble by "
+                    f"the number of gradient accumulation steps ({grad_acc})"
+                )
+
+        metric_fns = make_metrics(config)
+
+        augmenter = Transformation.from_dict_list(
+            OmegaConf.to_container(config.augmentations)
+        )
+        n_augmentations = augmenter.get_n_augmentations()
+        augment_op = augmenter.create_vectorized_transform()
+        if n_augmentations > 1:
+            print(f"Augmentation multiplicity of {n_augmentations}")
+        if config.label_augmentations:
+            label_augmenter = Transformation.from_dict_list(
+                OmegaConf.to_container(config.label_augmentations)
+            )
+            label_augment_op = label_augmenter.create_vectorized_transform()
+        else:
+            label_augment_op = (
+                lambda _: _
+            )  # pylint:disable=unnecessary-lambda-assignment
+        # augment_op = augment_op.create_vectorized_transform()
+        if config.test_augmentations:
+            test_augmenter = Transformation.from_dict_list(
+                OmegaConf.to_container(config.test_augmentations)
+            )
+            test_aug = test_augmenter.create_vectorized_transform()
+        else:
+            test_aug = lambda x: x  # pylint:disable=unnecessary-lambda-assignment
+        if config.test_label_augmentations:
+            test_label_augmenter = Transformation.from_dict_list(
+                OmegaConf.to_container(config.test_label_augmentations)
+            )
+            test_label_aug = test_label_augmenter.create_vectorized_transform()
+        else:
+            test_label_aug = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
+        scheduler = make_scheduler_from_config(config)
+        stopper = make_stopper_from_config(config)
+        loss_class = make_loss_from_config(config)
+        test_loss_fn = loss_class.create_test_loss_fn()
+
+        def make_train_op(model_vars, model):
+            ema: Optional[ExponentialMovingAverage] = None
+            if config.ema.use_ema:
+                ema = ExponentialMovingAverage(
+                    model_vars, config.ema.decay, update_every=config.ema.update_every
+                )
+            opt = make_optim_from_config(config, model_vars)
+            train_loss_fn = loss_class.create_train_loss_fn(model_vars, model)
+            loss_gv = create_loss_gradient(config, model_vars, train_loss_fn)
+            train_vars = (
+                model_vars
+                + loss_gv.vars()
+                + opt.vars()
+                + objax.random.DEFAULT_GENERATOR.vars()
+            )
+            if ema is not None:
+                train_vars += ema.vars()
+            train_op = create_train_op(
+                train_vars,
+                loss_gv,
+                opt,
+                augment_op,
+                label_augment_op,
+                grad_accumulation=grad_acc > 1,
+                noise=total_noise,
+                effective_batch_size=effective_batch_size,
+                n_augmentations=n_augmentations,
+                parallel=config.general.parallel,
+                ema=ema,
             )
 
-    metric_fns = make_metrics(config)
+            return train_op, train_vars
 
-    augmenter = Transformation.from_dict_list(
-        OmegaConf.to_container(config.augmentations)
-    )
-    n_augmentations = augmenter.get_n_augmentations()
-    augment_op = augmenter.create_vectorized_transform()
-    if n_augmentations > 1:
-        print(f"Augmentation multiplicity of {n_augmentations}")
-    if config.label_augmentations:
-        label_augmenter = Transformation.from_dict_list(
-            OmegaConf.to_container(config.label_augmentations)
-        )
-        label_augment_op = label_augmenter.create_vectorized_transform()
-    else:
-        label_augment_op = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
-    # augment_op = augment_op.create_vectorized_transform()
-    if config.test_augmentations:
-        test_augmenter = Transformation.from_dict_list(
-            OmegaConf.to_container(config.test_augmentations)
-        )
-        test_aug = test_augmenter.create_vectorized_transform()
-    else:
-        test_aug = lambda x: x  # pylint:disable=unnecessary-lambda-assignment
-    if config.test_label_augmentations:
-        test_label_augmenter = Transformation.from_dict_list(
-            OmegaConf.to_container(config.test_label_augmentations)
-        )
-        test_label_aug = test_label_augmenter.create_vectorized_transform()
-    else:
-        test_label_aug = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
-    scheduler = make_scheduler_from_config(config)
-    stopper = make_stopper_from_config(config)
-    loss_class = make_loss_from_config(config)
-    test_loss_fn = loss_class.create_test_loss_fn()
-
-    def make_train_op(model_vars, model):
-        ema: Optional[ExponentialMovingAverage] = None
-        if config.ema.use_ema:
-            ema = ExponentialMovingAverage(
-                model_vars, config.ema.decay, update_every=config.ema.update_every
-            )
-        opt = make_optim_from_config(config, model_vars)
-        train_loss_fn = loss_class.create_train_loss_fn(model_vars, model)
-        loss_gv = create_loss_gradient(config, model_vars, train_loss_fn)
-        train_vars = (
-            model_vars
-            + loss_gv.vars()
-            + opt.vars()
-            + objax.random.DEFAULT_GENERATOR.vars()
-        )
-        if ema is not None:
-            train_vars += ema.vars()
-        train_op = create_train_op(
-            train_vars,
-            loss_gv,
-            opt,
-            augment_op,
-            label_augment_op,
-            grad_accumulation=grad_acc > 1,
-            noise=total_noise,
-            effective_batch_size=effective_batch_size,
-            n_augmentations=n_augmentations,
-            parallel=config.general.parallel,
-            ema=ema,
+        (
+            attack_train_train_ops,
+            attack_train_train_vars,
+            train_model_vars,
+        ) = make_train_ops(train_models, make_train_op)
+        attack_eval_train_ops, attack_eval_train_vars, eval_model_vars = make_train_ops(
+            eval_models, make_train_op
         )
 
-        return train_op, train_vars
-
-    train_ops_and_vars = [
-        make_train_op(model_vars, model) for model, model_vars, _ in models
-    ]
-    train_ops, train_vars = [tov[0] for tov in train_ops_and_vars], [
-        tov[1] for tov in train_ops_and_vars
-    ]
-    model_vars = [model.vars() for model, _, _ in models]
-
-    epoch_time = []
-    epoch_iter: Iterable
-    if config.general.log_wandb:
-        epoch_iter = tqdm(
-            range(config.hyperparams.epochs),
-            total=config.hyperparams.epochs,
-            desc="Epoch",
-            leave=True,
-        )
-    else:
-        epoch_iter = range(config.hyperparams.epochs)
-    if config.general.eval_init:
-        if config.general.eval_train:
-            metrics = test_multi_dataset(
-                config,
-                shadow_train_loader,
-                predict_ops_jit,
-                test_aug,
-                test_label_aug,
-                model_vars,
-                config.general.parallel,
-                "train",
-                metrics=metric_fns,
-                loss_fn=test_loss_fn,
-                multi_dataset=True,
-            )
-        if shadow_eval_loader is not None:
-            metric = test_multi_dataset(
-                config,
-                shadow_eval_loader,
-                predict_ops_jit,
-                test_aug,
-                test_label_aug,
-                model_vars,
-                config.general.parallel,
-                "val",
-                metrics=metric_fns,
-                loss_fn=test_loss_fn,
-                multi_dataset=False,
-            )
-    for epoch, learning_rate in zip(epoch_iter, scheduler):
-        cur_epoch_time = train(
-            config,
-            shadow_train_loader,
-            train_ops,
-            learning_rate,
-            train_vars,
-            config.general.parallel,
-            grad_acc,
-        )
+        epoch_time = []
+        epoch_iter: Iterable
         if config.general.log_wandb:
-            wandb.log({"epoch": epoch, "lr": learning_rate})
+            epoch_iter = tqdm(
+                range(config.hyperparams.epochs),
+                total=config.hyperparams.epochs,
+                desc="Epoch",
+                leave=True,
+            )
         else:
-            print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
-        epoch_time.append(cur_epoch_time)
-        if config.general.eval_train:
-            test_multi_dataset(
+            epoch_iter = range(config.hyperparams.epochs)
+        if config.general.eval_init:
+            if config.general.eval_train:
+                metrics = test_multi_dataset(
+                    config,
+                    shadow_train_loader,
+                    predict_ops_jit_train,
+                    test_aug,
+                    test_label_aug,
+                    train_model_vars,
+                    config.general.parallel,
+                    "train_attack_train",
+                    metrics=metric_fns,
+                    loss_fn=test_loss_fn,
+                    multi_dataset=True,
+                )
+                metrics = test_multi_dataset(
+                    config,
+                    attack_eval_loader,
+                    predict_ops_jit_eval,
+                    test_aug,
+                    test_label_aug,
+                    eval_model_vars,
+                    config.general.parallel,
+                    "train_attack_eval",
+                    metrics=metric_fns,
+                    loss_fn=test_loss_fn,
+                    multi_dataset=True,
+                )
+            if shadow_eval_loader is not None:
+                metric = test_multi_dataset(
+                    config,
+                    shadow_eval_loader,
+                    list(chain([predict_ops_jit_train, predict_ops_jit_eval])),
+                    test_aug,
+                    test_label_aug,
+                    train_model_vars + eval_model_vars,
+                    config.general.parallel,
+                    "val",
+                    metrics=metric_fns,
+                    loss_fn=test_loss_fn,
+                    multi_dataset=False,
+                )
+        for epoch, learning_rate in zip(epoch_iter, scheduler):
+            cur_epoch_time = train(
                 config,
                 shadow_train_loader,
-                predict_ops_jit,
-                test_aug,
-                test_label_aug,
-                model_vars,
+                attack_train_train_ops,
+                learning_rate,
+                attack_train_train_vars,
                 config.general.parallel,
-                "train",
-                metrics=metric_fns,
-                loss_fn=test_loss_fn,
-                multi_dataset=True,
+                grad_acc,
             )
-        if shadow_eval_loader is not None:
-            metric = test_multi_dataset(
+            cur_epoch_time += train(
                 config,
-                shadow_eval_loader,
-                predict_ops_jit,
-                test_aug,
-                test_label_aug,
-                model_vars,
+                attack_eval_loader,
+                attack_eval_train_ops,
+                learning_rate,
+                attack_eval_train_vars,
                 config.general.parallel,
-                "val",
-                metrics=metric_fns,
-                loss_fn=test_loss_fn,
-                multi_dataset=False,
-            )
-            scheduler.update_score(metric)
-        else:
-            metric = None
-        if config.DP:
-            epsilon = analyse_epsilon(
-                (len(shadow_train_loader) // batch_expansion_factor) * (epoch + 1)
+                grad_acc,
             )
             if config.general.log_wandb:
-                wandb.log({"epsilon": epsilon})
+                wandb.log({"epoch": epoch, "lr": learning_rate})
             else:
-                print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})")
-    #     if config.unfreeze_schedule is not None:
-    #         model_vars, fresh_model_vars = unfreeze_schedule(epoch + 1)
-    #         if fresh_model_vars:
-    #             train_op, train_vars = make_train_op(model_vars)
-    #         n_train_vars_cur = get_num_params(model_vars)
-    #         if config.general.log_wandb:
-    #             wandb.log({"num_trained_vars": n_train_vars_cur})
-    #         else:
-    #             print(f"\tNum Train Vars: {n_train_vars_cur:,}")
-    #     if checkpoint is not None:
-    #         checkpoint.save(model.vars(), idx=epoch)
-    #     if metric is not None and stopper(metric):
-    #         print("Early Stopping was activated -> Stopping Training")
-    #         break
+                print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
+            epoch_time.append(cur_epoch_time)
+            if config.general.eval_train:
+                metrics = test_multi_dataset(
+                    config,
+                    shadow_train_loader,
+                    predict_ops_jit_train,
+                    test_aug,
+                    test_label_aug,
+                    train_model_vars,
+                    config.general.parallel,
+                    "train_attack_train",
+                    metrics=metric_fns,
+                    loss_fn=test_loss_fn,
+                    multi_dataset=True,
+                )
+                metrics = test_multi_dataset(
+                    config,
+                    attack_eval_loader,
+                    predict_ops_jit_eval,
+                    test_aug,
+                    test_label_aug,
+                    eval_model_vars,
+                    config.general.parallel,
+                    "train_attack_eval",
+                    metrics=metric_fns,
+                    loss_fn=test_loss_fn,
+                    multi_dataset=True,
+                )
+            if shadow_eval_loader is not None:
+                metric = test_multi_dataset(
+                    config,
+                    shadow_eval_loader,
+                    predict_ops_jit_train + predict_ops_jit_eval,
+                    test_aug,
+                    test_label_aug,
+                    train_model_vars + eval_model_vars,
+                    config.general.parallel,
+                    "val",
+                    metrics=metric_fns,
+                    loss_fn=test_loss_fn,
+                    multi_dataset=False,
+                )
+                scheduler.update_score(metric)
+            else:
+                metric = None
+            if config.DP:
+                epsilon = analyse_epsilon(
+                    (len(shadow_train_loader) // batch_expansion_factor) * (epoch + 1)
+                )
+                if config.general.log_wandb:
+                    wandb.log({"epsilon": epsilon})
+                else:
+                    print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})")
+        #     if config.unfreeze_schedule is not None:
+        #         model_vars, fresh_model_vars = unfreeze_schedule(epoch + 1)
+        #         if fresh_model_vars:
+        #             train_op, train_vars = make_train_op(model_vars)
+        #         n_train_vars_cur = get_num_params(model_vars)
+        #         if config.general.log_wandb:
+        #             wandb.log({"num_trained_vars": n_train_vars_cur})
+        #         else:
+        #             print(f"\tNum Train Vars: {n_train_vars_cur:,}")
+        #     if checkpoint is not None:
+        #         checkpoint.save(model.vars(), idx=epoch)
+        #     if metric is not None and stopper(metric):
+        #         print("Early Stopping was activated -> Stopping Training")
+        #         break
 
-    # no need for testing in attack scenario, val set must do
-    # metric = test(
-    #     config,
-    #     test_loader,
-    #     predict_op_jit,
-    #     test_aug,
-    #     test_label_aug,
-    #     model.vars(),
-    #     False,
-    #     "test",
-    #     metrics=metric_fns,
-    #     loss_fn=test_loss_fn,
-    # )
-    if config.general.save_path:
-        save_path: Path = Path(config.general.save_path)
-        save_path = save_path.parent / (
-            save_path.stem + identifying_model_str + save_path.suffix
-        )
-        # save shadow models and indices as training dataset
-        all_weights = np.stack(
-            [flatten_weights(model)[2] for model, _, _ in models], axis=0
-        )
-        target_imgs_labels = shadow_train_loader.dataset[-1]
-        target_imgs = np.stack(
-            [target_img for target_img, _ in target_imgs_labels], axis=0
-        )
-        target_labels = np.stack(
-            [target_label for _, target_label in target_imgs_labels], axis=0
-        )
-        save_dict = {
-            "config": OmegaConf.to_container(config),
-            "general": {
-                "fixed_indices": shadow_train_loader.dataset.indices,
-                "shadow_train_indices": shadow_train_loader.dataset.shadow_indices,
-                "shadow_eval_indices": shadow_eval_loader.dataset.indices,
-                "attack_eval_indices": attack_eval_loader.dataset.shadow_indices,
-            },
-            "weight_train_data": all_weights,
-            "reconstruction_targets": target_imgs,
-            "reconstruction_labels": target_labels,
-        }
-        save(save_dict, f"{save_path}.pt")
-    #     print(f"Saving model to {config.general.save_path}")
-    #     objax.io.save_var_collection(save_path, model.vars())
-    if config.general.log_wandb:
-        run.finish()
-    else:
+        # no need for testing in attack scenario, val set must do
+        # metric = test(
+        #     config,
+        #     test_loader,
+        #     predict_op_jit,
+        #     test_aug,
+        #     test_label_aug,
+        #     model.vars(),
+        #     False,
+        #     "test",
+        #     metrics=metric_fns,
+        #     loss_fn=test_loss_fn,
+        # )
+        if config.general.save_path:
+            save_path: Path = Path(config.general.save_path)
+            save_path = save_path.parent / (
+                save_path.stem + identifying_model_str + save_path.suffix
+            )
+            # save shadow models and indices as training dataset
+            attack_train_weights = np.stack(
+                [flatten_weights(model)[2] for model, _, _ in train_models], axis=0
+            )
+            attack_eval_weights = np.stack(
+                [flatten_weights(model)[2] for model, _, _ in eval_models], axis=0
+            )
+            train_target_imgs_labels = shadow_train_loader.dataset[-1]
+            eval_imgs_labels = attack_eval_loader.dataset[-1]
+            train_target_imgs = np.stack(
+                [target_img for target_img, _ in train_target_imgs_labels], axis=0
+            )
+            train_target_labels = np.stack(
+                [target_label for _, target_label in train_target_imgs_labels], axis=0
+            )
+            eval_target_imgs = np.stack(
+                [target_img for target_img, _ in eval_imgs_labels], axis=0
+            )
+            eval_target_labels = np.stack(
+                [target_label for _, target_label in eval_imgs_labels], axis=0
+            )
+            attack_data_dict = {
+                "config": OmegaConf.to_container(config),
+                "general": {
+                    "fixed_indices": shadow_train_loader.dataset.indices,
+                    "shadow_train_indices": shadow_train_loader.dataset.shadow_indices,
+                    "shadow_eval_indices": shadow_eval_loader.dataset.indices,
+                    "attack_eval_indices": attack_eval_loader.dataset.shadow_indices,
+                },
+                "attack_train_weights": attack_train_weights,
+                "attack_eval_weights": attack_eval_weights,
+                "reconstruction_train_targets": train_target_imgs,
+                "reconstruction_train_labels": train_target_labels,
+                "reconstruction_eval_targets": eval_target_imgs,
+                "reconstruction_eval_labels": eval_target_labels,
+            }
+            torchsave(attack_data_dict, f"{save_path}.pt")
+        #     print(f"Saving model to {config.general.save_path}")
+        #     objax.io.save_var_collection(save_path, model.vars())
         print("Average epoch time (all epochs): ", np.average(epoch_time))
         print("Median epoch time (all epochs): ", np.median(epoch_time))
         if len(epoch_time) > 1:
             print("Average epoch time (except first): ", np.average(epoch_time[1:]))
             print("Median epoch time (except first): ", np.median(epoch_time[1:]))
         print("Total training time (excluding evaluation): ", np.sum(epoch_time))
+
+    else:
+        attack_data_dict = torchload(config.attack.use_saved_attack_data)
+        attack_train_weights = attack_data_dict["attack_train_weights"]
+        attack_train_targets = attack_data_dict["reconstruction_train_targets"]
+        attack_eval_weights = attack_data_dict["attack_eval_weights"]
+        attack_eval_targets = attack_data_dict["reconstruction_eval_targets"]
+
+    # from sklearn import decomposition
+    # from sklearn import preprocessing
+
+    # def scaler_fn(params_train, params_test, use_train_only=True):
+    #     if use_train_only:
+    #         scaler = preprocessing.StandardScaler().fit(params_train)
+    #     else:
+    #         scaler = preprocessing.StandardScaler().fit(
+    #             np.concatenate([params_train, params_test])
+    #         )
+    #     params_train_scaled = scaler.transform(params_train)
+    #     params_test_scaled = scaler.transform(params_test)
+    #     return params_train_scaled, params_test_scaled
+
+    # shadow_train_rescaled_params, shadow_eval_rescaled_params = scaler_fn(
+    #     shadow_train_params,
+    #     shadow_eval_params,
+    #     use_train_only=fit_scaler_with_only_train,
+    # )
+
+    if config.general.log_wandb:
+        run.finish()
 
 
 if __name__ == "__main__":

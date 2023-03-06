@@ -6,6 +6,7 @@ from jax import numpy as jn, local_device_count
 from typing import Callable
 import wandb
 from objax import TrainRef, Module
+from objax.io import load_var_collection
 
 from dptraining.config import Config
 from dptraining.utils.metrics import (
@@ -13,8 +14,51 @@ from dptraining.utils.metrics import (
     summarise_batch_metrics,
     summarise_dict_metrics,
 )
+from dptraining.models import (
+    make_model_from_config,
+    modify_architecture_from_pretrained_model,
+)
 
 N_DEVICES = local_device_count()
+
+
+def make_train_ops(models, make_train_op):
+    attack_train_train_ops_and_vars = [
+        make_train_op(model_vars, model) for model, model_vars, _ in models
+    ]
+    train_ops, train_vars = [tov[0] for tov in attack_train_train_ops_and_vars], [
+        tov[1] for tov in attack_train_train_ops_and_vars
+    ]
+    model_vars = [model.vars() for model, _, _ in models]
+
+    return train_ops, train_vars, model_vars
+
+
+def create_N_models(config: Config, N: int):
+    models = []
+    for _ in tqdm(
+        range(N),
+        total=N,
+        leave=False,
+        desc="Creating shadow models",
+    ):
+        model = make_model_from_config(config.model)
+        ######################################################################
+        if config.general.use_pretrained_model is not None:
+            print(f"Loading model from {config.general.use_pretrained_model}")
+            load_var_collection(config.general.use_pretrained_model, model.vars())
+            if config.model.pretrained_model_changes is not None:
+                (
+                    model_vars,
+                    must_train_vars,
+                ) = modify_architecture_from_pretrained_model(config, model)
+            else:  # assuming pretrained model is exactly like current model
+                model_vars, must_train_vars = model.vars(), model.vars()
+        else:
+            model_vars, must_train_vars = model.vars(), model.vars()
+        models.append((model, model_vars, must_train_vars))
+    del model, model_vars, must_train_vars
+    return models
 
 
 def flatten_weights(model: Module) -> tuple[dict[str, np.array], list[str], np.array]:
