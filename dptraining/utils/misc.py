@@ -24,7 +24,6 @@ class StateDictObjectMetricTracker(StateDictObject):
         cumulative_delta: bool = True,
         mode: str = "maximize",
     ):
-
         if patience < 1:
             raise ValueError("Argument patience should be positive integer.")
 
@@ -64,7 +63,6 @@ class StateDictObjectMetricTracker(StateDictObject):
         self.mode = state_dict["mode"]
 
     def update(self, score: float) -> bool:
-
         match self.mode:
             case "maximize":
                 if self.best_score is None:
@@ -96,3 +94,16 @@ class StateDictObjectMetricTracker(StateDictObject):
 
 def get_num_params(model_vars: VarCollection) -> int:
     return sum([prod(v.shape) for v in model_vars.values()])
+
+
+def make_unique_str(config):
+    identifying_model_str = ""
+    if config.general.make_save_str_unique:
+        if config.general.log_wandb:
+            identifying_model_str += (
+                f"_{wandb.run.name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+            )
+        else:
+            identifying_model_str += f"_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+
+    return identifying_model_str

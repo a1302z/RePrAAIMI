@@ -4,7 +4,7 @@ from copy import deepcopy
 from functools import partial
 from typing import Callable
 
-from objax import functional, nn, VarCollection, BaseVar
+from objax import functional, nn, VarCollection, BaseVar, Module, io as objaxio
 from objax.util import class_name
 from omegaconf import OmegaConf
 
@@ -73,6 +73,38 @@ from dptraining.models.layers import (
 from dptraining.models.unet import Unet
 from dptraining.models.resnet9 import ResNet9
 from dptraining.models.smoothnet import get_smoothnet
+from dptraining.utils.gradual_unfreezing import make_unfreezing_schedule
+
+
+def setup_pretrained_model(config: Config, model: Module):
+    if config.general.use_pretrained_model is not None:
+        print(f"Loading model from {config.general.use_pretrained_model}")
+        objaxio.load_var_collection(config.general.use_pretrained_model, model.vars())
+        if config.model.pretrained_model_changes is not None:
+            model_vars, must_train_vars = modify_architecture_from_pretrained_model(
+                config, model
+            )
+        else:  # assuming pretrained model is exactly like current model
+            model_vars, must_train_vars = model.vars(), model.vars()
+    else:
+        model_vars, must_train_vars = model.vars(), model.vars()
+
+    if config.unfreeze_schedule is not None:
+        unfreeze_schedule = make_unfreezing_schedule(
+            config.model.name,
+            config.unfreeze_schedule.trigger_points,
+            model_vars,
+            must_train_vars,
+            model,
+        )
+        model_vars, _ = unfreeze_schedule(0)
+    else:
+        unfreeze_schedule = (
+            lambda _: model_vars,
+            False,  # pylint:disable=unnecessary-lambda-assignment
+        )
+
+    return model_vars, unfreeze_schedule, must_train_vars
 
 
 def get_kwargs(func: Callable, already_defined: list[str], model_config: ModelConfig):

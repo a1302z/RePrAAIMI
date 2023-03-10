@@ -1,16 +1,12 @@
 import os
 import sys
 from pathlib import Path
-from typing import Callable, Iterable, Optional
 from functools import partial
 
 import hydra
 import numpy as np
 import wandb
 from omegaconf import OmegaConf
-from tqdm import tqdm
-from datetime import datetime
-from opacus.accountants import create_accountant, IAccountant
 
 sys.path.insert(0, str(Path.cwd()))
 
@@ -39,28 +35,21 @@ def main(
     from torch.random import manual_seed as torch_manual_seed
 
     from dptraining.datasets import make_loader_from_config
-    from dptraining.models import (
-        make_model_from_config,
-        modify_architecture_from_pretrained_model,
-    )
-    from dptraining.optim import make_optim_from_config
-    from dptraining.privacy import EpsCalculator
+    from dptraining.models import make_model_from_config, setup_pretrained_model
+    from dptraining.privacy import setup_privacy
     from dptraining.utils import (
-        ExponentialMovingAverage,
         make_loss_from_config,
         make_scheduler_from_config,
         make_stopper_from_config,
         make_metrics,
     )
-    from dptraining.utils.augment import Transformation
+    from dptraining.utils.augment import make_augs
     from dptraining.utils.training_utils import (
-        create_loss_gradient,
-        create_train_op,
         test,
-        train,
+        make_train_op,
+        train_loop,
     )
-    from dptraining.utils.gradual_unfreezing import make_unfreezing_schedule
-    from dptraining.utils.misc import get_num_params
+    from dptraining.utils.misc import get_num_params, make_unique_str
 
     np.random.seed(config.general.seed)
     objax.random.DEFAULT_GENERATOR.seed(config.general.seed)
@@ -86,51 +75,19 @@ def main(
         val_loader = train_loader
         test_loader = train_loader
     model = make_model_from_config(config.model)
-    if config.general.use_pretrained_model is not None:
-        print(f"Loading model from {config.general.use_pretrained_model}")
-        objax.io.load_var_collection(config.general.use_pretrained_model, model.vars())
-        if config.model.pretrained_model_changes is not None:
-            model_vars, must_train_vars = modify_architecture_from_pretrained_model(
-                config, model
-            )
-        else:  # assuming pretrained model is exactly like current model
-            model_vars, must_train_vars = model.vars(), model.vars()
-    else:
-        model_vars, must_train_vars = model.vars(), model.vars()
-    n_train_vars_total: int = get_num_params(model_vars)
+    model_vars, unfreeze_schedule, _ = setup_pretrained_model(config, model)
+    n_train_vars_total: int = get_num_params(model.vars())
     if config.general.log_wandb:
         wandb.log({"total_model_vars": n_train_vars_total})
     else:
         print(f"Total model params: {n_train_vars_total:,}")
-
-    if config.unfreeze_schedule is not None:
-        unfreeze_schedule = make_unfreezing_schedule(
-            config.model.name,
-            config.unfreeze_schedule.trigger_points,
-            model_vars,
-            must_train_vars,
-            model,
-        )
-        model_vars, _ = unfreeze_schedule(0)
-    else:
-        unfreeze_schedule = (
-            lambda _: model_vars,
-            False,  # pylint:disable=unnecessary-lambda-assignment
-        )
     n_train_vars_cur: int = get_num_params(model_vars)
     if config.general.log_wandb:
         wandb.log({"num_trained_vars": n_train_vars_cur})
     else:
         print(f"Num trained params: {n_train_vars_cur:,}")
 
-    identifying_model_str = ""
-    if config.general.make_save_str_unique:
-        if config.general.log_wandb:
-            identifying_model_str += (
-                f"_{wandb.run.name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
-            )
-        else:
-            identifying_model_str += f"_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+    identifying_model_str = make_unique_str(config)
 
     if config.checkpoint:
         config.checkpoint.logdir += identifying_model_str
@@ -158,245 +115,76 @@ def main(
         predict_lambda, model.vars()  # pylint:disable=not-callable
     )
 
-    grad_acc = config.hyperparams.grad_acc_steps
-    if not config.DP:
-        sampling_rate, delta, sigma, final_epsilon, total_noise = 0, 0, 0, 0, 0
-        batch_expansion_factor = 1
-        effective_batch_size = (
-            config.hyperparams.batch_size * config.hyperparams.grad_acc_steps
-        )
-    else:
-        accountant: IAccountant = create_accountant(mechanism=config.DP.mechanism)
-        delta = config.DP.delta
-        eps_calc = EpsCalculator(config, train_loader)
-        try:
-            eps_calc.fill_config(accountant=accountant, tol=config.DP.eps_tol)
-        except ValueError as e:
-            if (
-                config.DP.mechanism == "gdp"
-                and str(e) == "f(a) and f(b) must have different signs"
-            ):
-                raise ValueError(
-                    f"Value error probably due to high epsilon while using GDP."
-                )
-            else:
-                raise e
-        sigma = config.DP.sigma
-
-        total_noise, adapted_sigma = eps_calc.adapt_sigma()
-
-        effective_batch_size = EpsCalculator.calc_effective_batch_size(config)
-        batch_expansion_factor = EpsCalculator.get_grad_acc(config)
-        sampling_rate: float = effective_batch_size / len(train_loader.dataset)
-
-        def analyse_epsilon(steps: int, sigma=sigma):
-            accountant.history = [(sigma, sampling_rate, steps)]
-            return accountant.get_epsilon(delta=delta)
-
-        final_epsilon = analyse_epsilon(
-            (len(train_loader) // batch_expansion_factor) * config.hyperparams.epochs
-        )
-
-        print(
-            f"This training will lead to a final epsilon of {final_epsilon:.2f}"
-            f" for {config.hyperparams.epochs} epochs"
-            f" at a noise multiplier of {sigma:5f} and a delta of {delta}"
-        )
-        if config.DP.glrt_assumption:
-            print(f"Effective sigma due to glrt assumption is {adapted_sigma}")
-        max_batches = (
-            config.hyperparams.overfit
-            if config.hyperparams.overfit is not None
-            else len(train_loader)
-        )
-        if max_batches % grad_acc != 0:
-            reduced_max_batches = max_batches - (max_batches % grad_acc)
-            assert reduced_max_batches > 0, (
-                f"The number of batches ({max_batches}) cannot be smaller "
-                f"than the number of gradient accumulation steps ({grad_acc})"
-            )
-            print(
-                f"The number of batches per epoch will be reduced to "
-                f"{reduced_max_batches} as it's the highest number of "
-                f"batches ({max_batches}) which is evenly divisble by "
-                f"the number of gradient accumulation steps ({grad_acc})"
-            )
+    (
+        grad_acc,
+        accountant,
+        sampling_rate,
+        delta,
+        sigma,
+        total_noise,
+        batch_expansion_factor,
+        effective_batch_size,
+    ) = setup_privacy(config, train_loader)
 
     metric_fns = make_metrics(config)
 
-    augmenter = Transformation.from_dict_list(
-        OmegaConf.to_container(config.augmentations)
-    )
-    n_augmentations = augmenter.get_n_augmentations()
-    augment_op = augmenter.create_vectorized_transform()
+    (
+        n_augmentations,
+        augment_op,
+        label_augment_op,
+        test_aug,
+        test_label_aug,
+    ) = make_augs(config)
     if n_augmentations > 1:
         print(f"Augmentation multiplicity of {n_augmentations}")
-    if config.label_augmentations:
-        label_augmenter = Transformation.from_dict_list(
-            OmegaConf.to_container(config.label_augmentations)
-        )
-        label_augment_op = label_augmenter.create_vectorized_transform()
-    else:
-        label_augment_op = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
-    # augment_op = augment_op.create_vectorized_transform()
-    if config.test_augmentations:
-        test_augmenter = Transformation.from_dict_list(
-            OmegaConf.to_container(config.test_augmentations)
-        )
-        test_aug = test_augmenter.create_vectorized_transform()
-    else:
-        test_aug = lambda x: x  # pylint:disable=unnecessary-lambda-assignment
-    if config.test_label_augmentations:
-        test_label_augmenter = Transformation.from_dict_list(
-            OmegaConf.to_container(config.test_label_augmentations)
-        )
-        test_label_aug = test_label_augmenter.create_vectorized_transform()
-    else:
-        test_label_aug = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
     scheduler = make_scheduler_from_config(config)
     stopper = make_stopper_from_config(config)
     loss_class = make_loss_from_config(config)
     test_loss_fn = loss_class.create_test_loss_fn()
 
-    def make_train_op(model_vars):
-        ema: Optional[ExponentialMovingAverage] = None
-        if config.ema.use_ema:
-            ema = ExponentialMovingAverage(
-                model_vars, config.ema.decay, update_every=config.ema.update_every
-            )
-        opt = make_optim_from_config(config, model_vars)
-        train_loss_fn = loss_class.create_train_loss_fn(model_vars, model)
-        loss_gv = create_loss_gradient(config, model_vars, train_loss_fn)
-        train_vars = (
-            model_vars
-            + loss_gv.vars()
-            + opt.vars()
-            + objax.random.DEFAULT_GENERATOR.vars()
-        )
-        if ema is not None:
-            train_vars += ema.vars()
-        train_op = create_train_op(
-            train_vars,
-            loss_gv,
-            opt,
-            augment_op,
-            label_augment_op,
-            grad_accumulation=grad_acc > 1,
-            noise=total_noise,
-            effective_batch_size=effective_batch_size,
-            n_augmentations=n_augmentations,
-            parallel=config.general.parallel,
-            ema=ema,
-        )
+    train_op, train_vars = make_train_op(
+        model,
+        model_vars,
+        config,
+        loss_class,
+        augment_op,
+        label_augment_op,
+        grad_acc,
+        total_noise,
+        effective_batch_size,
+        n_augmentations,
+    )
 
-        return train_op, train_vars
-
-    train_op, train_vars = make_train_op(model_vars)
-
-    epoch_time = []
-    epoch_iter: Iterable
-    if config.general.log_wandb:
-        epoch_iter = tqdm(
-            range(config.hyperparams.epochs),
-            total=config.hyperparams.epochs,
-            desc="Epoch",
-            leave=True,
-        )
-    else:
-        epoch_iter = range(config.hyperparams.epochs)
-    if config.general.eval_init:
-        if config.general.eval_train:
-            test(
-                config,
-                train_loader,
-                predict_op_parallel if config.general.parallel else predict_op_jit,
-                test_aug,
-                test_label_aug,
-                model.vars(),
-                config.general.parallel,
-                "train",
-                metrics=metric_fns,
-                loss_fn=test_loss_fn,
-            )
-        if val_loader is not None:
-            metric = test(
-                config,
-                val_loader,
-                predict_op_parallel if config.general.parallel else predict_op_jit,
-                test_aug,
-                test_label_aug,
-                model.vars(),
-                config.general.parallel,
-                "val",
-                metrics=metric_fns,
-                loss_fn=test_loss_fn,
-            )
-    for epoch, learning_rate in zip(epoch_iter, scheduler):
-        cur_epoch_time = train(
-            config,
-            train_loader,
-            train_op,
-            learning_rate,
-            train_vars,
-            config.general.parallel,
-            grad_acc,
-        )
-        if config.general.log_wandb:
-            wandb.log({"epoch": epoch, "lr": learning_rate})
-        else:
-            print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
-        epoch_time.append(cur_epoch_time)
-        if config.general.eval_train:
-            test(
-                config,
-                train_loader,
-                predict_op_parallel if config.general.parallel else predict_op_jit,
-                test_aug,
-                test_label_aug,
-                model.vars(),
-                config.general.parallel,
-                "train",
-                metrics=metric_fns,
-                loss_fn=test_loss_fn,
-            )
-        if val_loader is not None:
-            metric = test(
-                config,
-                val_loader,
-                predict_op_parallel if config.general.parallel else predict_op_jit,
-                test_aug,
-                test_label_aug,
-                model.vars(),
-                config.general.parallel,
-                "val",
-                metrics=metric_fns,
-                loss_fn=test_loss_fn,
-            )
-            scheduler.update_score(metric)
-        else:
-            metric = None
-        if config.DP:
-            epsilon = analyse_epsilon(
-                (len(train_loader) // batch_expansion_factor) * (epoch + 1)
-            )
-            if config.general.log_wandb:
-                wandb.log({"epsilon": epsilon})
-            else:
-                print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})")
-        if config.unfreeze_schedule is not None:
-            model_vars, fresh_model_vars = unfreeze_schedule(epoch + 1)
-            if fresh_model_vars:
-                train_op, train_vars = make_train_op(model_vars)
-            n_train_vars_cur = get_num_params(model_vars)
-            if config.general.log_wandb:
-                wandb.log({"num_trained_vars": n_train_vars_cur})
-            else:
-                print(f"\tNum Train Vars: {n_train_vars_cur:,}")
-        if checkpoint is not None:
-            checkpoint.save(model.vars(), idx=epoch)
-        if metric is not None and stopper(metric):
-            print("Early Stopping was activated -> Stopping Training")
-            break
+    epoch_time = train_loop(
+        config,
+        train_loader,
+        val_loader,
+        model,
+        unfreeze_schedule,
+        checkpoint,
+        predict_op_parallel,
+        predict_op_jit,
+        grad_acc,
+        sampling_rate,
+        delta,
+        sigma,
+        total_noise,
+        batch_expansion_factor,
+        effective_batch_size,
+        accountant,
+        metric_fns,
+        n_augmentations,
+        augment_op,
+        label_augment_op,
+        test_aug,
+        test_label_aug,
+        scheduler,
+        stopper,
+        loss_class,
+        test_loss_fn,
+        train_op,
+        train_vars,
+    )
 
     # never do test parallel as this could emit some test samples and thus distort results
     metric = test(

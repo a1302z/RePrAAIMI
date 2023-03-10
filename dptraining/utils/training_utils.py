@@ -1,6 +1,6 @@
 import wandb
 import contextlib
-from typing import Callable
+from typing import Callable, Optional, Iterable
 
 import numpy as np
 
@@ -14,15 +14,61 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path.cwd()))
 
 from dptraining.config import Config
-from dptraining.privacy import ClipAndAccumulateGrads
-from dptraining.optim import AccumulateGrad
+from dptraining.privacy import ClipAndAccumulateGrads, analyse_epsilon
+from dptraining.optim import AccumulateGrad, make_optim_from_config
 from dptraining.utils.metrics import (
     calculate_metrics,
     summarise_batch_metrics,
     summarise_dict_metrics,
 )
+from dptraining.utils import ExponentialMovingAverage
+from dptraining.utils.misc import get_num_params
+
 
 N_DEVICES = local_device_count()
+
+
+
+def make_train_op(
+    model,
+    model_vars,
+    config: Config,
+    loss_class,
+    augment_op,
+    label_augment_op,
+    grad_acc,
+    total_noise,
+    effective_batch_size,
+    n_augmentations,
+):
+    ema: Optional[ExponentialMovingAverage] = None
+    if config.ema.use_ema:
+        ema = ExponentialMovingAverage(
+            model_vars, config.ema.decay, update_every=config.ema.update_every
+        )
+    opt = make_optim_from_config(config, model_vars)
+    train_loss_fn = loss_class.create_train_loss_fn(model_vars, model)
+    loss_gv = create_loss_gradient(config, model_vars, train_loss_fn)
+    train_vars = (
+        model_vars + loss_gv.vars() + opt.vars() + objax.random.DEFAULT_GENERATOR.vars()
+    )
+    if ema is not None:
+        train_vars += ema.vars()
+    train_op = create_train_op(
+        train_vars,
+        loss_gv,
+        opt,
+        augment_op,
+        label_augment_op,
+        grad_accumulation=grad_acc > 1,
+        noise=total_noise,
+        effective_batch_size=effective_batch_size,
+        n_augmentations=n_augmentations,
+        parallel=config.general.parallel,
+        ema=ema,
+    )
+
+    return train_op, train_vars
 
 
 def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
@@ -333,3 +379,155 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
         for name, value in logging_metrics.items():
             print(f"\t{name}: {value}")
     return main_metric[1]
+
+
+def train_loop(
+    config: Config,
+    train_loader,
+    val_loader,
+    model,
+    unfreeze_schedule,
+    checkpoint,
+    predict_op_parallel,
+    predict_op_jit,
+    grad_acc,
+    sampling_rate,
+    delta,
+    sigma,
+    total_noise,
+    batch_expansion_factor,
+    effective_batch_size,
+    accountant,
+    metric_fns,
+    n_augmentations,
+    augment_op,
+    label_augment_op,
+    test_aug,
+    test_label_aug,
+    scheduler,
+    stopper,
+    loss_class,
+    test_loss_fn,
+    train_op,
+    train_vars,
+):
+    epoch_time = []
+    epoch_iter: Iterable
+    if config.general.log_wandb:
+        epoch_iter = tqdm(
+            range(config.hyperparams.epochs),
+            total=config.hyperparams.epochs,
+            desc="Epoch",
+            leave=True,
+        )
+    else:
+        epoch_iter = range(config.hyperparams.epochs)
+    if config.general.eval_init:
+        if config.general.eval_train:
+            test(
+                config,
+                train_loader,
+                predict_op_parallel if config.general.parallel else predict_op_jit,
+                test_aug,
+                test_label_aug,
+                model.vars(),
+                config.general.parallel,
+                "train",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
+            )
+        if val_loader is not None:
+            metric = test(
+                config,
+                val_loader,
+                predict_op_parallel if config.general.parallel else predict_op_jit,
+                test_aug,
+                test_label_aug,
+                model.vars(),
+                config.general.parallel,
+                "val",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
+            )
+    for epoch, learning_rate in zip(epoch_iter, scheduler):
+        cur_epoch_time = train(
+            config,
+            train_loader,
+            train_op,
+            learning_rate,
+            train_vars,
+            config.general.parallel,
+            grad_acc,
+        )
+        if config.general.log_wandb:
+            wandb.log({"epoch": epoch, "lr": learning_rate})
+        else:
+            print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
+        epoch_time.append(cur_epoch_time)
+        if config.general.eval_train:
+            test(
+                config,
+                train_loader,
+                predict_op_parallel if config.general.parallel else predict_op_jit,
+                test_aug,
+                test_label_aug,
+                model.vars(),
+                config.general.parallel,
+                "train",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
+            )
+        if val_loader is not None:
+            metric = test(
+                config,
+                val_loader,
+                predict_op_parallel if config.general.parallel else predict_op_jit,
+                test_aug,
+                test_label_aug,
+                model.vars(),
+                config.general.parallel,
+                "val",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
+            )
+            scheduler.update_score(metric)
+        else:
+            metric = None
+        if config.DP:
+            epsilon = analyse_epsilon(
+                accountant,
+                (len(train_loader) // batch_expansion_factor) * (epoch + 1),
+                sigma,
+                sampling_rate,
+                delta,
+            )
+            if config.general.log_wandb:
+                wandb.log({"epsilon": epsilon})
+            else:
+                print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})")
+        if config.unfreeze_schedule is not None:
+            model_vars, fresh_model_vars = unfreeze_schedule(epoch + 1)
+            if fresh_model_vars:
+                train_op, train_vars = make_train_op(
+                    model,
+                    model_vars,
+                    config,
+                    loss_class,
+                    augment_op,
+                    label_augment_op,
+                    grad_acc,
+                    total_noise,
+                    effective_batch_size,
+                    n_augmentations,
+                )
+            n_train_vars_cur = get_num_params(model_vars)
+            if config.general.log_wandb:
+                wandb.log({"num_trained_vars": n_train_vars_cur})
+            else:
+                print(f"\tNum Train Vars: {n_train_vars_cur:,}")
+        if checkpoint is not None:
+            checkpoint.save(model.vars(), idx=epoch)
+        if metric is not None and stopper(metric):
+            print("Early Stopping was activated -> Stopping Training")
+            break
+    return epoch_time

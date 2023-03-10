@@ -286,6 +286,9 @@ class AttackConfig:
     N_shadow_eval: Optional[int] = None
     N_attack_eval: Optional[int] = None
     use_saved_attack_data: Optional[Path] = None
+    pca_dim: Optional[int] = 2
+    rescale_params: bool = True
+    include_eval_data_in_rescale_and_pca: bool = False
 
 
 @dataclass

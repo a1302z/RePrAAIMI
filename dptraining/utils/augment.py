@@ -1,5 +1,6 @@
 from math import prod
 from typing import Any, Callable
+from omegaconf import OmegaConf
 
 import objax
 from jax import numpy as jnp
@@ -34,6 +35,7 @@ from omegaconf import DictConfig
 from torchvision import transforms
 
 from random import choice, seed
+from dptraining.config import Config
 
 seed(0)
 
@@ -42,6 +44,37 @@ torchvision_transforms = {
     for mn in dir(transforms)
     if callable(getattr(transforms, mn))
 }
+
+
+def make_augs(config: Config):
+    augmenter = Transformation.from_dict_list(
+        OmegaConf.to_container(config.augmentations)
+    )
+    n_augmentations = augmenter.get_n_augmentations()
+    augment_op = augmenter.create_vectorized_transform()
+    if config.label_augmentations:
+        label_augmenter = Transformation.from_dict_list(
+            OmegaConf.to_container(config.label_augmentations)
+        )
+        label_augment_op = label_augmenter.create_vectorized_transform()
+    else:
+        label_augment_op = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
+        # augment_op = augment_op.create_vectorized_transform()
+    if config.test_augmentations:
+        test_augmenter = Transformation.from_dict_list(
+            OmegaConf.to_container(config.test_augmentations)
+        )
+        test_aug = test_augmenter.create_vectorized_transform()
+    else:
+        test_aug = lambda x: x  # pylint:disable=unnecessary-lambda-assignment
+    if config.test_label_augmentations:
+        test_label_augmenter = Transformation.from_dict_list(
+            OmegaConf.to_container(config.test_label_augmentations)
+        )
+        test_label_aug = test_label_augmenter.create_vectorized_transform()
+    else:
+        test_label_aug = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
+    return n_augmentations, augment_op, label_augment_op, test_aug, test_label_aug
 
 
 class ConsecutiveAugmentations:
