@@ -1,4 +1,4 @@
-from typing import Any, Tuple
+from typing import Any
 
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -14,7 +14,7 @@ def fft_conversion(img, axes=None):
 
 
 class NumpyCIFAR10(CIFAR10):
-    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+    def __getitem__(self, index: int) -> tuple[Any, Any]:
         img, target = self.data[index], self.targets[index]
 
         if self.transform is not None:
@@ -51,10 +51,10 @@ class CIFAR10Creator(DataLoaderCreator):
     @staticmethod
     def make_datasets(  # pylint:disable=too-many-arguments
         config: Config,
-        transforms: Tuple,
+        transforms: tuple,
         numpy_optimisation=True,
         normalize_by_default=True,
-    ) -> Tuple[Dataset, Dataset, Dataset]:
+    ) -> tuple[Dataset, Dataset, Dataset]:
         train_tf, val_tf, test_tf = transforms
         train_kwargs = {
             "root": config.dataset.root,
@@ -125,7 +125,7 @@ class CIFAR10Creator(DataLoaderCreator):
         train_kwargs,
         val_kwargs,
         test_kwargs,
-    ) -> Tuple[DataLoader, DataLoader, DataLoader]:
+    ) -> tuple[DataLoader, DataLoader, DataLoader]:
         train_dl = DataLoader(train_ds, **train_kwargs)
         val_dl = DataLoader(val_ds, **val_kwargs) if val_ds is not None else None
         test_dl = DataLoader(test_ds, **test_kwargs)

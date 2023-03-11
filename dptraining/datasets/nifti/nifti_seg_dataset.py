@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 
 import ctypes
@@ -98,7 +98,7 @@ class NiftiSegmentationDataset(Dataset):
     def __len__(self) -> int:
         return len(self.matched_labeled_scans)
 
-    def __getitem__(self, index: int) -> Tuple[np.array, np.array]:
+    def __getitem__(self, index: int) -> tuple[np.array, np.array]:
         file_key, img_file, label_file = self.matched_labeled_scans[index]
         # print(f"{index} cached: {self.cached_files[index]}")
         # t0 = time()

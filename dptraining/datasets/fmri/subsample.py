@@ -7,14 +7,14 @@ LICENSE file in the root directory of this source tree.
 # pylint: skip-file
 
 import contextlib
-from typing import Optional, Sequence, Tuple, Union
+from typing import Optional, Sequence, Union
 
 import numpy as np
 import torch
 
 
 @contextlib.contextmanager
-def temp_seed(rng: np.random.RandomState, seed: Optional[Union[int, Tuple[int, ...]]]):
+def temp_seed(rng: np.random.RandomState, seed: Optional[Union[int, tuple[int, ...]]]):
     """A context manager for temporarily adjusting the random seed."""
     if seed is None:
         try:
@@ -84,8 +84,8 @@ class MaskFunc:
         self,
         shape: Sequence[int],
         offset: Optional[int] = None,
-        seed: Optional[Union[int, Tuple[int, ...]]] = None,
-    ) -> Tuple[torch.Tensor, int]:
+        seed: Optional[Union[int, tuple[int, ...]]] = None,
+    ) -> tuple[torch.Tensor, int]:
         """
         Sample and return a k-space mask.
 
@@ -114,7 +114,7 @@ class MaskFunc:
         self,
         shape: Sequence[int],
         offset: Optional[int],
-    ) -> Tuple[torch.Tensor, torch.Tensor, int]:
+    ) -> tuple[torch.Tensor, torch.Tensor, int]:
         """
         Sample a new k-space mask.
 
@@ -428,7 +428,7 @@ class MagicMaskFractionFunc(MagicMaskFunc):
         self,
         shape: Sequence[int],
         offset: Optional[int],
-    ) -> Tuple[torch.Tensor, torch.Tensor, int]:
+    ) -> tuple[torch.Tensor, torch.Tensor, int]:
         """
         Sample a new k-space mask.
 

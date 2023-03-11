@@ -1,7 +1,7 @@
 from copy import deepcopy
 from pathlib import Path
 from pickle import load
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 import numpy as np
 from torch import Generator  # pylint:disable=no-name-in-module
@@ -87,13 +87,13 @@ class TinyImageNet(Dataset):
         assert self.imgs.shape[0] == len(self.labels)
         return len(self.labels)
 
-    def __getitem__(self, index: int) -> Tuple:
+    def __getitem__(self, index: int) -> tuple:
         return self.transform(self.imgs[index]), self.target_tf(self.labels[index])
 
 
 class TinyImageNetCreator(DataLoaderCreator):
     @staticmethod
-    def make_datasets(config: Config, transforms: Tuple) -> Tuple[Dataset, Dataset]:
+    def make_datasets(config: Config, transforms: tuple) -> tuple[Dataset, Dataset]:
         train_tf, val_tf, test_tf = transforms
         train_kwargs = {
             "root": config.dataset.root,

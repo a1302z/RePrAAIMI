@@ -2,7 +2,7 @@ import functools
 import jax
 from jax import numpy as jnp
 
-from typing import Optional, Callable, Tuple
+from typing import Optional, Callable
 from objax.gradient import GradValues
 from objax.module import Function, Vectorize
 from objax import random, ModuleList, StateVar
@@ -16,7 +16,7 @@ class ClipAndAccumulateGrads(PrivateGradValues):
         loss_fn: Callable,
         variables: VarCollection,
         l2_norm_clip: float,
-        batch_axis: Tuple[Optional[int], ...] = (0,),
+        batch_axis: tuple[Optional[int], ...] = (0,),
         use_norm_accumulation: bool = False,
         gradient_accumulation_steps: int = 1,
         num_augmented_samples: int = 1,

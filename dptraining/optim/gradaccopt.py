@@ -1,6 +1,6 @@
 from jax import numpy as jnp
 
-from typing import Optional, Callable, Tuple, Union
+from typing import Optional, Callable, Union
 from objax.gradient import GradValues
 from objax.module import Module
 from objax import ModuleList, StateVar
@@ -12,7 +12,7 @@ class AccumulateGrad(Module):
         self,
         f: Union[Module, Callable],
         variables: Optional[VarCollection],
-        input_argnums: Optional[Tuple[int, ...]] = None,
+        input_argnums: Optional[tuple[int, ...]] = None,
     ):
         super().__init__()
         self.counter = StateVar(jnp.array(0, dtype=jnp.int32))

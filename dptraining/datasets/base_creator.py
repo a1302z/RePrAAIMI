@@ -1,7 +1,6 @@
 import abc
 from pathlib import Path
 from tqdm import tqdm
-from typing import Tuple
 from torch.utils.data import Dataset, DataLoader
 from numpy import newaxis, sqrt
 from dptraining.config import Config
@@ -11,8 +10,8 @@ class DataLoaderCreator(abc.ABC):
     @staticmethod
     @abc.abstractmethod
     def make_datasets(
-        config: Config, transforms: Tuple
-    ) -> Tuple[Dataset, Dataset, Dataset]:
+        config: Config, transforms: tuple
+    ) -> tuple[Dataset, Dataset, Dataset]:
         pass
 
     @staticmethod
@@ -23,7 +22,7 @@ class DataLoaderCreator(abc.ABC):
         train_kwargs,
         val_kwargs,
         test_kwargs,
-    ) -> Tuple[DataLoader, DataLoader, DataLoader]:
+    ) -> tuple[DataLoader, DataLoader, DataLoader]:
         train_dl = DataLoader(train_ds, **train_kwargs)
         val_dl = DataLoader(val_ds, **val_kwargs) if val_ds is not None else None
         test_dl = DataLoader(test_ds, **test_kwargs)

@@ -1,5 +1,3 @@
-from typing import Tuple
-
 from torch import Generator  # pylint:disable=no-name-in-module
 from torch.utils.data import Dataset, random_split
 from torchvision.datasets import ImageNet
@@ -10,7 +8,7 @@ from dptraining.datasets.base_creator import DataLoaderCreator
 
 class ImageNetCreator(DataLoaderCreator):
     @staticmethod
-    def make_datasets(config: Config, transforms) -> Tuple[Dataset, Dataset]:
+    def make_datasets(config: Config, transforms) -> tuple[Dataset, Dataset]:
         train_tf, val_tf, test_tf = transforms
         train_kwargs = {
             "root": config.dataset.root,

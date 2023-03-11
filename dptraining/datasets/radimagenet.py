@@ -1,7 +1,7 @@
 import sys
 from bisect import bisect_right
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Union, cast
 
 import numpy as np
 from PIL import Image
@@ -23,7 +23,7 @@ from dptraining.config import DatasetTask
 
 # from dptraining.datasets.utils import calc_mean_std
 
-DATA_OUTPUT_TYPE = Tuple[np.array, Union[int, np.array]]  # pylint:disable=invalid-name
+DATA_OUTPUT_TYPE = tuple[np.array, Union[int, np.array]]  # pylint:disable=invalid-name
 
 
 SUPPORTED_MODALITIES = ("mr", "ct", "us")
@@ -36,7 +36,7 @@ STATS = {
 }
 
 
-def find_classes(directory: str) -> Tuple[Dict[str, Path], Dict[str, int]]:
+def find_classes(directory: str) -> tuple[Dict[str, Path], Dict[str, int]]:
     """Finds the class folders in a dataset.
 
     See :class:`DatasetFolder` for details.
@@ -118,15 +118,15 @@ class ExtendedImageFolder(ImageFolder):
         self.samples = samples
         self.targets = [s[1] for s in samples]
 
-    def find_classes(self, directory: str) -> Tuple[List[str], Dict[str, int]]:
+    def find_classes(self, directory: str) -> tuple[List[str], Dict[str, int]]:
         return find_classes(directory)
 
     def make_dataset(  # pylint:disable=arguments-renamed
         self,
         directory: str,
-        extensions: Optional[Tuple[str, ...]] = None,
+        extensions: Optional[tuple[str, ...]] = None,
         is_valid_file: Optional[Callable[[str], bool]] = None,
-    ) -> List[Tuple[str, int]]:
+    ) -> List[tuple[str, int]]:
         directory = Path(directory)
 
         both_none = extensions is None and is_valid_file is None
@@ -365,8 +365,8 @@ class RadImageNet(Dataset):
 class RadImageNetCreator(DataLoaderCreator):
     @staticmethod
     def make_datasets(
-        config: dict, transforms: Tuple
-    ) -> Tuple[Dataset, Dataset, Dataset]:
+        config: dict, transforms: tuple
+    ) -> tuple[Dataset, Dataset, Dataset]:
         task = config.dataset.task
         root_folder = Path(config.dataset.root)
         train_split, test_split = (

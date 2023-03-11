@@ -74,7 +74,7 @@ def preprocess_and_convert_to_numpy(
     mean_std: tuple[float],
 ) -> list:
     """Convert scan and label to numpy arrays and perform preprocessing
-    Return: Tuple(np.array, np.array)"""
+    Return: tuple(np.array, np.array)"""
     np_scan = nifti_scan.get_fdata()
     np_label = nifti_mask.get_fdata()
     nifti_mask.uncache()

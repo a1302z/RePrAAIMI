@@ -1,6 +1,6 @@
 # %%
 from pathlib import Path
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 import numpy as np
 
 import pandas as pd
@@ -79,7 +79,7 @@ class HAM10000(Dataset):
 
 class HAM10000Creator(DataLoaderCreator):
     @staticmethod
-    def make_datasets(config: Config, transforms: Tuple) -> Tuple[Dataset, Dataset]:
+    def make_datasets(config: Config, transforms: tuple) -> tuple[Dataset, Dataset]:
         root = Path(config.dataset.root)
         test_split = config.dataset.test_split
         train_split = config.dataset.train_val_split

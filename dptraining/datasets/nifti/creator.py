@@ -1,6 +1,6 @@
 from pathlib import Path
 from random import seed, shuffle
-from typing import Tuple, Optional, Callable
+from typing import Optional, Callable
 from itertools import compress
 from tqdm import tqdm
 import nibabel as nib
@@ -290,8 +290,8 @@ class NiftiSegCreator(DataLoaderCreator):
 
     @staticmethod
     def make_datasets(
-        config: Config, transforms: Tuple
-    ) -> Tuple[Dataset, Dataset, Dataset]:
+        config: Config, transforms: tuple
+    ) -> tuple[Dataset, Dataset, Dataset]:
         if config.dataset.name == DatasetName.msd:
             if config.dataset.nifti_seg_options.msd_subtask:
                 root = (
