@@ -114,8 +114,6 @@ def make_metrics(config: Config):
 def calculate_metrics(
     task, metrics, loss_fn, correct, raw_prediction, binary_reduction
 ):
-    raw_prediction = raw_prediction.reshape(correct.shape)
-    loss = loss_fn(jnp.array(raw_prediction), jnp.array(correct)).item()
     match task:
         case DatasetTask.classification:
             if binary_reduction:
@@ -129,10 +127,11 @@ def calculate_metrics(
             else:
                 predicted = np.argmax(raw_prediction, axis=1, keepdims=True)
         case DatasetTask.reconstruction:
-            predicted = raw_prediction
+            raw_prediction = raw_prediction.reshape(correct.shape)
         case other:
             raise ValueError(f"DatasetTask {other} not defined")
 
+    loss = loss_fn(jnp.array(raw_prediction), jnp.array(correct)).item()
     if np.iscomplexobj(correct):
         correct = np.abs(correct)
     if np.iscomplexobj(predicted):

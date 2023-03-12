@@ -107,7 +107,9 @@ def main(
     # else:
     #     print(f"Num trained params: {n_train_vars_cur:,}")
 
-    identifying_model_str = make_unique_str(config)
+    identifying_model_str = make_unique_str(
+        config, id_str=wandb.run.name if config.general.log_wandb else ""
+    )
 
     # if config.checkpoint:
     #     config.checkpoint.logdir += identifying_model_str
@@ -174,6 +176,8 @@ def main(
         effective_batch_size,
         n_augmentations,
     )
+    attack_train_train_vars.append(objax.random.DEFAULT_GENERATOR.vars())
+    attack_eval_train_vars.append(objax.random.DEFAULT_GENERATOR.vars())
 
     epoch_time = train_loop(
         config,

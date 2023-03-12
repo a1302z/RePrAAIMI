@@ -4,6 +4,7 @@ from typing import cast
 
 from objax import VarCollection
 from numpy import prod
+from datetime import datetime
 
 
 class StateDictObject:
@@ -96,12 +97,12 @@ def get_num_params(model_vars: VarCollection) -> int:
     return sum([prod(v.shape) for v in model_vars.values()])
 
 
-def make_unique_str(config):
+def make_unique_str(config, id_str=""):
     identifying_model_str = ""
     if config.general.make_save_str_unique:
         if config.general.log_wandb:
             identifying_model_str += (
-                f"_{wandb.run.name}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+                f"_{id_str}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
             )
         else:
             identifying_model_str += f"_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"

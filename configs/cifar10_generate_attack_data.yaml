@@ -8,7 +8,7 @@ general:
   eval_init: False
   save_path: cifar10_attack_data
 wandb:
-  project: cifar
+  project: cifar_attack_generation
 dataset: 
   task: classification
   name: CIFAR10

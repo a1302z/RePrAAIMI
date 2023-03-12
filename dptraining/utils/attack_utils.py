@@ -1,4 +1,4 @@
-from contextlib import suppress
+from contextlib import suppress, ExitStack
 from functools import partial
 from itertools import chain
 from time import time
@@ -117,12 +117,12 @@ def make_train_ops(
         )
         for model, model_vars, _ in models
     ]
-    train_ops, train_vars = [tov[0] for tov in attack_train_train_ops_and_vars], [
-        tov[1] for tov in attack_train_train_ops_and_vars
+    train_ops, individual_vars = [tov[0] for tov in attack_train_train_ops_and_vars], [
+        tov[2] for tov in attack_train_train_ops_and_vars
     ]
     model_vars = [model.vars() for model, _, _ in models]
 
-    return train_ops, train_vars, model_vars
+    return train_ops, individual_vars, model_vars
 
 
 def create_N_models(config: Config, N: int):
@@ -184,7 +184,10 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
         desc="Training",
         leave=False,
     )
-    with (sum(train_vars)).replicate() if parallel else suppress():
+    with ExitStack() as es:
+        if parallel:
+            for tv in [x.replicate() for x in train_vars]:
+                es.enter_context(tv)
         for i, data in pbar:
             add_args = {}
             if grad_acc > 1:
@@ -233,7 +236,10 @@ def test_multi_dataset(  # pylint:disable=too-many-arguments,too-many-branches
     loss_fn: Callable,
     multi_dataset: bool = False,
 ) -> float:
-    ctx_mngr = (sum(model_vars)).replicate() if parallel else suppress()
+    ctx_mngr = ExitStack()
+    if parallel:
+        for tv in [x.replicate() for x in model_vars]:
+            ctx_mngr.enter_context(tv)
     per_batch_metrics = (
         config.metrics.per_batch_metrics
         if "per_batch_metrics" in config.metrics

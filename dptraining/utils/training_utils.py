@@ -28,7 +28,6 @@ from dptraining.utils.misc import get_num_params
 N_DEVICES = local_device_count()
 
 
-
 def make_train_op(
     model,
     model_vars,
@@ -40,6 +39,7 @@ def make_train_op(
     total_noise,
     effective_batch_size,
     n_augmentations,
+    only_individual_train_vars: bool = True,
 ):
     ema: Optional[ExponentialMovingAverage] = None
     if config.ema.use_ema:
@@ -49,13 +49,12 @@ def make_train_op(
     opt = make_optim_from_config(config, model_vars)
     train_loss_fn = loss_class.create_train_loss_fn(model_vars, model)
     loss_gv = create_loss_gradient(config, model_vars, train_loss_fn)
-    train_vars = (
-        model_vars + loss_gv.vars() + opt.vars() + objax.random.DEFAULT_GENERATOR.vars()
-    )
+    individual_vars = model_vars + loss_gv.vars() + opt.vars()
     if ema is not None:
-        train_vars += ema.vars()
+        individual_vars += ema.vars()
+    all_vars = individual_vars + objax.random.DEFAULT_GENERATOR.vars()
     train_op = create_train_op(
-        train_vars,
+        all_vars,
         loss_gv,
         opt,
         augment_op,
@@ -68,7 +67,7 @@ def make_train_op(
         ema=ema,
     )
 
-    return train_op, train_vars
+    return train_op, all_vars, individual_vars
 
 
 def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
