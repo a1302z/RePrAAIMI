@@ -30,15 +30,13 @@ loader:
 # test_augmentations:
 model:
   complex: False
-  name: resnet9
-  in_channels: 3
-  num_classes: 10
-  conv: convws_nw
-  activation: mish
-  normalization: gn
-  pooling: avgpool
+  name: mlp
+  activation: elu
   extra_args:
-    scale_norm: True
+    sizes: 
+      - 10
+    inp_size: 3072
+    outp_size: 10
 optim:
   name: nadam
 loss: 
@@ -49,15 +47,15 @@ ema:
   use_ema: True
   decay: 0.995
 hyperparams:
-  epochs: 2
-  batch_size: 1024
-  batch_size_test: 1024
+  epochs: 100
+  batch_size: 1001
+  batch_size_test: 100
   lr: 2e-3
   # momentum: 0.9
   grad_acc_steps: 2
 attack:
   type: RECON_INFORMED
-  N_fixed_dataset: 40000
-  N_shadow_train: 10
-  N_attack_eval: 10
+  N_fixed_dataset: 999
+  N_shadow_train: 10000
+  N_attack_eval: 1000
   

@@ -21,5 +21,6 @@ class MLP(Module):
             layers.append(activation_fn)
         self.mlp = nn.Sequential(layers)
 
-    def __call__(self, *args, **kwargs):
-        return self.mlp(*args, **kwargs)
+    def __call__(self, x, **kwargs):
+        x = x.reshape(x.shape[0], -1)
+        return self.mlp(x, **kwargs)

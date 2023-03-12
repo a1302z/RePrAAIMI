@@ -115,7 +115,9 @@ def make_train_ops(
             effective_batch_size,
             n_augmentations,
         )
-        for model, model_vars, _ in models
+        for model, model_vars, _ in tqdm(
+            models, total=len(models), desc="Create train ops", leave=False
+        )
     ]
     train_ops, individual_vars = [tov[0] for tov in attack_train_train_ops_and_vars], [
         tov[2] for tov in attack_train_train_ops_and_vars
@@ -193,19 +195,21 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
             if grad_acc > 1:
                 add_args["apply_norm_acc"] = (i + 1) % grad_acc == 0
             train_losses = []
-            for train_op, (img, label) in tqdm(  # TODO: vectorize
-                zip(train_ops, data),
+            for j, train_op in tqdm(  # TODO: vectorize
+                enumerate(train_ops),
                 total=len(train_ops),
                 leave=False,
                 desc="Training shadow models",
             ):
+                img, label = data[j] if isinstance(data, list) else data
                 train_result = train_op(
                     img, label, np.float32(learning_rate), **add_args
                 )
                 if train_result is not None:
                     # train_loss, grads = train_result
                     train_losses.append(train_result[0].item())
-            pbar.set_description(f"Average train_loss: {np.mean(train_losses):.2f}")
+            if len(train_losses) > 0:
+                pbar.set_description(f"Average train_loss: {np.mean(train_losses):.2f}")
             # if config.general.log_wandb and train_result is not None:
             #     log_dict = {
             #         "train_loss": train_loss,

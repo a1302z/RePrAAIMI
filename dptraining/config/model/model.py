@@ -87,6 +87,7 @@ class Activation(Enum):
     conjmish = 6
     igaussian = 7
     cardioid = 8
+    elu = 9
 
 
 class RealActivation(Enum):
@@ -94,6 +95,7 @@ class RealActivation(Enum):
     selu = 2
     leakyrelu = 3
     mish = 4
+    elu = 9
 
 
 class ComplexActivation(Enum):

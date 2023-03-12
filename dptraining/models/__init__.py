@@ -295,6 +295,8 @@ def make_real_activation_from_config(config: ModelConfig) -> Callable:
             return functional.leaky_relu
         case RealActivation.mish.value:
             return mish
+        case RealActivation.elu.value:
+            return functional.elu
         case None:
             raise ValueError("No activation layer specified (required)")
         case _:

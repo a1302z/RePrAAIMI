@@ -39,7 +39,7 @@ class FixedAndShadowDatasetFromOneSet(DataSubset):
         if index == super().__len__():
             data = [self.total_dataset[idx] for idx in self.shadow_indices]
         elif index < len(self.total_dataset):
-            data = [super().__getitem__(index)] * self.N_copies
+            data = super().__getitem__(index)
         else:
             raise ValueError(f"Index out of dataset size")
         return data
@@ -70,7 +70,7 @@ class FixedAndShadowDatasetFromTwoSets(DataSubset):
         if index == super().__len__():
             data = [self.shadow_dataset[idx] for idx in self.shadow_indices]
         elif index < len(self.total_dataset):
-            data = [super().__getitem__(index)] * self.N_copies
+            data = super().__getitem__(index)
         else:
             raise ValueError(f"Index out of dataset size")
         return data
