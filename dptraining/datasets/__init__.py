@@ -20,6 +20,7 @@ from dptraining.datasets.fmri import FMRICreator
 from dptraining.datasets.tinyimagenet import TinyImageNetCreator
 from dptraining.datasets.nifti.creator import NiftiSegCreator
 from dptraining.datasets.ham10000 import HAM10000Creator
+from dptraining.datasets.attack_datasets import AttackCreator
 from dptraining.datasets.subset import (
     FixedAndShadowDatasetFromOneSet,
     DataSubset,
@@ -55,6 +56,8 @@ def select_creator(config):
             creator = NiftiSegCreator
         case DatasetName.ham10000:
             creator = HAM10000Creator
+        case DatasetName.attack:
+            creator = AttackCreator
         case _ as unsupported:
             raise ValueError(f"Unsupported dataset '{unsupported}'.")
     return creator

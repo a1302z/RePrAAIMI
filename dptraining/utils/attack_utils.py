@@ -29,7 +29,7 @@ N_DEVICES = local_device_count()
 def rescale_and_shrink_network_params(
     config: Config, attack_train_weights, attack_eval_weights
 ):
-    if config.attack.rescale_params:
+    if config.dataset.attack.rescale_params:
 
         def scaler_fn(params_train, params_test, use_train_only=True):
             if use_train_only:
@@ -45,11 +45,11 @@ def rescale_and_shrink_network_params(
         attack_train_weights, attack_eval_weights = scaler_fn(
             attack_train_weights,
             attack_eval_weights,
-            use_train_only=config.attack.include_eval_data_in_rescale_and_pca,
+            use_train_only=config.dataset.attack.include_eval_data_in_rescale_and_pca,
         )
-    if config.attack.pca_dim:
-        pca = decomposition.PCA(n_components=config.attack.pca_dim)
-        if config.attack.include_eval_data_in_rescale_and_pca:
+    if config.dataset.attack.pca_dim:
+        pca = decomposition.PCA(n_components=config.dataset.attack.pca_dim)
+        if config.dataset.attack.include_eval_data_in_rescale_and_pca:
             pca.fit(np.concatenate([attack_train_weights, attack_eval_weights]))
         else:
             pca.fit(attack_train_weights)

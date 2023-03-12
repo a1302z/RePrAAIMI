@@ -269,6 +269,32 @@ class L1Loss(LossFunctionCreator):
         return loss_fn
 
 
+class MSELoss(LossFunctionCreator):
+    def create_train_loss_fn(self, model_vars, model):
+        @objax.Function.with_vars(model_vars)
+        def loss_fn(inpt, label):
+            logit = model(inpt, training=True)
+            loss = objax.functional.loss.mean_squared_error(
+                logit.reshape(label.shape), label
+            )
+            loss = self._weight_loss(loss, label)
+            loss = self._reduce_loss(loss)
+            return loss
+
+        return loss_fn
+
+    def create_test_loss_fn(self):
+        def loss_fn(predicted, correct):
+            loss = objax.functional.loss.mean_squared_error(
+                predicted.reshape(correct.shape), correct
+            )
+            loss = self._weight_loss(loss, correct)
+            loss = self._reduce_loss(loss)
+            return loss
+
+        return loss_fn
+
+
 class L2Regularization(LossFunctionCreator):
     def __init__(self, config: Config) -> None:
         super().__init__(config)

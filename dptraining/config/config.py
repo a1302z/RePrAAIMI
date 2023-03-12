@@ -42,6 +42,7 @@ class WandBConfig:
 
 
 class DatasetName(Enum):
+    attack = 0
     CIFAR10 = 1
     imagenet = 2
     tinyimagenet = 3
@@ -145,6 +146,14 @@ class HAM10000:
 
 
 @dataclass
+class AttackData:
+    attack_data_path: Path = MISSING
+    pca_dim: Optional[int] = 2
+    rescale_params: bool = True
+    include_eval_data_in_rescale_and_pca: bool = False
+
+
+@dataclass
 class DatasetConfig:
     name: DatasetName = MISSING
     root: str = MISSING
@@ -159,6 +168,7 @@ class DatasetConfig:
     fmri: Optional[FmriConfig] = None
     nifti_seg_options: Optional[NiftiSegmentationConfig] = None
     ham: Optional[HAM10000] = None
+    attack: Optional[AttackData] = None
     datasplit_seed: int = 0
 
 
@@ -190,7 +200,8 @@ class OptimConfig:
 class LossType(Enum):
     cse = 1
     l1 = 2
-    dice = 3
+    mse = 3
+    dice = 4
 
 
 class LossReduction(Enum):
@@ -273,8 +284,8 @@ class DPConfig:
 
 class AttackType(Enum):
     MIA_STANDARD = 0
-    MIA_INFORMED = 1  # For now only this is supported
-    RECON_INFORMED = 2
+    MIA_INFORMED = 1
+    RECON_INFORMED = 2  # For now only this is supported
     RECON_GB = 3
 
 
@@ -285,10 +296,6 @@ class AttackConfig:
     N_shadow_train: int = MISSING
     N_shadow_eval: Optional[int] = None
     N_attack_eval: Optional[int] = None
-    use_saved_attack_data: Optional[Path] = None
-    pca_dim: Optional[int] = 2
-    rescale_params: bool = True
-    include_eval_data_in_rescale_and_pca: bool = False
 
 
 @dataclass

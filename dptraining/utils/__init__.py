@@ -12,6 +12,7 @@ from dptraining.utils.loss import (
     CrossEntropy,
     CombinedLoss,
     L1Loss,
+    MSELoss,
     L2Regularization,
     DiceLoss,
     f_score,
@@ -66,6 +67,8 @@ def make_loss_from_config(config: Config):  # pylint:disable=unused-argument
             loss_fn = CrossEntropy(config)
         case LossType.l1:
             loss_fn = L1Loss(config)
+        case LossType.mse:
+            loss_fn = MSELoss(config)
         case LossType.dice:
             loss_fn = DiceLoss(config)
         case other:

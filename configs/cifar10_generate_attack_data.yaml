@@ -50,15 +50,14 @@ ema:
   decay: 0.995
 hyperparams:
   epochs: 2
-  batch_size: 101
-  batch_size_test: 101
+  batch_size: 1024
+  batch_size_test: 1024
   lr: 2e-3
   # momentum: 0.9
   grad_acc_steps: 2
 attack:
-  type: MIA_INFORMED
-  N_fixed_dataset: 100
+  type: RECON_INFORMED
+  N_fixed_dataset: 40000
   N_shadow_train: 10
   N_attack_eval: 10
-  # use_saved_attack_data: attack_training_data.pt
   

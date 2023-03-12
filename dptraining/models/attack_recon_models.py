@@ -19,7 +19,7 @@ class MLP(Module):
         layers.append(nn.Linear(sizes[-1], outp_size))
         if activate_final:
             layers.append(activation_fn)
-        self.mlp = nn.Sequential(*layers)
+        self.mlp = nn.Sequential(layers)
 
     def __call__(self, *args, **kwargs):
         return self.mlp(*args, **kwargs)

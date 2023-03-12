@@ -21,6 +21,7 @@ from dptraining.config.config import (
     Normalization,
     DataStats,
     CTWindow,
+    AttackType
 )
 
 from dptraining.config.utils import get_allowed_names, get_allowed_values

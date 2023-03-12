@@ -4,6 +4,7 @@ from typing import Any, Union
 from warnings import warn
 
 import numpy as np
+from jax import numpy as jnp
 from omegaconf import DictConfig, OmegaConf
 from skimage import metrics as skimagemetrics
 from sklearn import metrics as sklearnmetrics
@@ -113,18 +114,25 @@ def make_metrics(config: Config):
 def calculate_metrics(
     task, metrics, loss_fn, correct, raw_prediction, binary_reduction
 ):
-    loss = loss_fn(raw_prediction, correct).item()
-    if task in [DatasetTask.classification, DatasetTask.reconstruction]:
-        if binary_reduction:
-            predicted = np.where(raw_prediction > 0.5, 1, 0)
-        else:
-            predicted = raw_prediction.argmax(axis=1)
-        correct, predicted = correct.squeeze(), predicted.squeeze()
-    elif task == DatasetTask.segmentation:
-        if binary_reduction:
-            predicted = np.where(raw_prediction > 0.5, 1.0, 0.0)
-        else:
-            predicted = np.argmax(raw_prediction, axis=1, keepdims=True)
+    raw_prediction = raw_prediction.reshape(correct.shape)
+    loss = loss_fn(jnp.array(raw_prediction), jnp.array(correct)).item()
+    match task:
+        case DatasetTask.classification:
+            if binary_reduction:
+                predicted = np.where(raw_prediction > 0.5, 1, 0)
+            else:
+                predicted = raw_prediction.argmax(axis=1)
+            correct, predicted = correct.squeeze(), predicted.squeeze()
+        case DatasetTask.segmentation:
+            if binary_reduction:
+                predicted = np.where(raw_prediction > 0.5, 1.0, 0.0)
+            else:
+                predicted = np.argmax(raw_prediction, axis=1, keepdims=True)
+        case DatasetTask.reconstruction:
+            predicted = raw_prediction
+        case other:
+            raise ValueError(f"DatasetTask {other} not defined")
+
     if np.iscomplexobj(correct):
         correct = np.abs(correct)
     if np.iscomplexobj(predicted):

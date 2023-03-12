@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 
 class ModelName(Enum):
+    mlp = 0
     cifar10model = 1
     resnet18 = 2
     resnet9 = 3
@@ -22,6 +23,7 @@ class ModelName(Enum):
 class RealModelName(
     Enum
 ):  # TODO: split also by classification vs segmentation/recon models
+    mlp = 0
     cifar10model = 1
     resnet18 = 2
     resnet9 = 3

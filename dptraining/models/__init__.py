@@ -73,6 +73,7 @@ from dptraining.models.layers import (
 from dptraining.models.unet import Unet
 from dptraining.models.resnet9 import ResNet9
 from dptraining.models.smoothnet import get_smoothnet
+from dptraining.models.attack_recon_models import MLP
 from dptraining.utils.gradual_unfreezing import make_unfreezing_schedule
 
 
@@ -478,6 +479,10 @@ def make_real_model_from_config(config: ModelConfig) -> Callable:
                 pool_func=partial(make_real_pooling_from_config(config), size=2),
                 **kwargs,
             )
+        case RealModelName.mlp.value:
+            already_defined = ("act_func",)
+            kwargs = get_kwargs(MLP, already_defined, config)
+            return MLP(activation_fn=make_real_activation_from_config(config), **kwargs)
         case RealModelName.smoothnet.value:
             already_defined = (
                 "in_channels",
