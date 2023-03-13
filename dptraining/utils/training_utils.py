@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 sys.path.insert(0, str(Path.cwd()))
 
-from dptraining.config import Config
+from dptraining.config import Config, DatasetTask
 from dptraining.privacy import ClipAndAccumulateGrads, analyse_epsilon
 from dptraining.optim import AccumulateGrad, make_optim_from_config
 from dptraining.utils.metrics import (
@@ -323,7 +323,11 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
         ):
             image = test_aug(image)
             label = test_label_aug(label)
-            n_images = image.shape[0]
+            n_images = (
+                image[0].shape[0]
+                if isinstance(image, (list, tuple))
+                else image.shape[0]
+            )
             if parallel and not (n_images % N_DEVICES) == 0:
                 max_samples = n_images - (n_images % N_DEVICES)
                 image = image[:max_samples]
@@ -344,6 +348,30 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
             else:
                 correct.append(label)
                 scores.append(y_pred)
+            if i == 0 and config.wandb.log_image_batch > 0:
+                N = config.wandb.log_image_batch
+                match config.dataset.task:
+                    case DatasetTask.reconstruction:
+                        gt_images = wandb.Image(label[:N], caption="Ground Truth")
+                        pred_images = wandb.Image(y_pred[:N], caption="Prediction")
+                        log_dict = {"gt_images": gt_images, "pred_images": pred_images}
+                    case DatasetTask.classification:
+                        inp_images = wandb.Image(image[:N], caption="Inputs")
+                        log_dict = {"inputs": inp_images}
+                    case DatasetTask.segmentation:  # TODO support for 3D
+                        inp_images = wandb.Image(
+                            image[:N],
+                            masks={
+                                "predictions": {"mask_data": y_pred[:N]},
+                                "groundtruth": {"mask_data": label[:N]},
+                            },
+                        )
+                        log_dict = {"segmentations": inp_images}
+                    case other:
+                        raise ValueError(f"Logging for task {other} not implemented")
+
+                wandb.log(log_dict)
+
             if i + 1 >= max_batches:
                 break
     if per_batch_metrics:

@@ -10,6 +10,7 @@ general:
   # save_path:
 wandb:
   project: ukbb
+  log_image_batch: 10
 # checkpoint:
 #   logdir:
 #   keep_ckpts: 10
@@ -84,8 +85,8 @@ ema:
   decay: 0.999
 hyperparams:
   epochs: 10
-  batch_size: 1
-  batch_size_test: 1
+  batch_size: 2
+  batch_size_test: 10
   lr: 2e-3
   # momentum: 0.9
   # l2regularization: 1e-5

@@ -8,7 +8,54 @@ from dptraining.config import Config, AttackType
 from dptraining.utils.attack_utils import rescale_and_shrink_network_params
 
 
-class AttackDataset(Dataset):
+class MIADataset(Dataset):
+    def __init__(
+        self,
+        model_weights: np.array,
+        differing_samples: np.array,
+        transform: Optional[Callable] = None,
+        label_transform: Optional[Callable] = None,
+        deterministic: bool = False,  # Always compare the same two samples
+    ) -> None:
+        super().__init__()
+        self.model_weights = model_weights
+        self.differing_samples = differing_samples
+        self.transform: Callable = transform if transform else lambda _: _
+        self.label_transform: Callable = (
+            label_transform if label_transform else lambda _: _
+        )
+        self.deterministic = deterministic
+
+    def __len__(self) -> int:
+        return self.model_weights.shape[0]
+
+    def __getitem__(self, index: int) -> tuple[tuple[np.array, np.array], int]:
+        L = self.__len__()
+        if self.deterministic:
+            rng = np.random.Generator(np.random.PCG64(index))
+            order = rng.choice(a=[True, False])
+            other_idx = (index - rng.integers(self.__len__() - 1) - 1) % L
+        else:
+            order = np.random.choice(a=[True, False])
+            other_idx = (
+                index - np.random.randint(self.__len__() - 1) - 1
+            ) % L  # this should prevent that the same other and idx are equal
+        assert index != other_idx, "This shouldn't happen"
+        model_weights = self.model_weights[index]
+        true_sample = self.differing_samples[index]
+        false_sample = self.differing_samples[other_idx]
+        # This order so label 0 means first element is correct
+        return (
+            [
+                model_weights,
+                false_sample if order else true_sample,
+                true_sample if order else false_sample,
+            ],
+            int(order),
+        )
+
+
+class ReconAttackDataset(Dataset):
     def __init__(
         self,
         attack_input: np.array,
@@ -48,31 +95,62 @@ class AttackCreator(DataLoaderCreator):
             config, attack_train_weights, attack_eval_weights
         )
 
-        if config.attack.type == AttackType.RECON_INFORMED:
-            train_ds = AttackDataset(
-                attack_train_weights, attack_train_targets, transform=transforms[0]
-            )
-            test_split = int(
-                round(config.dataset.test_split * attack_eval_weights.shape[0])
-            )
-            random_samples = np.arange(attack_eval_weights.shape[0])
-            rng = np.random.Generator(np.random.PCG64(config.dataset.datasplit_seed))
-            rng.shuffle(random_samples)
-            eval_idcs, test_idcs = (
-                random_samples[test_split:],
-                random_samples[:test_split],
-            )
-            eval_ds = AttackDataset(
-                attack_eval_weights[eval_idcs],
-                attack_eval_targets[eval_idcs],
-                transform=transforms[1],
-            )
-            test_ds = AttackDataset(
-                attack_eval_weights[test_idcs],
-                attack_eval_targets[test_idcs],
-                transform=transforms[2],
-            )
-        else:
-            raise ValueError(f"Attack Type {config.attack.type} not supported yet")
+        match config.attack.type:
+            case AttackType.RECON_INFORMED:
+                train_ds = ReconAttackDataset(
+                    attack_train_weights, attack_train_targets, transform=transforms[0]
+                )
+                test_split = int(
+                    round(config.dataset.test_split * attack_eval_weights.shape[0])
+                )
+                random_samples = np.arange(attack_eval_weights.shape[0])
+                rng = np.random.Generator(
+                    np.random.PCG64(config.dataset.datasplit_seed)
+                )
+                rng.shuffle(random_samples)
+                eval_idcs, test_idcs = (
+                    random_samples[test_split:],
+                    random_samples[:test_split],
+                )
+                eval_ds = ReconAttackDataset(
+                    attack_eval_weights[eval_idcs],
+                    attack_eval_targets[eval_idcs],
+                    transform=transforms[1],
+                )
+                test_ds = ReconAttackDataset(
+                    attack_eval_weights[test_idcs],
+                    attack_eval_targets[test_idcs],
+                    transform=transforms[2],
+                )
+            case AttackType.MIA_INFORMED:
+                train_ds = MIADataset(
+                    attack_train_weights, attack_train_targets, transform=transforms[0]
+                )
+                test_split = int(
+                    round(config.dataset.test_split * attack_eval_weights.shape[0])
+                )
+                random_samples = np.arange(attack_eval_weights.shape[0])
+                rng = np.random.Generator(
+                    np.random.PCG64(config.dataset.datasplit_seed)
+                )
+                rng.shuffle(random_samples)
+                eval_idcs, test_idcs = (
+                    random_samples[test_split:],
+                    random_samples[:test_split],
+                )
+                eval_ds = MIADataset(
+                    attack_eval_weights[eval_idcs],
+                    attack_eval_targets[eval_idcs],
+                    transform=transforms[1],
+                    deterministic=True,
+                )
+                test_ds = MIADataset(
+                    attack_eval_weights[test_idcs],
+                    attack_eval_targets[test_idcs],
+                    transform=transforms[2],
+                    deterministic=True,
+                )
+            case other:
+                raise ValueError(f"Attack Type {other} not supported yet")
 
         return train_ds, eval_ds, test_ds

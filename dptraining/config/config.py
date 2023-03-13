@@ -25,6 +25,7 @@ class GeneralConfig:
     eval_train: bool = MISSING
     make_save_str_unique: Optional[str] = None
     eval_init: bool = False
+    print_info: bool = True
 
 
 @dataclass
@@ -39,6 +40,7 @@ class WandBConfig:
     tags: Optional[list[str]] = None
     name: Optional[str] = None
     save_code: Optional[bool] = None
+    log_image_batch: int = 0
 
 
 class DatasetName(Enum):
@@ -174,6 +176,7 @@ class DatasetConfig:
 
 class LoaderCollateFn(Enum):
     numpy = 1
+    mia = 2
 
 
 @dataclass
@@ -289,6 +292,7 @@ class AttackType(Enum):
     RECON_GB = 3
 
 
+
 @dataclass
 class AttackConfig:
     type: AttackType = MISSING
@@ -296,6 +300,9 @@ class AttackConfig:
     N_shadow_train: int = MISSING
     N_shadow_eval: Optional[int] = None
     N_attack_eval: Optional[int] = None
+    grad_model: Optional[ModelConfig] = None
+    img_model: Optional[ModelConfig] = None
+    final_model: Optional[ModelConfig] = None
 
 
 @dataclass

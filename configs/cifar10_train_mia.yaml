@@ -1,0 +1,84 @@
+defaults:
+  - base_config
+  - _self_
+general:
+  log_wandb: False
+  parallel: False
+  eval_train: False
+  eval_init: False
+  # save_path: cifar10_attack_data
+wandb:
+  project: cifar_mia
+dataset: 
+  task: classification
+  name: attack
+  attack:
+    attack_data_path: cifar10_attack_data_mlp_100.pt
+    pca_dim: 2
+    rescale_params: True
+    include_eval_data_in_rescale_and_pca: False
+metrics:
+  main: 
+    roc_auc_score: 
+  logging:
+    roc_auc_score:
+    accuracy_score:
+    classification_report:
+      output_dict: True
+      zero_division: 0
+    matthews_corrcoef:
+loader: 
+  num_workers: 0
+  # prefetch_factor: 16
+  collate_fn: mia
+# augmentations:
+# test_augmentations:
+model:
+  complex: False
+  name: miabase
+optim:
+  name: nadam
+loss: 
+  type: cse
+  reduction: sum
+  binary_loss: True
+# ema:
+#   use_ema: True
+#   decay: 0.995
+hyperparams:
+  epochs: 100
+  batch_size: 1024
+  batch_size_test: 1024
+  lr: 2e-3
+  # momentum: 0.9
+  grad_acc_steps: 1
+attack:
+  type: MIA_INFORMED
+  grad_model:
+    complex: False
+    name: mlp
+    activation: relu
+    extra_args:
+      inp_size: 2
+      outp_size: 100
+      sizes:
+        - 64
+  img_model:
+    complex: False
+    name: mlp
+    activation: relu
+    extra_args:
+      inp_size: 3072
+      outp_size: 100
+      sizes:
+        - 512
+  final_model:
+    complex: False
+    name: mlp
+    activation: relu
+    extra_args:
+      inp_size: 200
+      outp_size: 1
+      sizes:
+        - 64
+    

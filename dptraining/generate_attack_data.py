@@ -98,7 +98,7 @@ def main(
     n_train_vars_total: int = get_num_params(train_models[0][1])
     if config.general.log_wandb:
         wandb.log({"total_model_vars": n_train_vars_total})
-    else:
+    elif config.general.print_info:
         print(f"Total model params: {n_train_vars_total:,}")
 
     # n_train_vars_cur: int = get_num_params(model_vars)
@@ -141,7 +141,7 @@ def main(
         test_aug,
         test_label_aug,
     ) = make_augs(config)
-    if n_augmentations > 1:
+    if n_augmentations > 1 and config.general.print_info:
         print(f"Augmentation multiplicity of {n_augmentations}")
     scheduler = make_scheduler_from_config(config)
     stopper = make_stopper_from_config(config)

@@ -25,6 +25,21 @@ def collate_np_reconstruction(
     return list_of_outputs
 
 
+def collate_mia(
+    list_of_data_tuples: list[
+        tuple[tuple[np.array, np.array, np.array], list[Union[int, float]]]
+    ]
+) -> tuple[np.array, np.array]:
+    return (
+        (
+            np.stack([b[0][0] for b in list_of_data_tuples]),
+            np.stack([b[0][1] for b in list_of_data_tuples]),
+            np.stack([b[0][1] for b in list_of_data_tuples]),
+        ),
+        np.array([b[1] for b in list_of_data_tuples], dtype=int),
+    )
+
+
 def create_collate_fn_lists(
     collate_fn: Callable,
 ) -> list[tuple[np.array, Union[int, float, np.array]]]:

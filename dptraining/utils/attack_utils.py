@@ -135,7 +135,7 @@ def create_N_models(config: Config, N: int):
         leave=False,
         desc="Creating shadow models",
     ):
-        model = make_model_from_config(config.model)
+        model = make_model_from_config(config)
         model_vars, _, must_train_vars = setup_pretrained_model(config, model)
         models.append((model, model_vars, must_train_vars))
     return models

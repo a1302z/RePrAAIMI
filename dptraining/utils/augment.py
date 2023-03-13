@@ -47,11 +47,15 @@ torchvision_transforms = {
 
 
 def make_augs(config: Config):
-    augmenter = Transformation.from_dict_list(
-        OmegaConf.to_container(config.augmentations)
-    )
-    n_augmentations = augmenter.get_n_augmentations()
-    augment_op = augmenter.create_vectorized_transform()
+    if config.augmentations:
+        augmenter = Transformation.from_dict_list(
+            OmegaConf.to_container(config.augmentations)
+        )
+        n_augmentations = augmenter.get_n_augmentations()
+        augment_op = augmenter.create_vectorized_transform()
+    else:
+        n_augmentations = 1
+        augment_op = lambda x: x
     if config.label_augmentations:
         label_augmenter = Transformation.from_dict_list(
             OmegaConf.to_container(config.label_augmentations)

@@ -74,17 +74,17 @@ def main(
     if config.hyperparams.overfit is not None:
         val_loader = train_loader
         test_loader = train_loader
-    model = make_model_from_config(config.model)
+    model = make_model_from_config(config)
     model_vars, unfreeze_schedule, _ = setup_pretrained_model(config, model)
     n_train_vars_total: int = get_num_params(model.vars())
     if config.general.log_wandb:
         wandb.log({"total_model_vars": n_train_vars_total})
-    else:
+    elif config.general.print_info:
         print(f"Total model params: {n_train_vars_total:,}")
     n_train_vars_cur: int = get_num_params(model_vars)
     if config.general.log_wandb:
         wandb.log({"num_trained_vars": n_train_vars_cur})
-    else:
+    elif config.general.print_info:
         print(f"Num trained params: {n_train_vars_cur:,}")
 
     identifying_model_str = make_unique_str(config)
@@ -135,14 +135,14 @@ def main(
         test_aug,
         test_label_aug,
     ) = make_augs(config)
-    if n_augmentations > 1:
+    if n_augmentations > 1 and config.general.print_info:
         print(f"Augmentation multiplicity of {n_augmentations}")
     scheduler = make_scheduler_from_config(config)
     stopper = make_stopper_from_config(config)
     loss_class = make_loss_from_config(config)
     test_loss_fn = loss_class.create_test_loss_fn()
 
-    train_op, train_vars = make_train_op(
+    train_op, train_vars, _ = make_train_op(
         model,
         model_vars,
         config,
@@ -204,7 +204,8 @@ def main(
         save_path = save_path.parent / (
             save_path.stem + identifying_model_str + save_path.suffix
         )
-        print(f"Saving model to {config.general.save_path}")
+        if config.general.print_info:
+            print(f"Saving model to {config.general.save_path}")
         objax.io.save_var_collection(save_path, model.vars())
     if config.general.log_wandb:
         run.finish()

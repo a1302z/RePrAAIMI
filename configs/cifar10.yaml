@@ -28,15 +28,13 @@ loader:
 # test_augmentations:
 model:
   complex: False
-  name: resnet9
-  in_channels: 3
-  num_classes: 10
-  conv: convws_nw
-  activation: mish
-  normalization: gn
-  pooling: avgpool
+  name: mlp
+  activation: elu
   extra_args:
-    scale_norm: True
+    sizes: 
+      - 100
+    inp_size: 3072
+    outp_size: 10
 optim:
   name: nadam
 loss: 

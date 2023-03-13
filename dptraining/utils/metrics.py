@@ -127,7 +127,7 @@ def calculate_metrics(
             else:
                 predicted = np.argmax(raw_prediction, axis=1, keepdims=True)
         case DatasetTask.reconstruction:
-            raw_prediction = raw_prediction.reshape(correct.shape)
+            predicted = raw_prediction = raw_prediction.reshape(correct.shape)
         case other:
             raise ValueError(f"DatasetTask {other} not defined")
 

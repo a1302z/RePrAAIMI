@@ -30,6 +30,7 @@ from dptraining.datasets.utils import (
     collate_np_classification,
     collate_np_reconstruction,
     create_collate_fn_lists,
+    collate_mia,
 )
 from dptraining.utils.augment import Transformation
 
@@ -74,6 +75,9 @@ def get_collate_fn(loader_config, task):
         DatasetTask.segmentation,
     ]:
         return collate_np_reconstruction
+    elif loader_config["collate_fn"] == LoaderCollateFn.mia:
+        assert task == DatasetTask.classification
+        return collate_mia
     else:
         raise ValueError(
             f"collate_fn {loader_config['collate_fn']} for {task} not supported."
