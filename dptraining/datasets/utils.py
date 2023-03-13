@@ -30,11 +30,12 @@ def create_collate_fn_lists(
 ) -> list[tuple[np.array, Union[int, float, np.array]]]:
     def collate_fn_list(list_of_samples: list[list[tuple]]):
         return_value: list[tuple[np.array, Union[int, float, np.array]]] = []
-        contains_list = any((isinstance(l, list) for l in list_of_samples))
-        if contains_list:
-            for i in range(
-                len(list_of_samples)
-            ):  # TODO this can probably be vectorized
+        contains_list = [
+            i for i, l in enumerate(list_of_samples) if isinstance(l, list)
+        ]
+        if len(contains_list) > 0:
+            L = len(list_of_samples[contains_list[0]])
+            for i in range(L):  # TODO this can probably be vectorized
                 return_value.append(
                     collate_fn(
                         [
