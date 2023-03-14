@@ -1,14 +1,12 @@
 import os
 import sys
 from pathlib import Path
-from typing import Union
 
 import hydra
 import numpy as np
 import wandb
 from omegaconf import OmegaConf
-from torch import save as torchsave, load as torchload
-from torch.utils.data import Dataset, DataLoader
+from torch import save as torchsave
 
 sys.path.insert(0, str(Path.cwd()))
 
@@ -16,7 +14,7 @@ os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 # os.environ["CUDA_VISIBLE_DEVICES"] = ""
 # os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 
-from dptraining.config import Config, DatasetTask
+from dptraining.config import Config
 from dptraining.config.config_store import load_config_store
 
 # pylint:disable=import-outside-toplevel
@@ -273,7 +271,7 @@ def main(
             "reconstruction_eval_targets": attack_eval_targets,
             "reconstruction_eval_labels": attack_eval_target_label,
         }
-        torchsave(attack_data_dict, f"{save_path}.pt")
+        torchsave(attack_data_dict, f"{save_path}.pt", pickle_protocol=5)
     #     print(f"Saving model to {config.general.save_path}")
     #     objax.io.save_var_collection(save_path, model.vars())
     print("Average epoch time (all epochs): ", np.average(epoch_time))
