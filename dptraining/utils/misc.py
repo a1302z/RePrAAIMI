@@ -3,8 +3,10 @@ from collections import OrderedDict
 from typing import cast
 
 from objax import VarCollection
-from numpy import prod
+from numpy import prod, empty
 from datetime import datetime
+
+from skimage.util import view_as_blocks
 
 
 class StateDictObject:
@@ -108,3 +110,14 @@ def make_unique_str(config, id_str=""):
             identifying_model_str += f"_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
 
     return identifying_model_str
+
+
+def make_grid_numpy(im_in, ncols=3):
+    im_in = im_in.swapaxes(1, -1)
+    n, h, w, c = im_in.shape
+    dn = (-n) % ncols  # trailing images
+    im_out = empty((n + dn) * h * w * c, im_in.dtype).reshape(-1, w * ncols, c)
+    view = view_as_blocks(im_out, (h, w, c))
+    for k, im in enumerate(list(im_in) + dn * [0]):
+        view[k // ncols, k % ncols, 0] = im
+    return im_out

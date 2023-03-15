@@ -91,9 +91,28 @@ class AttackCreator(DataLoaderCreator):
         attack_eval_weights = attack_data_dict["attack_eval_weights"]
         attack_eval_targets = attack_data_dict["reconstruction_eval_targets"]
 
-        attack_train_weights, attack_eval_weights = rescale_and_shrink_network_params(
-            config, attack_train_weights, attack_eval_weights
-        )
+        if config.dataset.attack.rescale_params or config.dataset.attack.pca_dim:
+            (
+                attack_train_weights,
+                attack_eval_weights,
+            ) = rescale_and_shrink_network_params(
+                config.dataset.attack.rescale_params,
+                config.dataset.attack.pca_dim,
+                attack_train_weights,
+                attack_eval_weights,
+                config.dataset.attack.include_eval_data_in_rescale_and_pca,
+            )
+        if config.dataset.attack.rescale_images or config.dataset.attack.pca_imgs:
+            (
+                attack_train_targets,
+                attack_eval_targets,
+            ) = rescale_and_shrink_network_params(
+                config.dataset.attack.rescale_images,
+                config.dataset.attack.pca_imgs,
+                attack_train_targets,
+                attack_eval_targets,
+                config.dataset.attack.include_eval_data_in_rescale_and_pca,
+            )
 
         match config.attack.type:
             case AttackType.RECON_INFORMED:

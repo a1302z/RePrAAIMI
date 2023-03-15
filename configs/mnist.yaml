@@ -4,16 +4,12 @@ defaults:
 general:
   log_wandb: False
   parallel: False
-  eval_train: False
-  eval_init: False
-  print_info: False
-  save_path: cifar10_attack_data
-  make_save_str_unique: True
+  eval_train: True
 wandb:
-  project: cifar_attack_generation
+  project: mnist
 dataset: 
   task: classification
-  name: CIFAR10
+  name: mnist
   root: ./data
   train_val_split: 0.9
   normalization: True
@@ -37,7 +33,7 @@ model:
   extra_args:
     sizes: 
       - 100
-    inp_size: 3072
+    inp_size: 784
     outp_size: 10
 optim:
   name: nadam
@@ -45,19 +41,23 @@ loss:
   type: cse
   reduction: sum
   binary_loss: False
-# ema:
-#   use_ema: True
-#   decay: 0.995
+ema:
+  use_ema: True
+  decay: 0.995
 hyperparams:
   epochs: 10
-  batch_size: 1001
-  batch_size_test: 100
+  batch_size: 512
+  batch_size_test: 512
   lr: 2e-3
   # momentum: 0.9
   grad_acc_steps: 2
-attack:
-  type: RECON_INFORMED
-  N_fixed_dataset: 34999
-  N_shadow_train: 5000
-  N_attack_eval: 1000
-  
+scheduler:
+  type: reduceonplateau
+  normalize_lr: False
+  patience: 5
+  min_delta: 0.01
+  factor: 0.9
+earlystopping:
+  mode: maximize
+  patience: 100
+  min_delta: 0.01

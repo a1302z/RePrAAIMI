@@ -21,6 +21,7 @@ from dptraining.datasets.tinyimagenet import TinyImageNetCreator
 from dptraining.datasets.nifti.creator import NiftiSegCreator
 from dptraining.datasets.ham10000 import HAM10000Creator
 from dptraining.datasets.attack_datasets import AttackCreator
+from dptraining.datasets.mnist import MNISTCreator
 from dptraining.datasets.subset import (
     FixedAndShadowDatasetFromOneSet,
     DataSubset,
@@ -35,8 +36,12 @@ from dptraining.datasets.utils import (
 from dptraining.utils.augment import Transformation
 
 
-SUPPORTED_FFT = (DatasetName.CIFAR10,)
-SUPPORTED_NORMALIZATION = (DatasetName.CIFAR10, DatasetName.tinyimagenet)
+SUPPORTED_FFT = (DatasetName.CIFAR10, DatasetName.mnist)
+SUPPORTED_NORMALIZATION = (
+    DatasetName.CIFAR10,
+    DatasetName.mnist,
+    DatasetName.tinyimagenet,
+)
 
 
 def select_creator(config):
@@ -59,6 +64,8 @@ def select_creator(config):
             creator = HAM10000Creator
         case DatasetName.attack:
             creator = AttackCreator
+        case DatasetName.mnist:
+            creator = MNISTCreator
         case _ as unsupported:
             raise ValueError(f"Unsupported dataset '{unsupported}'.")
     return creator
@@ -116,9 +123,8 @@ def make_dataset(config: Config) -> tuple[Dataset]:
         else test_tf
     )
     add_kwargs = {}
-    match config.dataset.name:
-        case DatasetName.CIFAR10:
-            add_kwargs["normalize_by_default"] = config.dataset.normalization
+    if config.dataset.name in [DatasetName.CIFAR10, DatasetName.mnist]:
+        add_kwargs["normalize_by_default"] = config.dataset.normalization
     creator = select_creator(config)
     train_ds, val_ds, test_ds = creator.make_datasets(
         config, (train_tf, val_tf, test_tf), **add_kwargs

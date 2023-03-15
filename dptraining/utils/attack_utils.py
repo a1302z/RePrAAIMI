@@ -2,7 +2,7 @@ from contextlib import suppress, ExitStack
 from functools import partial
 from itertools import chain
 from time import time
-from typing import Callable, Iterable
+from typing import Callable, Iterable, Optional
 
 import numpy as np
 from jax import local_device_count
@@ -27,36 +27,51 @@ N_DEVICES = local_device_count()
 
 
 def rescale_and_shrink_network_params(
-    config: Config, attack_train_weights, attack_eval_weights
+    rescale: bool,
+    pca_dim: Optional[int],
+    train_data,
+    eval_data,
+    include_eval: bool,
 ):
-    if config.dataset.attack.rescale_params:
+    if rescale:
 
-        def scaler_fn(params_train, params_test, use_train_only=True):
-            if use_train_only:
-                scaler = preprocessing.StandardScaler().fit(params_train)
-            else:
+        def scaler_fn(train_x, test_x, include_eval=True):
+            old_shape = None
+            if len(train_x.shape) > 2:
+                old_shape = (train_x.shape, test_x.shape)
+                train_x = train_x.reshape(-1, np.prod(train_x.shape[1:]))
+                test_x = test_x.reshape(-1, np.prod(test_x.shape[1:]))
+            if include_eval:
                 scaler = preprocessing.StandardScaler().fit(
-                    np.concatenate([params_train, params_test])
+                    np.concatenate([train_x, test_x])
                 )
-            params_train_scaled = scaler.transform(params_train)
-            params_test_scaled = scaler.transform(params_test)
+            else:
+                scaler = preprocessing.StandardScaler().fit(train_x)
+            params_train_scaled = scaler.transform(train_x)
+            params_test_scaled = scaler.transform(test_x)
+            if old_shape:
+                train_x = train_x.reshape(old_shape[0])
+                test_x = test_x.reshape(old_shape[1])
             return params_train_scaled, params_test_scaled
 
-        attack_train_weights, attack_eval_weights = scaler_fn(
-            attack_train_weights,
-            attack_eval_weights,
-            use_train_only=config.dataset.attack.include_eval_data_in_rescale_and_pca,
+        train_data, eval_data = scaler_fn(
+            train_data,
+            eval_data,
+            include_eval=include_eval,
         )
-    if config.dataset.attack.pca_dim:
-        pca = decomposition.PCA(n_components=config.dataset.attack.pca_dim)
-        if config.dataset.attack.include_eval_data_in_rescale_and_pca:
-            pca.fit(np.concatenate([attack_train_weights, attack_eval_weights]))
+    if pca_dim:
+        if len(train_data.shape) > 2:
+            train_data = train_data.reshape(-1, np.prod(train_data.shape[1:]))
+            eval_data = eval_data.reshape(-1, np.prod(eval_data.shape[1:]))
+        pca = decomposition.PCA(n_components=pca_dim)
+        if include_eval:
+            pca.fit(np.concatenate([train_data, eval_data]))
         else:
-            pca.fit(attack_train_weights)
-        attack_train_weights = pca.transform(attack_train_weights)
-        attack_eval_weights = pca.transform(attack_eval_weights)
+            pca.fit(train_data)
+        train_data = pca.transform(train_data)
+        eval_data = pca.transform(eval_data)
 
-    return attack_train_weights, attack_eval_weights
+    return train_data, eval_data
 
 
 def setup_predict_ops(config: Config, train_models, eval_models):

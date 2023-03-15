@@ -4,7 +4,7 @@ defaults:
 general:
   log_wandb: False
   parallel: False
-  eval_train: False
+  eval_train: True
   eval_init: False
   # save_path: cifar10_attack_data
 wandb:
@@ -13,9 +13,11 @@ dataset:
   task: classification
   name: attack
   attack:
-    attack_data_path: cifar10_attack_data_mlp_100.pt
-    pca_dim: 2
+    attack_data_path: cifar10_attack_data_2000_1000_samples.pt
+    pca_dim: 100
     rescale_params: True
+    # pca_imgs: 100
+    rescale_images: True
     include_eval_data_in_rescale_and_pca: False
 metrics:
   main: 
@@ -47,7 +49,7 @@ loss:
 #   decay: 0.995
 hyperparams:
   epochs: 100
-  batch_size: 1024
+  batch_size: 20
   batch_size_test: 1024
   lr: 2e-3
   # momentum: 0.9
@@ -57,27 +59,27 @@ attack:
   grad_model:
     complex: False
     name: mlp
-    activation: relu
+    activation: elu
     extra_args:
-      inp_size: 2
-      outp_size: 100
+      inp_size: 100
+      outp_size: 50
       sizes:
-        - 64
+        - 100
   img_model:
     complex: False
     name: mlp
-    activation: relu
+    activation: elu
     extra_args:
       inp_size: 3072
-      outp_size: 100
+      outp_size: 50
       sizes:
-        - 512
+        - 100
   final_model:
     complex: False
     name: mlp
-    activation: relu
+    activation: elu
     extra_args:
-      inp_size: 200
+      inp_size: 100
       outp_size: 1
       sizes:
         - 64

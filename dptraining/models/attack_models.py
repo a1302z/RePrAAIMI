@@ -1,6 +1,7 @@
 from objax import Module, nn, functional
 from objax.typing import JaxArray
 from jax import numpy as jn
+from typing import Optional, Callable
 
 
 # Balle et al propose this as (x, 1000, 1000, y) in their sample code
@@ -11,6 +12,7 @@ class MLP(Module):
         outp_size: int,
         sizes: list[int],
         activation_fn=functional.relu,
+        normalization_layer: Optional[Callable] = None,
         activate_final: bool = False,
     ) -> None:
         super().__init__()

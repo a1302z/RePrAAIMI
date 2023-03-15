@@ -26,6 +26,7 @@ class GeneralConfig:
     make_save_str_unique: Optional[str] = None
     eval_init: bool = False
     print_info: bool = True
+    wandb_log_images: int = 0  # logs min(value, batch_size) images
 
 
 @dataclass
@@ -40,7 +41,6 @@ class WandBConfig:
     tags: Optional[list[str]] = None
     name: Optional[str] = None
     save_code: Optional[bool] = None
-    log_image_batch: int = 0
 
 
 class DatasetName(Enum):
@@ -53,6 +53,7 @@ class DatasetName(Enum):
     msd = 6
     ukbb_seg = 7
     ham10000 = 8
+    mnist = 9
 
 
 class MSDSubtask(Enum):
@@ -152,6 +153,8 @@ class AttackData:
     attack_data_path: Path = MISSING
     pca_dim: Optional[int] = 2
     rescale_params: bool = True
+    rescale_images: bool = False
+    pca_imgs: Optional[int] = None
     include_eval_data_in_rescale_and_pca: bool = False
 
 
@@ -290,7 +293,6 @@ class AttackType(Enum):
     MIA_INFORMED = 1
     RECON_INFORMED = 2  # For now only this is supported
     RECON_GB = 3
-
 
 
 @dataclass

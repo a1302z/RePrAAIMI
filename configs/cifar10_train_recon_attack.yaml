@@ -14,7 +14,7 @@ dataset:
   name: attack
   attack:
     attack_data_path: cifar10_attack_data_mlp_100.pt
-    pca_dim: 2
+    pca_dim: 100
     rescale_params: True
     include_eval_data_in_rescale_and_pca: False
 metrics:
@@ -38,7 +38,7 @@ model:
   name: mlp
   activation: relu
   extra_args:
-    inp_size: 2
+    inp_size: 100
     outp_size: 3072
     sizes:
       - 1000
@@ -53,7 +53,7 @@ ema:
   use_ema: True
   decay: 0.995
 hyperparams:
-  epochs: 100
+  epochs: 10000
   batch_size: 1024
   batch_size_test: 1024
   lr: 2e-3

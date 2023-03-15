@@ -22,7 +22,7 @@ from dptraining.utils.metrics import (
     summarise_dict_metrics,
 )
 from dptraining.utils import ExponentialMovingAverage
-from dptraining.utils.misc import get_num_params
+from dptraining.utils.misc import get_num_params, make_grid_numpy
 
 
 N_DEVICES = local_device_count()
@@ -334,6 +334,11 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
                 label = label[:max_samples]
             y_pred = predict_op(image)
             y_pred, label = np.array(y_pred), np.array(label)
+            if config.dataset.task in [
+                # DatasetTask.segmentation,
+                DatasetTask.reconstruction,
+            ]:
+                y_pred = y_pred.reshape(label.shape)
             if per_batch_metrics:
                 main_metric_batch, logging_metric_batch = calculate_metrics(
                     config.dataset.task,
@@ -348,16 +353,25 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
             else:
                 correct.append(label)
                 scores.append(y_pred)
-            if i == 0 and config.wandb.log_image_batch > 0:
-                N = config.wandb.log_image_batch
+            if i == 0 and config.general.wandb_log_images > 0:
+                N = config.general.wandb_log_images
                 match config.dataset.task:
                     case DatasetTask.reconstruction:
-                        gt_images = wandb.Image(label[:N], caption="Ground Truth")
-                        pred_images = wandb.Image(y_pred[:N], caption="Prediction")
-                        log_dict = {"gt_images": gt_images, "pred_images": pred_images}
+                        gt_images = wandb.Image(
+                            make_grid_numpy(label[:N]), caption="Ground Truth"
+                        )
+                        pred_images = wandb.Image(
+                            make_grid_numpy(y_pred[:N]), caption="Prediction"
+                        )
+                        log_dict = {
+                            f"{dataset_split}_gt_images": gt_images,
+                            f"{dataset_split}_pred_images": pred_images,
+                        }
                     case DatasetTask.classification:
-                        inp_images = wandb.Image(image[:N], caption="Inputs")
-                        log_dict = {"inputs": inp_images}
+                        inp_images = wandb.Image(
+                            image[:N], caption="Inputs"
+                        )  # TODO display labels
+                        log_dict = {f"{dataset_split}_inputs": inp_images}
                     case DatasetTask.segmentation:  # TODO support for 3D
                         inp_images = wandb.Image(
                             image[:N],
@@ -366,7 +380,7 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
                                 "groundtruth": {"mask_data": label[:N]},
                             },
                         )
-                        log_dict = {"segmentations": inp_images}
+                        log_dict = {f"{dataset_split}_segmentations": inp_images}
                     case other:
                         raise ValueError(f"Logging for task {other} not implemented")
 

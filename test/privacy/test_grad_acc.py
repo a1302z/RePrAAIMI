@@ -124,7 +124,7 @@ def test_grad_equality(utils):
         }
     }
     config = utils.extend_base_config(config_dict)
-    model = make_model_from_config(config.model)
+    model = make_model_from_config(config)
     data, label = setup_fake_data((10, 3, 32, 32), (10, 1))
     _, gv = setup_fake_training(model)
 
