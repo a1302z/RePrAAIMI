@@ -148,14 +148,21 @@ class HAM10000:
     merge_labels: bool = True  # only for HAM10000
 
 
+class AttackInput(Enum):
+    weights_and_images = 0
+    outputs = 1
+    outputs_and_grads = 2
+
+
 @dataclass
 class AttackData:
     attack_data_path: Path = MISSING
-    pca_dim: Optional[int] = 2
-    rescale_params: bool = True
+    pca_dim: Optional[int] = None
+    rescale_params: bool = False
     rescale_images: bool = False
     pca_imgs: Optional[int] = None
     include_eval_data_in_rescale_and_pca: bool = False
+    attack_input: AttackInput = MISSING
 
 
 @dataclass
@@ -304,7 +311,9 @@ class AttackConfig:
     N_attack_eval: Optional[int] = None
     grad_model: Optional[ModelConfig] = None
     img_model: Optional[ModelConfig] = None
-    final_model: Optional[ModelConfig] = None
+    compare_model: Optional[ModelConfig] = None
+    orig_model: Optional[ModelConfig] = None
+    orig_loss_fn: Optional[LossConfig] = None
 
 
 @dataclass

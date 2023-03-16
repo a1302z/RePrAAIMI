@@ -73,7 +73,7 @@ from dptraining.models.layers import (
 from dptraining.models.unet import Unet
 from dptraining.models.resnet9 import ResNet9
 from dptraining.models.smoothnet import get_smoothnet
-from dptraining.models.attack_models import MLP, MIAModel
+from dptraining.models.attack_models import MLP, MIAWeightImageModel, MIAComparisonModel
 from dptraining.utils.gradual_unfreezing import make_unfreezing_schedule
 
 
@@ -492,7 +492,7 @@ def make_real_model_from_config(config: Config) -> Callable:
             return MLP(
                 activation_fn=make_real_activation_from_config(config.model), **kwargs
             )
-        case RealModelName.miabase.value:
+        case RealModelName.miaweightimage.value:
             grad_model_cfg, img_model_cfg, final_model_cfg = (
                 deepcopy(config),
                 deepcopy(config),
@@ -500,11 +500,16 @@ def make_real_model_from_config(config: Config) -> Callable:
             )
             grad_model_cfg.model = config.attack.grad_model
             img_model_cfg.model = config.attack.img_model
-            final_model_cfg.model = config.attack.final_model
+            final_model_cfg.model = config.attack.compare_model
             grad_model = make_real_model_from_config(grad_model_cfg)
             img_model = make_real_model_from_config(img_model_cfg)
-            final_model = make_real_model_from_config(final_model_cfg)
-            return MIAModel(grad_model, img_model, final_model)
+            compare_model = make_real_model_from_config(final_model_cfg)
+            return MIAWeightImageModel(grad_model, img_model, compare_model)
+        case RealModelName.miacomparison.value:
+            base_model_cfg = deepcopy(config)
+            base_model_cfg.model = config.attack.compare_model
+            base_model = make_real_model_from_config(base_model_cfg)
+            return MIAComparisonModel(base_model)
         case RealModelName.smoothnet.value:
             already_defined = (
                 "in_channels",

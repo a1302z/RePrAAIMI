@@ -14,7 +14,8 @@ class ModelName(Enum):
     smoothnet = 4
     wide_resnet = 5
     unet = 6
-    miabase = 7
+    miaweightimage = 7
+    miacomparison = 8
 
 
 # We can't use union types yet, unfortunately:
@@ -31,7 +32,8 @@ class RealModelName(
     smoothnet = 4
     wide_resnet = 5
     unet = 6
-    miabase = 7
+    miaweightimage = 7
+    miacomparison = 8
 
 
 class ComplexModelName(Enum):
