@@ -32,3 +32,6 @@ dependencies:
     - deepee
     - split-folders
     - pyyaml
+    - lpips
+    - kornia
+    - autodp

@@ -18,11 +18,15 @@
 
 # %%
 from breaching import breaching
+import numpy as np
 import torch
-
+from tqdm import tqdm
 import math
+from omegaconf import open_dict
 
 from breachingobjaxutils.initialize import make_configs, init_wandb, make_make_fns
+from dptraining.privacy import setup_privacy, analyse_epsilon
+from dptraining.datasets import make_loader_from_config
 
 
 # Redirects logs directly into the jupyter notebook
@@ -49,6 +53,25 @@ setup
 
 make_model, make_loss_gv_from_model = make_make_fns(train_config)
 
+train_loader, _, _ = make_loader_from_config(train_config)
+
+if train_config.DP:
+    (
+        grad_acc,
+        accountant,
+        sampling_rate,
+        delta,
+        sigma,
+        total_noise,
+        batch_expansion_factor,
+        effective_batch_size,
+    ) = setup_privacy(train_config, train_loader)
+    with open_dict(cfg):
+        cfg.case.user.total_noise = 1e-5
+    print(
+        f"actual epsilon: {analyse_epsilon(accountant,1,cfg.case.user.total_noise,sampling_rate,delta,)}"
+    )
+
 # %% [markdown]
 # ### Modify config options here
 
@@ -56,7 +79,9 @@ make_model, make_loss_gv_from_model = make_make_fns(train_config)
 # You can use `.attribute` access to modify any of these configurations for the attack, or the case:
 
 # %%
-cfg.case.user.num_data_points = 64  # How many data points does this user own
+cfg.case.user.num_data_points = (
+    train_config.hyperparams.batch_size
+)  # How many data points does this user own
 cfg.case.server.model_modification.type = (
     "CuriousAbandonHonesty"  # What type of Imprint block will be grafted to the model
 )
@@ -135,17 +160,45 @@ reconstructed_user_data, stats = attacker.reconstruct(
 # %%
 user.plot(reconstructed_user_data, savefile="cah_recon.png")
 
-# reconstructed = torch.zeros_like(true_user_data["data"])
+# reconstructed = np.zeros_like(true_user_data["data"])
 # for sample in reconstructed_user_data["data"]:
-#     l2_dists = (sample[None] - true_user_data["data"]).pow(2).mean(dim=[1, 2, 3])
-#     min_dist, min_idx = l2_dists.min(dim=0)
-#     if min_dist < 1e-1:
-#         reconstructed[min_idx] = sample
-# reconstructed_user_data = dict(data=reconstructed, labels=None)
+#     l2_dists = np.power(sample[None] - np.array(true_user_data["data"]), 2).mean(
+#         axis=(1, 2, 3)
+#     )
+#     min_dist, min_idx = np.min(l2_dists, axis=0), np.argmin(l2_dists, axis=0)
+#     # if min_dist < 1e-1:
+#     reconstructed[min_idx] = sample
+#     dists.append(min_dist)
+# for idx, sample in tqdm(
+#     enumerate(true_user_data["data"]),
+#     total=true_user_data["data"].shape[0],
+#     leave=False,
+#     desc="make aligned recon grid",
+# ):
+#     l2_dists = np.power(
+#         sample[None] - np.array(reconstructed_user_data["data"]), 2
+#     ).mean(axis=(1, 2, 3))
+#     min_dist, min_idx = np.min(l2_dists, axis=0), np.argmin(l2_dists, axis=0)
+#     # if min_dist < 1e-1:
+#     reconstructed[idx] = reconstructed_user_data["data"][min_idx]
+#     dists.append(min_dist)
 
-# # %%
+l2_dists = np.power(
+    np.array(true_user_data["data"][:, None, ...]) - np.array(reconstructed_user_data["data"]), 2
+).mean(axis=(2, 3, 4))
+min_dist, min_idx = np.min(l2_dists, axis=1), np.argmin(l2_dists, axis=1)
+reconstructed = reconstructed_user_data["data"][min_idx]
+
+
+print(f"ReRo@0.1: {100.0*(min_dist<0.1).sum()/min_dist.shape[0]:.2f}%")
+
+reconstructed_user_data = dict(data=reconstructed, labels=min_dist.tolist())
+
+user.plot(reconstructed_user_data, savefile="cah_recon_aligned.png")
+
+# %%
 # metrics = breaching.analysis.report(
-#     reconstructed_user_data,
+#     dict(data=reconstructed, labels=None),
 #     true_user_data,
 #     [server_payload],
 #     server.model,
@@ -159,7 +212,6 @@ user.plot(reconstructed_user_data, savefile="cah_recon.png")
 # And finally, we also plot the reconstructed data:
 
 # %%
-# user.plot(reconstructed_user_data, savefile="cah_recon.png")
 
 # %% [markdown]
 # ### Notes:

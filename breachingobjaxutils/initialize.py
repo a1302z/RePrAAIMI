@@ -19,7 +19,9 @@ from dptraining.privacy.grad_clipper import ClipAndAccumulateGrads
 from dptraining.optim.gradaccopt import AccumulateGrad
 
 
-def make_configs(attack_overrides: list[str], train_config_path: Union[str, Path]):
+def make_configs(
+    attack_overrides: list[str], train_config_path: Union[str, Path]
+) -> tuple[OmegaConf, Config]:
     cfg = get_config(overrides=attack_overrides)
     base_config = OmegaConf.structured(Config)
     train_config = OmegaConf.load(train_config_path)
@@ -54,7 +56,7 @@ def make_make_fns(train_config):
         loss_cls = make_loss_from_config(train_config)
         loss_fn = loss_cls.create_train_loss_fn(model.vars(), model)
         loss_gv = create_loss_gradient(
-            config=Config, model_vars=model.vars(), loss_fn=loss_fn
+            config=train_config, model_vars=model.vars(), loss_fn=loss_fn
         )
         return loss_fn, loss_gv
 
