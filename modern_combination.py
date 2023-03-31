@@ -79,7 +79,7 @@ def main():
     shared_data, true_user_data = user.compute_local_updates(server_payload)
 
     # %%
-    user.plot(true_user_data, print_labels=True)
+    user.plot(true_user_data, print_labels=True, savefile="true_data_honest.png")
 
     # %% [markdown]
     # ### Reconstruct user data:

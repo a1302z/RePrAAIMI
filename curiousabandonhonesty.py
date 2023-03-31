@@ -17,16 +17,15 @@
 # ### Startup
 
 # %%
-from breaching import breaching
 import numpy as np
 import torch
-from tqdm import tqdm
 import math
 from omegaconf import open_dict
+import os
+from warnings import warn
 
-from breachingobjaxutils.initialize import make_configs, init_wandb, make_make_fns
-from dptraining.privacy import setup_privacy, analyse_epsilon
-from dptraining.datasets import make_loader_from_config
+from breaching import breaching
+from breachingobjaxutils.initialize import make_configs
 
 
 # Redirects logs directly into the jupyter notebook
@@ -43,13 +42,26 @@ from dptraining.datasets import make_loader_from_config
 # %%
 cfg, train_config = make_configs(
     ["attack=imprint", "case/server=malicious-model-cah"],
-    "breaching/test_train_config.yaml",
+    # "breaching/test_train_config.yaml",
+    "configs/ham10000.yaml",
 )
+if train_config.general.cpu:
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
+from dptraining.privacy import setup_privacy, analyse_epsilon
+from dptraining.datasets import make_loader_from_config
+from dptraining.utils.training_utils import fix_seeds
+from breachingobjaxutils.objaxbasedfunctions import (
+    make_make_fns,
+    get_transform_normalization,
+    get_aug_normalization,
+)
+
+fix_seeds(train_config)
 
 device = torch.device(f"cuda") if torch.cuda.is_available() else torch.device("cpu")
 torch.backends.cudnn.benchmark = cfg.case.impl.benchmark
 setup = dict(device=device, dtype=getattr(torch, cfg.case.impl.dtype))
-setup
 
 make_model, make_loss_gv_from_model = make_make_fns(train_config)
 
@@ -77,6 +89,19 @@ if train_config.DP:
 
 # %% [markdown]
 # You can use `.attribute` access to modify any of these configurations for the attack, or the case:
+aug_fn = None
+tf_stats = get_transform_normalization(train_config)
+if tf_stats is not None:
+    dm, ds = tf_stats
+else:
+    aug_stats = get_aug_normalization(train_config)
+    if aug_stats is None:
+        warn("Did not find stats. Will continue assuming unnormalized input.")
+        dm, ds = 0.0, 1.0
+    else:
+        dm, ds, aug_fn = aug_stats
+stats = (dm, ds)
+example_batch, example_label = next(iter(train_loader))
 
 # %%
 cfg.case.user.num_data_points = (
@@ -89,7 +114,8 @@ cfg.case.server.model_modification.num_bins = 128  # How many bins are in the bl
 
 cfg.case.server.model_modification.position = None  # '4.0.conv'
 cfg.case.server.model_modification.connection = "addition"
-cfg.case.data.path = "/media/alex/NVME/ILSVRC2012/"
+# cfg.case.data.path = "/media/alex/NVME/ILSVRC2012/"
+
 
 # Unnormalized data:
 # cfg.case.data.normalize = False
@@ -100,8 +126,10 @@ cfg.case.data.path = "/media/alex/NVME/ILSVRC2012/"
 
 # Normalized data:
 cfg.case.data.normalize = True
-cfg.case.server.model_modification.sigma = 0.5 * 0.2260
-cfg.case.server.model_modification.mu = -0.4490 * math.sqrt(224**2 * 3) * 0.5
+cfg.case.server.model_modification.sigma = float(0.5 * np.mean(ds))
+cfg.case.server.model_modification.mu = float(
+    -np.mean(dm) * math.sqrt(np.prod(example_batch.shape[1:])) * 0.5
+)
 cfg.case.server.model_modification.scale_factor = -0.9990
 cfg.attack.breach_reduction = None  # Will be done manually
 
@@ -117,7 +145,7 @@ user, server, model_fn = breaching.cases.construct_case(
     train_config,
     cfg.case,
     make_model,
-    # dataloader=train_data,
+    dataloader=(train_loader, aug_fn),
     make_loss_grad=make_loss_gv_from_model,
 )
 attacker = breaching.attacks.prepare_attack(
@@ -136,7 +164,7 @@ server_payload = server.distribute_payload()
 shared_data, true_user_data = user.compute_local_updates(server_payload)
 
 # %%
-user.plot(true_user_data, savefile="cah_true_data.png")
+user.plot(true_user_data, savefile="cah_true_data.png", stats=stats)
 
 # %% [markdown]
 # ### Reconstruct user data:
@@ -147,7 +175,7 @@ user.plot(true_user_data, savefile="cah_true_data.png")
 # For this attack, we also share secret information from the malicious server with the attack (`server.secrets`), which here is the location and structure of the imprint block.
 
 # %%
-reconstructed_user_data, stats = attacker.reconstruct(
+reconstructed_user_data, recon_stats = attacker.reconstruct(
     [server_payload], [shared_data], server.secrets, dryrun=cfg.dryrun
 )
 
@@ -158,7 +186,7 @@ reconstructed_user_data, stats = attacker.reconstruct(
 # ### Remove mixed images by direct GT comparison
 
 # %%
-user.plot(reconstructed_user_data, savefile="cah_recon.png")
+user.plot(reconstructed_user_data, savefile="cah_recon.png", stats=stats)
 
 # reconstructed = np.zeros_like(true_user_data["data"])
 # for sample in reconstructed_user_data["data"]:
@@ -184,7 +212,9 @@ user.plot(reconstructed_user_data, savefile="cah_recon.png")
 #     dists.append(min_dist)
 
 l2_dists = np.power(
-    np.array(true_user_data["data"][:, None, ...]) - np.array(reconstructed_user_data["data"]), 2
+    np.array(true_user_data["data"][:, None, ...])
+    - np.array(reconstructed_user_data["data"]),
+    2,
 ).mean(axis=(2, 3, 4))
 min_dist, min_idx = np.min(l2_dists, axis=1), np.argmin(l2_dists, axis=1)
 reconstructed = reconstructed_user_data["data"][min_idx]
@@ -194,7 +224,7 @@ print(f"ReRo@0.1: {100.0*(min_dist<0.1).sum()/min_dist.shape[0]:.2f}%")
 
 reconstructed_user_data = dict(data=reconstructed, labels=min_dist.tolist())
 
-user.plot(reconstructed_user_data, savefile="cah_recon_aligned.png")
+user.plot(reconstructed_user_data, savefile="cah_recon_aligned.png", stats=stats)
 
 # %%
 # metrics = breaching.analysis.report(

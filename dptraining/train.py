@@ -48,12 +48,11 @@ def main(
         test,
         make_train_op,
         train_loop,
+        fix_seeds,
     )
     from dptraining.utils.misc import get_num_params, make_unique_str
 
-    np.random.seed(config.general.seed)
-    objax.random.DEFAULT_GENERATOR.seed(config.general.seed)
-    torch_manual_seed(config.general.seed)
+    fix_seeds(config)
 
     if config.general.parallel:
         n_devices = device_count()

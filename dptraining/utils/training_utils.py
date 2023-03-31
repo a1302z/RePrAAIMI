@@ -24,8 +24,16 @@ from dptraining.utils.metrics import (
 from dptraining.utils import ExponentialMovingAverage
 from dptraining.utils.misc import get_num_params, make_grid_numpy
 
+from torch.random import manual_seed as torch_manual_seed
+
 
 N_DEVICES = local_device_count()
+
+
+def fix_seeds(config):
+    np.random.seed(config.general.seed)
+    objax.random.DEFAULT_GENERATOR.seed(config.general.seed)
+    torch_manual_seed(config.general.seed)
 
 
 def make_train_op(
