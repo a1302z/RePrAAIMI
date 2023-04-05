@@ -20,6 +20,7 @@ dependencies:
   - conda-forge::h5py
   - conda-forge::pandas
   - conda-forge::opacus
+  - conda-forge::seaborn
   - black
   - pytest
   - pylint

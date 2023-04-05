@@ -1,20 +1,9 @@
 from typing import Optional
 from opacus.accountants import create_accountant, IAccountant
 
-from dptraining.privacy.calc_noise_for_eps import EpsCalculator
+from dptraining.privacy.calc_noise_for_eps import EpsCalculator, analyse_epsilon
 from dptraining.privacy.grad_clipper import ClipAndAccumulateGrads
 from dptraining.config import Config
-
-
-def analyse_epsilon(
-    accountant: IAccountant,
-    steps: int,
-    sigma: float,
-    sampling_rate: float,
-    delta: float,
-):
-    accountant.history = [(sigma, sampling_rate, steps)]
-    return accountant.get_epsilon(delta=delta)
 
 
 def setup_privacy(config: Config, train_loader):

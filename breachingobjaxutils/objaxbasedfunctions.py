@@ -71,6 +71,7 @@ def get_sub_augs(aug):
 
 
 def boil_down(results):
+    results = [res for res in results if res is not None]
     if len(results) == 0:
         return None
     else:

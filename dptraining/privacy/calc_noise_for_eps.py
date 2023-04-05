@@ -3,6 +3,7 @@ from functools import partial
 
 from jax.lax import rsqrt
 from scipy.optimize import minimize_scalar
+from opacus.accountants import IAccountant
 
 from dptraining.config import Config
 from dptraining.privacy.find_noise_mult import new_noise_multi
@@ -14,6 +15,18 @@ from opacus.accountants.utils import get_noise_multiplier
 class NoiseCalcMode(Enum):
     SIGMA = 1
     EPOCHS = 2
+    EPSILON = 3
+
+
+def analyse_epsilon(
+    accountant: IAccountant,
+    steps: int,
+    sigma: float,
+    sampling_rate: float,
+    delta: float,
+):
+    accountant.history = [(sigma, sampling_rate, steps)]
+    return accountant.get_epsilon(delta=delta)
 
 
 def epsilon_opt_func_opacus(
@@ -33,6 +46,7 @@ class EpsCalculator:
             config.DP.sigma is not None
             # and config.DP.grad_acc_steps is not None
             and config.hyperparams.epochs is None
+            and config.DP.epsilon is not None
         ):
             self._mode = NoiseCalcMode.EPOCHS
             self._sigma = config.DP.sigma
@@ -45,6 +59,7 @@ class EpsCalculator:
             # "grad_acc_steps" in config.DP and
             config.hyperparams.epochs is not None
             and config.DP.sigma is None
+            and config.DP.epsilon is not None
         ):
             self._mode = NoiseCalcMode.SIGMA
             effective_bs = EpsCalculator.calc_effective_batch_size(config)
@@ -52,6 +67,18 @@ class EpsCalculator:
             self._steps = (
                 len(train_loader) // EpsCalculator.get_grad_acc(config)
             ) * config.hyperparams.epochs
+        elif (
+            config.DP.sigma is not None
+            and config.hyperparams.epochs is not None
+            and config.DP.epsilon is None
+        ):
+            self._mode = NoiseCalcMode.EPSILON
+            effective_bs = EpsCalculator.calc_effective_batch_size(config)
+            self._sampling_rate = effective_bs / len(train_loader.dataset)
+            self._steps = (
+                len(train_loader) // EpsCalculator.get_grad_acc(config)
+            ) * config.hyperparams.epochs
+            self._sigma = config.DP.sigma
         else:
             raise ValueError(
                 "You need to specify either one of sigma or epochs in the config"
@@ -82,6 +109,11 @@ class EpsCalculator:
             )
             self._steps = result.x
             self._config.hyperparams.epochs = int(self._steps // self._eff_batch_size)
+        elif self._mode == NoiseCalcMode.EPSILON:
+            self._eps = analyse_epsilon(
+                accountant, self._steps, self._sigma, self._sampling_rate, self._delta
+            )
+            self._config.DP.epsilon = self._eps
         else:
             raise RuntimeError("Mode not implemented")
 
