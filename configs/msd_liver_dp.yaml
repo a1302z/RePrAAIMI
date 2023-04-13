@@ -37,13 +37,15 @@ dataset:
 augmentations:
   consecutive_augmentations:
     multiplicity: 16
-    consecutive_augmentations:
-      random_horizontal_flips:
-        flip_prob: 0.2
-      random_vertical_flips:
-        flip_prob: 0.2
-      random_z_flips:
-        flip_prob: 0.2
+    augmentations:
+      consecutive_augmentations:
+        augmentations:
+          random_horizontal_flips:
+            flip_prob: 0.2
+          random_vertical_flips:
+            flip_prob: 0.2
+          random_z_flips:
+            flip_prob: 0.2
 loader: 
   num_workers: 16
   prefetch_factor: 2

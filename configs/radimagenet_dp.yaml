@@ -32,18 +32,21 @@ loader:
   pin_memory: True
 augmentations:
   consecutive_augmentations:
-    normalize_jax:
-        mean:
-          - 0.22039941
-        std:
-          - 0.24865805
-    # consecutive_augmentations:
-    #   multiplicity: 16
-    #   consecutive_augmentations:
-    #     random_horizontal_flips:
-    #       flip_prob: 0.2
-    #     random_vertical_flips:
-    #       flip_prob: 0.2
+    augmentations:
+      normalize_jax:
+          mean:
+            - 0.22039941
+          std:
+            - 0.24865805
+      # consecutive_augmentations:
+      #   multiplicity: 16
+      #   augmentations:
+      #     consecutive_augmentations:
+      #       augmentations:
+      #         random_horizontal_flips:
+      #           flip_prob: 0.2
+      #         random_vertical_flips:
+      #           flip_prob: 0.2
 test_augmentations:
   normalize_jax:
       mean:

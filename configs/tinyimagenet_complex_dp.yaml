@@ -35,12 +35,14 @@ augmentations:
   consecutive_augmentations:
     multiplicity: 16
     complex: True
-    consecutive_augmentations:
-      complex: True
-      random_img_shift:
-        max_shift: 4
-      random_vertical_flips:
-        flip_prob: 0.5
+    augmentations:
+      consecutive_augmentations:
+        complex: True
+        augmentations:
+          random_img_shift:
+            max_shift: 4
+          random_vertical_flips:
+            flip_prob: 0.5
 test_augmentations:
   make_complex_both: 
 optim:

@@ -18,7 +18,7 @@ from dptraining.datasets.base_creator import (
     DataLoaderCreator,
     mk_subdirectories,
 )
-from dptraining.utils.transform import NormalizeNumpyImg
+from dptraining.transform import NormalizeNumpyImg
 from dptraining.config import DatasetTask
 
 # from dptraining.datasets.utils import calc_mean_std

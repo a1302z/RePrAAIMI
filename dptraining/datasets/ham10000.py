@@ -109,7 +109,7 @@ class HAM10000Creator(DataLoaderCreator):
 #     from omegaconf import OmegaConf
 #     from dptraining.datasets.utils import calc_mean_std
 #     from torch.utils.data import DataLoader
-#     from dptraining.utils.transform import NormalizeNumpyImg
+#     from dptraining.transform import NormalizeNumpyImg
 #     from dptraining.config import Config
 
 #     # from matplotlib import pyplot as plt

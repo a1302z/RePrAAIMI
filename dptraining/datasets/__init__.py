@@ -16,7 +16,7 @@ from dptraining.datasets.utils import (
     collate_np_classification,
     collate_np_reconstruction,
 )
-from dptraining.utils.augment import Transformation
+from dptraining.transform.transform_pipeline import TransformPipeline
 
 
 SUPPORTED_FFT = (DatasetName.CIFAR10,)
@@ -76,17 +76,17 @@ def make_dataset(config: Config):
         )
 
     train_tf = (
-        Transformation.from_dict_list(OmegaConf.to_container(config.train_transforms))
+        TransformPipeline.from_dict_list(OmegaConf.to_container(config.train_transforms))
         if config.train_transforms
         else None
     )
     test_tf = (
-        Transformation.from_dict_list(OmegaConf.to_container(config.test_transforms))
+        TransformPipeline.from_dict_list(OmegaConf.to_container(config.test_transforms))
         if config.test_transforms
         else None
     )
     val_tf = (
-        Transformation.from_dict_list(OmegaConf.to_container(config.val_transforms))
+        TransformPipeline.from_dict_list(OmegaConf.to_container(config.val_transforms))
         if config.val_transforms
         else test_tf
     )
