@@ -87,7 +87,9 @@ class ClipAndAccumulateGrads(PrivateGradValues):
         @Function.with_vars(gv.vars())
         def clipped_grad_single_example(*args):
             grads, values = gv(*args)
-            total_grad_norm = jnp.linalg.norm([jnp.linalg.norm(g) for g in grads])
+            total_grad_norm = jnp.linalg.norm(
+                jnp.stack([jnp.linalg.norm(g) for g in grads])
+            )
             idivisor = 1 / jnp.maximum(total_grad_norm / self.l2_norm_clip, 1.0)
             return [g * idivisor for g in grads], values
 
