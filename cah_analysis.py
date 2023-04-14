@@ -113,6 +113,8 @@ train_loader, _, _ = make_loader_from_config(config)
 
 accountant = create_accountant(config.DP.mechanism)
 
+PRIVACY_FOR_ENTIRE_TRAINING = True
+
 
 class ProxySet(torch.utils.data.Dataset):
     def __init__(self, batch) -> None:
@@ -151,7 +153,7 @@ dm, ds = dm.reshape(*new_shape), ds.reshape(*new_shape)
 stats = (dm, ds)
 
 
-eps_values = [10**i for i in range(0, 13, 3)] + ["Non-private"]
+eps_values = [10**i for i in range(0, 16, 3)] + ["Non-private"]
 # eps_values = [1, 1e6, 1e9, 1e12]
 
 recon_data_per_eps = []
@@ -166,43 +168,51 @@ for eps in eps_values:
     train_config = deepcopy(config)
     if isinstance(eps, (float, int)):
         train_config.DP.epsilon = eps
+        train_config.DP.eps_tol = eps * 10e-6
     else:
         train_config.DP = None
 
     make_model, make_loss_gv_from_model = make_make_fns(train_config)
 
     if train_config.DP:
-        # (
-        #     grad_acc,
-        #     accountant,
-        #     sampling_rate,
-        #     delta,
-        #     sigma,
-        #     total_noise,
-        #     batch_expansion_factor,
-        #     effective_batch_size,
-        # ) = setup_privacy(train_config, train_loader)
-        effective_batch_size = (
-            config.hyperparams.grad_acc_steps * config.hyperparams.batch_size
-        )
-        batch_expansion_factor = config.hyperparams.grad_acc_steps
-        sampling_rate: float = effective_batch_size / len(train_loader.dataset)
-        delta = config.DP.delta
-        opt_func = lambda noise: analyse_epsilon(
-            accountant, 1, noise, sampling_rate, delta
-        )
-        noise = get_noise_multiplier(
-            target_epsilon=train_config.DP.epsilon,
-            target_delta=delta,
-            sample_rate=sampling_rate,
-            steps=1,
-            accountant=config.DP.mechanism,
-        )
+        if PRIVACY_FOR_ENTIRE_TRAINING:
+            (
+                grad_acc,
+                accountant,
+                sampling_rate,
+                delta,
+                sigma,
+                total_noise,
+                batch_expansion_factor,
+                effective_batch_size,
+            ) = setup_privacy(train_config, train_loader)
+
+            steps = (
+                len(train_loader) // batch_expansion_factor
+            ) * train_config.hyperparams.epochs
+        else:
+            effective_batch_size = (
+                config.hyperparams.grad_acc_steps * config.hyperparams.batch_size
+            )
+            batch_expansion_factor = config.hyperparams.grad_acc_steps
+            sampling_rate: float = effective_batch_size / len(train_loader.dataset)
+            delta = config.DP.delta
+            steps = 1
+            opt_func = lambda noise: analyse_epsilon(
+                accountant, steps, noise, sampling_rate, delta
+            )
+            total_noise = get_noise_multiplier(
+                target_epsilon=train_config.DP.epsilon,
+                target_delta=delta,
+                sample_rate=sampling_rate,
+                steps=steps,
+                accountant=config.DP.mechanism,
+            )
 
         with open_dict(cfg):
-            cfg.case.user.total_noise = noise
+            cfg.case.user.total_noise = total_noise
         print(
-            f"actual epsilon: {analyse_epsilon(accountant,1,cfg.case.user.total_noise,sampling_rate,delta):.2f}"
+            f"actual epsilon: {analyse_epsilon(accountant,steps,cfg.case.user.total_noise,sampling_rate,delta, config.DP.alphas):.2f} with noise multiplier {total_noise}"
         )
 
     # %% [markdown]

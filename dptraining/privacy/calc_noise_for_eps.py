@@ -3,7 +3,7 @@ from functools import partial
 
 from jax.lax import rsqrt
 from scipy.optimize import minimize_scalar
-from opacus.accountants import IAccountant
+from opacus.accountants import IAccountant, RDPAccountant
 
 from dptraining.config import Config
 from dptraining.privacy.find_noise_mult import new_noise_multi
@@ -24,9 +24,13 @@ def analyse_epsilon(
     sigma: float,
     sampling_rate: float,
     delta: float,
+    add_alphas: list[float],
 ):
     accountant.history = [(sigma, sampling_rate, steps)]
-    return accountant.get_epsilon(delta=delta)
+    kwargs = {}
+    if isinstance(accountant, RDPAccountant):
+        kwargs["alphas"] = RDPAccountant.DEFAULT_ALPHAS + add_alphas
+    return accountant.get_epsilon(delta=delta, **kwargs)
 
 
 def epsilon_opt_func_opacus(
@@ -111,7 +115,12 @@ class EpsCalculator:
             self._config.hyperparams.epochs = int(self._steps // self._eff_batch_size)
         elif self._mode == NoiseCalcMode.EPSILON:
             self._eps = analyse_epsilon(
-                accountant, self._steps, self._sigma, self._sampling_rate, self._delta
+                accountant,
+                self._steps,
+                self._sigma,
+                self._sampling_rate,
+                self._delta,
+                add_alphas=self._config.DP.alphas,
             )
             self._config.DP.epsilon = self._eps
         else:

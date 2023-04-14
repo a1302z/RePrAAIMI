@@ -53,6 +53,7 @@ def main(
 
     key_values = []
     eps_vals = [1, 4, 8, 12, 16, 20]
+    N_SAMPLES = 10
 
     train_loader, _, _ = make_loader_from_config(train_config)
     for eps in eps_vals:
@@ -102,7 +103,7 @@ def main(
         eps = comp_mech.get_eps(DELTA)
         print(f"ε={eps:.2f} (Calculated RDP eps = {config.DP.epsilon:.2f})")
         # %%
-        FPR, FNR = comp_mech.plot_fDP(length=1001)
+        FPR, FNR = comp_mech.plot_fDP(length=N_SAMPLES)
 
         # %%
         # %%
@@ -132,17 +133,23 @@ def main(
         + [2 * bounds[-1] - bounds[-2]],
         cmap.N,
     )
+    FPR = FPR[1:]
+    FNR = FNR[1:]
 
     fig, ax = plt.subplots()
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.plot(FPR, FPR, linestyle="dashed", color="gray")  # ,label="Reference",)
-    ax.plot(FPR, 1 - FPR, linestyle="dashed", color="gray")  # ,label="Reference",)
     ax.set_xlabel("P(FPR)")
     ax.set_ylabel("P(TPR)")
     ax2 = ax.twinx()
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    # ax2.set_yscale("log")
+    ax.set_xlim(FPR[0], 1)
+    ax.set_ylim(1 - FNR[0], 1)
     ax3 = fig.add_axes([1.0, 0.1, 0.03, 0.8])
     ax3.set_ylabel("epsilon")
+
+    ax.plot(FPR, FPR, linestyle="dashed", color="gray")  # ,label="Reference",)
+    ax.plot(FPR, 1 - FPR, linestyle="dashed", color="gray")  # ,label="Reference",)
     cb = colorbar.ColorbarBase(
         ax3,
         cmap=cmap,
@@ -161,10 +168,12 @@ def main(
         eps_vals, key_values
     ):
         col = cmap(norm(eps))
-        ax.plot(FPR, 1 - FNR, color=col)
         ax2.plot(FPR, balanced_accuracy, linestyle="dashed", color=col)
+        FPR = FPR[1:]
+        FNR = FNR[1:]
+        ax.plot(FPR, 1 - FNR, color=col)
         ax2.set_ylabel("balanced accuracy")
-        ax2.set_ylim(0, 1)
+        ax2.set_ylim(FPR[0], 1)
         # markerline, stemlines, baseline = ax2.stem(
         #     [opt_cutoff],
         #     [max_acc],
@@ -195,6 +204,11 @@ def main(
     )
     fig.savefig(
         f"ROC_curve_DP_{str(config.dataset.name).split('.')[-1]}.svg",
+        bbox_inches="tight",
+        dpi=600,
+    )
+    fig.savefig(
+        f"ROC_curve_DP_{str(config.dataset.name).split('.')[-1]}.png",
         bbox_inches="tight",
         dpi=600,
     )

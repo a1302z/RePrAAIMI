@@ -16,6 +16,7 @@ from dptraining.utils.loss import (
     L2Regularization,
     DiceLoss,
     f_score,
+    calc_class_weights,
 )
 from dptraining.config import Config, SchedulerType, LossType
 from dptraining.utils.scheduler import (
