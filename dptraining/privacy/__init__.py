@@ -45,6 +45,7 @@ def setup_privacy(config: Config, train_loader):
             sigma,
             sampling_rate,
             delta,
+            add_alphas=config.DP.alphas,
         )
 
         print(

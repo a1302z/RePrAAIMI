@@ -82,7 +82,7 @@ if train_config.DP:
     with open_dict(cfg):
         cfg.case.user.total_noise = 1e-3
     print(
-        f"actual epsilon: {analyse_epsilon(accountant,1,cfg.case.user.total_noise,sampling_rate,delta,)}"
+        f"actual epsilon: {analyse_epsilon(accountant,1,cfg.case.user.total_noise,sampling_rate,delta,config.DP.alphas)}"
     )
 
 # %% [markdown]

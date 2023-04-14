@@ -228,6 +228,7 @@ class LossConfig:
     reduction: LossReduction = MISSING
     binary_loss: bool = MISSING
     class_weights: Optional[list[float]] = None
+    calculate_class_weights: bool = False
 
 
 @dataclass
@@ -291,8 +292,9 @@ class DPConfig:
     norm_acc: bool = MISSING
     rsqrt_noise_adapt: bool = False
     glrt_assumption: bool = False
-    mechanism: str = "gdp"
+    mechanism: str = "rdp"
     eps_tol: float = 1e-5
+    alphas: list[float] = field(default_factory=list)
 
 
 class AttackType(Enum):

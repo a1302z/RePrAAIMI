@@ -212,7 +212,7 @@ for eps in eps_values:
         with open_dict(cfg):
             cfg.case.user.total_noise = total_noise
         print(
-            f"actual epsilon: {analyse_epsilon(accountant,steps,cfg.case.user.total_noise,sampling_rate,delta):.2f} with noise multiplier {total_noise}"
+            f"actual epsilon: {analyse_epsilon(accountant,steps,cfg.case.user.total_noise,sampling_rate,delta, config.DP.alphas):.2f} with noise multiplier {total_noise}"
         )
 
     # %% [markdown]

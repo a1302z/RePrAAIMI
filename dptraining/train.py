@@ -42,6 +42,7 @@ def main(
         make_scheduler_from_config,
         make_stopper_from_config,
         make_metrics,
+        calc_class_weights,
     )
     from dptraining.utils.augment import make_augs
     from dptraining.utils.training_utils import (
@@ -136,6 +137,18 @@ def main(
     ) = make_augs(config)
     if n_augmentations > 1 and config.general.print_info:
         print(f"Augmentation multiplicity of {n_augmentations}")
+
+    if config.loss.calculate_class_weights:
+        class_weight_file = (
+            Path.cwd() / f"class_weights_{str(config.dataset.name).split('.')[-1]}.npy"
+        )
+        if class_weight_file.is_file():
+            print(f"Using existing class weight file. ({class_weight_file})")
+            config.loss.class_weights = np.load(class_weight_file).tolist()
+        else:
+            config.loss.class_weights = calc_class_weights(train_loader)
+            np.save(class_weight_file, config.loss.class_weights)
+
     scheduler = make_scheduler_from_config(config)
     stopper = make_stopper_from_config(config)
     loss_class = make_loss_from_config(config)

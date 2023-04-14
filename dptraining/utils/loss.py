@@ -1,11 +1,47 @@
 import abc
+from collections import Counter
 from typing import Callable, Sequence, Union
+from warnings import warn
+
+import numpy as np
+import objax
+from jax import nn
+from jax import numpy as jnp
+from jax import vmap
+from objax.typing import JaxArray
+from tqdm import tqdm
+
 from dptraining.config import Config
 from dptraining.config.config import LossReduction
-import objax
-from objax.typing import JaxArray
 
-from jax import numpy as jnp, vmap, nn
+
+def calc_class_weights(train_loader):
+    counter = Counter()
+    for _, label in tqdm(
+        train_loader,
+        total=len(train_loader),
+        leave=False,
+        desc="Get overview of labels",
+    ):
+        if isinstance(label, np.ndarray):
+            assert len(label.shape) == 1
+            label = label.tolist()
+        elif isinstance(label, jnp.DeviceArray):
+            assert len(label.shape) == 1
+            label = np.array(label).tolist()
+        assert isinstance(label, list)
+        counter.update(label)
+    counter = dict(sorted(counter.items()))
+    N_items = float(sum(counter.values()))
+    weights = []
+    for i in range(0, max(counter.keys())):
+        if i in counter:
+            weights.append(N_items / (len(counter) * counter[i]))
+        else:
+            warn(f"Class {i} has no instances")
+            weights.append(1.0)
+    mean_weight = np.mean(weights).item()
+    return [w / mean_weight for w in weights]
 
 
 def create_reduction_and_weight_functions(config: Config) -> tuple[Callable, Callable]:
