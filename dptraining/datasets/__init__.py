@@ -8,6 +8,7 @@ from dptraining.config import Config, DatasetName, LoaderCollateFn, DatasetTask
 from dptraining.datasets.cifar10 import CIFAR10Creator
 from dptraining.datasets.imagenet import ImageNetCreator
 from dptraining.datasets.radimagenet import RadImageNetCreator
+from dptraining.datasets.pppp import PPPPCreator
 from dptraining.datasets.fmri import FMRICreator
 from dptraining.datasets.tinyimagenet import TinyImageNetCreator
 from dptraining.datasets.utils import (
@@ -33,6 +34,8 @@ def select_creator(config):
             creator = FMRICreator
         case DatasetName.radimagenet:
             creator = RadImageNetCreator
+        case DatasetName.pppp:
+            creator = PPPPCreator
         case _ as unsupported:
             raise ValueError(f"Unsupported dataset '{unsupported}'.")
     return creator

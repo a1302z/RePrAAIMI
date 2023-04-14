@@ -31,6 +31,7 @@ class DatasetName(Enum):
     tinyimagenet = 3
     fastmri = 4
     radimagenet = 5
+    pppp = 6
 
 
 class DatasetTask(Enum):

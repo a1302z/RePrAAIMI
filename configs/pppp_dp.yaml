@@ -1,0 +1,99 @@
+defaults:
+  - base_config
+  - _self_
+project: pppp-dp
+general:
+  log_wandb: False
+  parallel: False
+  eval_train: False
+dataset: 
+  task: classification
+  name: pppp
+  # root: ./data/ILSVRC2012
+  # train_val_split: 0.9
+metrics:
+  main: 
+    matthews_corrcoef: 
+  logging:
+    classification_report:
+      output_dict: True
+      zero_division: 0
+train_transforms:
+  Resize: 
+      size: 224
+  RandomCrop:
+      size: 224
+  pil_to_numpy:
+  # numpy_img_to_chw:
+test_transforms:
+  Resize: 
+      size: 224
+  CenterCrop:
+      size: 224
+  pil_to_numpy:
+  # numpy_img_to_chw:
+loader:
+  collate_fn: numpy
+  num_workers: 0
+  # prefetch_factor: 6
+  pin_memory: True
+augmentations:
+  pil_to_jax:
+  normalize_jax:
+      mean:
+        - 0.5705
+      std:
+        - 0.1778
+  consecutive_augmentations:
+    multiplicity: 2
+    consecutive_augmentations:
+      random_img_shift:
+        max_shift: 4
+      random_vertical_flips:
+        flip_prob: 0.5
+  # random_vertical_flips:
+  #     flip_prob: 0.5
+  # random_horizontal_flips:
+  #     flip_prob: 0.5
+test_augmentations:
+  pil_to_jax:
+  normalize_jax:
+      mean:
+        - 0.5705
+      std:
+        - 0.1778
+optim:
+  name: nadam
+loss: 
+  type: cse
+  reduction: sum
+model:
+  name: resnet9
+  in_channels: 1
+  num_classes: 3
+  conv: convws_nw
+  activation: mish
+  normalization: gn
+  pooling: avgpool
+  extra_args:
+    scale_norm: True
+ema:
+  use_ema: False
+  decay: 0.04
+hyperparams:
+  epochs: 200
+  batch_size: 2
+  batch_size_test: 2
+  lr: 1e-3
+scheduler:
+  type: const
+  normalize_lr: False
+  patience: 20
+  min_delta: 0.01
+  factor: 0.5
+DP:
+  epsilon: 8.0
+  max_per_sample_grad_norm: 1.0
+  delta: 1e-5
+  norm_acc: False
+  grad_acc_steps: 32
