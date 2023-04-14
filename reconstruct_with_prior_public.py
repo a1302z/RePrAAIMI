@@ -121,8 +121,8 @@ def main(
 ):
     upper_bounds = []
     N_REPS = 10
-    N_SAMPLES = 200000
-    eps_values = [1] + list(range(10, 201, 10))
+    N_SAMPLES = int(1e6)  # 200000
+    eps_values = [1, 8] + list(range(10, 201, 10))
     train_loader, _, _ = make_loader_from_config(train_config)
 
     # %%
@@ -231,6 +231,7 @@ def main(
         # %%
         print(
             f"Reconstruction upper bound for {p} samples: {np.mean(variance).item():.2f}%"
+            f"\nLowest: {np.min(variance).item():.2f}%\t Highest: {np.max(variance).item():.2f}%"
         )
 
         upper_bounds.append(variance)
@@ -248,17 +249,18 @@ def main(
     #     yerr=err,
     #     color="blue",
     # )
-    plt.errorbar(eps_values, means, yerr=stds, color="blue", label="success mean/StD")
-    plt.fill_between(
-        eps_values,
-        means + err[1],
-        means - err[0],
-        # means + stds,
-        # means - stds,
-        color="blue",
-        alpha=0.25,
-        label="Success range",
-    )
+    # plt.errorbar(eps_values, means, yerr=stds, color="blue", label="success mean/StD")
+    plt.plot(eps_values, means, color="blue", label="reconstruction success")
+    # plt.fill_between(
+    #     eps_values,
+    #     means + err[1],
+    #     means - err[0],
+    #     # means + stds,
+    #     # means - stds,
+    #     color="blue",
+    #     alpha=0.25,
+    #     label="Success range",
+    # )
     plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter())
     plt.xlabel("epsilon")
     plt.ylabel("Prior aware upper bound")
@@ -272,6 +274,9 @@ def main(
         bbox_inches="tight",
         dpi=600,
     )
+
+    for eps, mv in zip(eps_values, means):
+        print(f"{eps}: {mv:.2f}")
 
 
 if __name__ == "__main__":

@@ -44,9 +44,10 @@ cfg, train_config = make_configs(
     ["attack=imprint", "case/server=malicious-model-cah"],
     # "breaching/test_train_config.yaml",
     "configs/ham10000.yaml",
+    # "configs/radimagenet_dp.yaml",
 )
-if train_config.general.cpu:
-    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# if train_config.general.cpu:
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 from dptraining.privacy import setup_privacy, analyse_epsilon
 from dptraining.datasets import make_loader_from_config
@@ -79,7 +80,7 @@ if train_config.DP:
         effective_batch_size,
     ) = setup_privacy(train_config, train_loader)
     with open_dict(cfg):
-        cfg.case.user.total_noise = 1e-5
+        cfg.case.user.total_noise = 1e-3
     print(
         f"actual epsilon: {analyse_epsilon(accountant,1,cfg.case.user.total_noise,sampling_rate,delta,)}"
     )
@@ -97,11 +98,15 @@ else:
     aug_stats = get_aug_normalization(train_config)
     if aug_stats is None:
         warn("Did not find stats. Will continue assuming unnormalized input.")
-        dm, ds = 0.0, 1.0
+        dm, ds = np.array(0.0), np.array(1.0)
     else:
         dm, ds, aug_fn = aug_stats
-stats = (dm, ds)
 example_batch, example_label = next(iter(train_loader))
+
+new_shape = [1] * len(example_batch.shape)
+new_shape[1] = ds.shape[0]
+dm, ds = dm.reshape(*new_shape), ds.reshape(*new_shape)
+stats = (dm, ds)
 
 # %%
 cfg.case.user.num_data_points = (
@@ -126,6 +131,9 @@ cfg.case.server.model_modification.connection = "addition"
 
 # Normalized data:
 cfg.case.data.normalize = True
+cfg.case.data.mean = None
+cfg.case.data.std = None
+cfg.case.data.shape = example_batch.shape[1:]
 cfg.case.server.model_modification.sigma = float(0.5 * np.mean(ds))
 cfg.case.server.model_modification.mu = float(
     -np.mean(dm) * math.sqrt(np.prod(example_batch.shape[1:])) * 0.5
@@ -149,7 +157,7 @@ user, server, model_fn = breaching.cases.construct_case(
     make_loss_grad=make_loss_gv_from_model,
 )
 attacker = breaching.attacks.prepare_attack(
-    model_fn, make_loss_gv_from_model, cfg.attack
+    model_fn, make_loss_gv_from_model, cfg.attack, stats
 )
 breaching.utils.overview(server, user, attacker)
 
@@ -211,20 +219,139 @@ user.plot(reconstructed_user_data, savefile="cah_recon.png", stats=stats)
 #     reconstructed[idx] = reconstructed_user_data["data"][min_idx]
 #     dists.append(min_dist)
 
+
+import lpips  # lazily import this only if vision reporting is used.
+
+lpips_scorer = lpips.LPIPS(net="alex", verbose=False).to(**setup)
+
+
+rec_denormalized = torch.clamp(
+    torch.from_numpy(np.array(reconstructed_user_data["data"])).to(**setup) * ds + dm,
+    0,
+    1,
+).float()
+denormalized_images = torch.clamp(
+    torch.from_numpy(np.array(true_user_data["data"])).to(**setup) * ds + dm,
+    0,
+    1,
+).float()
+features_gt_raw = breaching.analysis.calc_perceptual_features(
+    lpips_scorer,
+    denormalized_images,
+)
+features_rec_raw = breaching.analysis.calc_perceptual_features(
+    lpips_scorer,
+    rec_denormalized,
+)
+
+
+def flatten_features(ftrs):
+    return np.stack(
+        [np.concatenate([v.flatten().numpy() for v in d.values()]) for d in ftrs],
+        axis=0,
+    )
+
+
+features_gt = flatten_features(features_gt_raw)
+features_rec = flatten_features(features_rec_raw)
+
+perc_dist = np.power(features_gt[:, None, ...] - features_rec, 2).mean(axis=2)
+
+
 l2_dists = np.power(
     np.array(true_user_data["data"][:, None, ...])
     - np.array(reconstructed_user_data["data"]),
     2,
 ).mean(axis=(2, 3, 4))
-min_dist, min_idx = np.min(l2_dists, axis=1), np.argmin(l2_dists, axis=1)
+
+thresh = 1e-3
+
+min_dist, min_idx = np.min(perc_dist, axis=1), np.argmin(perc_dist, axis=1)
+l2min_dist, l2min_idx = np.min(l2_dists, axis=1), np.argmin(l2_dists, axis=1)
 reconstructed = reconstructed_user_data["data"][min_idx]
 
+calc_rero = (
+    lambda min_dist, thresh: 100.0 * (min_dist < thresh).sum(axis=0) / min_dist.shape[0]
+)
 
-print(f"ReRo@0.1: {100.0*(min_dist<0.1).sum()/min_dist.shape[0]:.2f}%")
+print(f"ReRo@{thresh}: {calc_rero(min_dist, thresh):.2f}%")
 
-reconstructed_user_data = dict(data=reconstructed, labels=min_dist.tolist())
+idcs_pcpt = np.argsort(min_dist)
+idcs_l2 = np.argsort(l2min_dist)
 
-user.plot(reconstructed_user_data, savefile="cah_recon_aligned.png", stats=stats)
+
+def make_compare_img(true_img, recon_img):
+    assert all([ts == rs for ts, rs in zip(true_img.shape, recon_img.shape)])
+    show_img = np.zeros(
+        (recon_img.shape[0] * 2, *recon_img.shape[1:]), dtype=recon_img.dtype
+    )
+    show_img[::2] = true_img
+    show_img[1::2] = recon_img
+    return show_img
+
+
+def double_labels(labels):
+    db_labels = np.zeros(2 * labels.shape[0])
+    db_labels[::2] = labels
+    db_labels[1::2] = labels
+    return db_labels
+
+
+user.plot(
+    dict(
+        data=make_compare_img(
+            true_user_data["data"][idcs_pcpt], reconstructed[idcs_pcpt]
+        ),
+        labels=double_labels(min_dist[idcs_pcpt]).tolist(),
+    ),
+    savefile=f"cah_recon_sorted_by_pcpt",
+    stats=stats,
+)
+user.plot(
+    dict(
+        data=make_compare_img(true_user_data["data"][idcs_l2], reconstructed[idcs_l2]),
+        labels=double_labels(l2min_dist[idcs_l2]).tolist(),
+    ),
+    savefile=f"cah_recon_sorted_by_l2",
+    stats=stats,
+)
+
+# for rerothresh in [1e-8, 1e-6, 1e-5, 1e-4, 1e-3, 2e-3, 5e-3]:
+#     reconstructed_user_data = dict(
+#         data=np.where(
+#             (min_dist < rerothresh)[:, None, None, None],
+#             reconstructed,
+#             np.zeros_like(reconstructed),
+#         ),
+#         labels=min_dist.tolist(),
+#     )
+
+#     user.plot(
+#         reconstructed_user_data,
+#         savefile=f"cah_recon_aligned@{rerothresh}.png",
+#         stats=stats,
+#     )
+
+import matplotlib.pyplot as plt
+
+# x = np.logspace(-12, 0, num=1000)
+# y = calc_rero(min_dist[:, None], x[None, :])
+
+
+x = min_dist.copy()
+x.sort()
+y = 100.0 * np.linspace(0, x.shape[0], num=x.shape[0]) / x.shape[0]
+
+plt.plot(x, y)
+plt.xscale("log")
+plt.savefig("rerothresholding")
+
+plt.clf()
+plt.scatter(min_dist, l2min_dist)
+# plt.xscale("log")
+# plt.yscale("log")
+plt.savefig("pcptvsl2")
+
 
 # %%
 # metrics = breaching.analysis.report(
