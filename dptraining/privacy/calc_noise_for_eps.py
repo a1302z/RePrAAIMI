@@ -1,5 +1,6 @@
 from enum import Enum
 from functools import partial
+from warnings import simplefilter, catch_warnings
 
 from jax.lax import rsqrt
 from scipy.optimize import minimize_scalar
@@ -90,14 +91,17 @@ class EpsCalculator:
 
     def fill_config(self, accountant, tol=1e-5) -> float:
         if self._mode == NoiseCalcMode.SIGMA:
-            self._config.DP.sigma = get_noise_multiplier(
-                target_epsilon=self._eps,
-                target_delta=self._delta,
-                sample_rate=self.sampling_rate,
-                steps=self._steps,
-                accountant=self._config.DP.mechanism,
-                epsilon_tolerance=tol,
-            )
+            with catch_warnings():  # ignoring too small or large alpha when searched
+                # if really too small or large warning comes again with final eps
+                simplefilter("ignore")
+                self._config.DP.sigma = get_noise_multiplier(
+                    target_epsilon=self._eps,
+                    target_delta=self._delta,
+                    sample_rate=self.sampling_rate,
+                    steps=self._steps,
+                    accountant=self._config.DP.mechanism,
+                    epsilon_tolerance=tol,
+                )
         elif self._mode == NoiseCalcMode.EPOCHS:
             result = minimize_scalar(
                 partial(
