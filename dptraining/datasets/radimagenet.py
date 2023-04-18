@@ -369,6 +369,8 @@ class RadImageNetCreator(DataLoaderCreator):
     ) -> tuple[Dataset, Dataset, Dataset]:
         task = config.dataset.task
         root_folder = Path(config.dataset.root)
+        if root_folder.is_symlink():
+            root_folder = root_folder.readlink()
         train_split, test_split = (
             config.dataset.train_val_split,
             config.dataset.test_split,
@@ -385,6 +387,8 @@ class RadImageNetCreator(DataLoaderCreator):
                 f"{val_split:.2f}_{test_split}_seed={seed}"
             )
         )
+        if copy_folder.is_symlink():
+            copy_folder = copy_folder.readlink()
         if copy_folder.is_dir():
             train_val_test_dirs = [
                 copy_folder / subdir for subdir in ["train", "val", "test"]
@@ -414,7 +418,7 @@ class RadImageNetCreator(DataLoaderCreator):
                     seed=seed,
                     prog_bar=None,
                     group_prefix=None,
-                    move=False,
+                    move="symlink",
                 )
                 out_class_paths.append(out_class_path)
             train_val_test_dirs = mk_subdirectories(
