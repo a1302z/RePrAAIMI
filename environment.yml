@@ -31,7 +31,7 @@ dependencies:
     - perflint
     - pytest-profiling
     - deepee
-    - split-folders
+    - git+https://github.com/cs-mshah/split-folders
     - pyyaml
     - lpips
     - kornia

@@ -18,6 +18,7 @@ from dptraining.datasets.base_creator import (
     DataLoaderCreator,
     mk_subdirectories,
 )
+from dptraining.config import Config
 from dptraining.utils.transform import NormalizeNumpyImg
 from dptraining.config import DatasetTask
 
@@ -365,7 +366,7 @@ class RadImageNet(Dataset):
 class RadImageNetCreator(DataLoaderCreator):
     @staticmethod
     def make_datasets(
-        config: dict, transforms: tuple
+        config: Config, transforms: tuple
     ) -> tuple[Dataset, Dataset, Dataset]:
         task = config.dataset.task
         root_folder = Path(config.dataset.root)
@@ -378,15 +379,15 @@ class RadImageNetCreator(DataLoaderCreator):
         val_split = 1.0 - train_split - test_split
         assert val_split > 0, "Train and test split are combined larger than 1"
         seed = config.dataset.datasplit_seed
-        copy_folder = (
+        copy_folder = Path(
             config.dataset.radimagenet.split_folder
             if config.dataset.radimagenet.split_folder
             else root_folder.parent
-            / (
-                f"{root_folder.name}_dataset_split_{train_split}_"
-                f"{val_split:.2f}_{test_split}_seed={seed}"
-            )
+        ) / (
+            f"{root_folder.name}_dataset_split_{train_split}_"
+            f"{val_split:.2f}_{test_split}_seed={seed}"
         )
+
         if copy_folder.is_symlink():
             copy_folder = copy_folder.readlink()
         if copy_folder.is_dir():
@@ -399,7 +400,7 @@ class RadImageNetCreator(DataLoaderCreator):
                 "If changes happen which require a rebuild please delete manually."
             )
         else:
-            copy_folder.mkdir()
+            copy_folder.mkdir(parents=True)
             classes, _ = find_classes(root_folder)
             out_class_paths = []
             for _, class_path in tqdm(
@@ -418,7 +419,7 @@ class RadImageNetCreator(DataLoaderCreator):
                     seed=seed,
                     prog_bar=None,
                     group_prefix=None,
-                    move="symlink",
+                    move=str(config.dataset.radimagenet.move),
                 )
                 out_class_paths.append(out_class_path)
             train_val_test_dirs = mk_subdirectories(

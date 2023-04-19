@@ -104,6 +104,14 @@ class FmriConfig:
     new_data_root: Optional[str] = None
 
 
+class Move(Enum):
+    copy = 0
+    symlink = 1
+
+    def __str__(self) -> str:
+        return super().__str__().split(".")[-1]
+
+
 @dataclass
 class RadimagenetConfig:
     modality: str = "all"
@@ -111,6 +119,7 @@ class RadimagenetConfig:
     allowed_body_regions: str = "all"
     allowed_labels: str = "all"
     split_folder: Optional[str] = None
+    move: Move = Move.symlink
 
 
 @dataclass
