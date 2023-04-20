@@ -4,7 +4,7 @@ from typing import Optional, Callable, Union
 from objax.gradient import GradValues
 from objax.module import Module
 from objax import ModuleList, StateVar
-from objax.variable import VarCollection
+from objax.variable import VarCollection, TrainVar
 
 
 class AccumulateGrad(Module):
@@ -18,7 +18,7 @@ class AccumulateGrad(Module):
         self.counter = StateVar(jnp.array(0, dtype=jnp.int32))
         self.accumulated_loss = StateVar(jnp.array(0.0))
         self.accumulated_grads = ModuleList(
-            StateVar(jnp.zeros_like(tv)) for tv in variables
+            StateVar(jnp.zeros_like(tv)) for tv in variables if isinstance(tv, TrainVar)
         )
         self.gv = GradValues(f, variables, input_argnums)
 
