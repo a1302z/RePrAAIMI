@@ -42,7 +42,7 @@ def get_transform_normalization(config: Config) -> tuple[array, array]:
 
 def get_aug_normalization(config: Config) -> tuple[array, array]:
     aug_entries = [key for key in config.keys() if "augmentation" in key]
-    results = [get_sub_augs(config[aug]) for aug in aug_entries]
+    results = [get_sub_augs(config[aug]) for aug in aug_entries if aug is not None]
     return boil_down(results)
 
 
@@ -53,6 +53,8 @@ def extract_mean_std(tf):
 
 
 def get_sub_augs(aug):
+    if aug is None:
+        return None
     has_normalize = [key for key in aug.keys() if "normalize" in key]
     if len(has_normalize) > 0:
         tf = aug[has_normalize[0]]

@@ -54,6 +54,7 @@ class DatasetName(Enum):
     ukbb_seg = 7
     ham10000 = 8
     mnist = 9
+    imagefolder = 10
 
 
 class MSDSubtask(Enum):
@@ -304,6 +305,7 @@ class DPConfig:
     mechanism: str = "rdp"
     eps_tol: float = 1e-5
     alphas: list[float] = field(default_factory=list)
+    use_batch_sampling: bool = True
 
 
 class AttackType(Enum):

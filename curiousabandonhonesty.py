@@ -22,10 +22,40 @@ import torch
 import math
 from omegaconf import open_dict
 import os
+from pathlib import Path
 from warnings import warn
+from datetime import datetime
+from tqdm import tqdm
 
 from breaching import breaching
 from breachingobjaxutils.initialize import make_configs
+import lpips
+import cv2
+import matplotlib.pyplot as plt
+
+
+def flatten_features(ftrs):
+    return np.stack(
+        [np.concatenate([v.flatten().numpy() for v in d.values()]) for d in ftrs],
+        axis=0,
+    )
+
+
+def make_compare_img(true_img, recon_img):
+    assert all([ts == rs for ts, rs in zip(true_img.shape, recon_img.shape)])
+    show_img = np.zeros(
+        (recon_img.shape[0] * 2, *recon_img.shape[1:]), dtype=recon_img.dtype
+    )
+    show_img[::2] = true_img
+    show_img[1::2] = recon_img
+    return show_img
+
+
+def double_labels(labels):
+    db_labels = np.zeros(2 * labels.shape[0])
+    db_labels[::2] = labels
+    db_labels[1::2] = labels
+    return db_labels
 
 
 # Redirects logs directly into the jupyter notebook
@@ -43,7 +73,7 @@ from breachingobjaxutils.initialize import make_configs
 cfg, train_config = make_configs(
     ["attack=imprint", "case/server=malicious-model-cah"],
     # "breaching/test_train_config.yaml",
-    "configs/ham10000.yaml",
+    "configs/imagenet_dp.yaml",
     # "configs/radimagenet_dp.yaml",
 )
 # if train_config.general.cpu:
@@ -82,7 +112,7 @@ if train_config.DP:
     with open_dict(cfg):
         cfg.case.user.total_noise = 1e-3
     print(
-        f"actual epsilon: {analyse_epsilon(accountant,1,cfg.case.user.total_noise,sampling_rate,delta,config.DP.alphas)}"
+        f"actual epsilon: {analyse_epsilon(accountant,1,cfg.case.user.total_noise,sampling_rate,delta,train_config.DP.alphas)}"
     )
 
 # %% [markdown]
@@ -115,7 +145,9 @@ cfg.case.user.num_data_points = (
 cfg.case.server.model_modification.type = (
     "CuriousAbandonHonesty"  # What type of Imprint block will be grafted to the model
 )
-cfg.case.server.model_modification.num_bins = 128  # How many bins are in the block
+cfg.case.server.model_modification.num_bins = (
+    2 * train_config.hyperparams.batch_size * train_config.hyperparams.grad_acc_steps
+)  # How many bins are in the block
 
 cfg.case.server.model_modification.position = None  # '4.0.conv'
 cfg.case.server.model_modification.connection = "addition"
@@ -168,153 +200,154 @@ breaching.utils.overview(server, user, attacker)
 # This exchange is a simulation of a single query in a federated learning protocol. The server sends out a `server_payload` and the user computes an update based on their private local data. This user update is `shared_data` and contains, for example, the parameter gradient of the model in the simplest case. `true_user_data` is also returned by `.compute_local_updates`, but of course not forwarded to the server or attacker and only used for (our) analysis.
 
 # %%
+
 server_payload = server.distribute_payload()
-shared_data, true_user_data = user.compute_local_updates(server_payload)
-
-# %%
-user.plot(true_user_data, savefile="cah_true_data.png", stats=stats)
-
-# %% [markdown]
-# ### Reconstruct user data:
-
-# %% [markdown]
-# Now we launch the attack, reconstructing user data based on only the `server_payload` and the `shared_data`.
-#
-# For this attack, we also share secret information from the malicious server with the attack (`server.secrets`), which here is the location and structure of the imprint block.
-
-# %%
-reconstructed_user_data, recon_stats = attacker.reconstruct(
-    [server_payload], [shared_data], server.secrets, dryrun=cfg.dryrun
-)
-
-# %% [markdown]
-# Next we'll evaluate metrics, comparing the `reconstructed_user_data` to the `true_user_data`.
-
-# %% [markdown]
-# ### Remove mixed images by direct GT comparison
-
-# %%
-user.plot(reconstructed_user_data, savefile="cah_recon.png", stats=stats)
-
-# reconstructed = np.zeros_like(true_user_data["data"])
-# for sample in reconstructed_user_data["data"]:
-#     l2_dists = np.power(sample[None] - np.array(true_user_data["data"]), 2).mean(
-#         axis=(1, 2, 3)
-#     )
-#     min_dist, min_idx = np.min(l2_dists, axis=0), np.argmin(l2_dists, axis=0)
-#     # if min_dist < 1e-1:
-#     reconstructed[min_idx] = sample
-#     dists.append(min_dist)
-# for idx, sample in tqdm(
-#     enumerate(true_user_data["data"]),
-#     total=true_user_data["data"].shape[0],
-#     leave=False,
-#     desc="make aligned recon grid",
-# ):
-#     l2_dists = np.power(
-#         sample[None] - np.array(reconstructed_user_data["data"]), 2
-#     ).mean(axis=(1, 2, 3))
-#     min_dist, min_idx = np.min(l2_dists, axis=0), np.argmin(l2_dists, axis=0)
-#     # if min_dist < 1e-1:
-#     reconstructed[idx] = reconstructed_user_data["data"][min_idx]
-#     dists.append(min_dist)
-
-
-import lpips  # lazily import this only if vision reporting is used.
 
 lpips_scorer = lpips.LPIPS(net="alex", verbose=False).to(**setup)
 
-
-rec_denormalized = torch.clamp(
-    torch.from_numpy(np.array(reconstructed_user_data["data"])).to(**setup) * ds + dm,
-    0,
-    1,
-).float()
-denormalized_images = torch.clamp(
-    torch.from_numpy(np.array(true_user_data["data"])).to(**setup) * ds + dm,
-    0,
-    1,
-).float()
-features_gt_raw = breaching.analysis.calc_perceptual_features(
-    lpips_scorer,
-    denormalized_images,
+p = Path(
+    f"reconstructions/{str(train_config.dataset.name).split('.')[-1]}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}/"
 )
-features_rec_raw = breaching.analysis.calc_perceptual_features(
-    lpips_scorer,
-    rec_denormalized,
-)
+N_batches = 5
+min_dist_total = []
+counter = 0
+for batch in tqdm(
+    range(N_batches), total=N_batches, desc="reconstructing inputs", leave=False
+):
+    shared_data, true_user_data = user.compute_local_updates(server_payload)
 
+    # %%
+    # user.plot(true_user_data, savefile="cah_true_data.png", stats=stats)
 
-def flatten_features(ftrs):
-    return np.stack(
-        [np.concatenate([v.flatten().numpy() for v in d.values()]) for d in ftrs],
-        axis=0,
+    # %% [markdown]
+    # ### Reconstruct user data:
+
+    # %% [markdown]
+    # Now we launch the attack, reconstructing user data based on only the `server_payload` and the `shared_data`.
+    #
+    # For this attack, we also share secret information from the malicious server with the attack (`server.secrets`), which here is the location and structure of the imprint block.
+
+    # %%
+    reconstructed_user_data, recon_stats = attacker.reconstruct(
+        [server_payload], [shared_data], server.secrets, dryrun=cfg.dryrun
     )
 
+    # %% [markdown]
+    # Next we'll evaluate metrics, comparing the `reconstructed_user_data` to the `true_user_data`.
 
-features_gt = flatten_features(features_gt_raw)
-features_rec = flatten_features(features_rec_raw)
+    # %% [markdown]
+    # ### Remove mixed images by direct GT comparison
 
-perc_dist = np.power(features_gt[:, None, ...] - features_rec, 2).mean(axis=2)
+    # %%
+    # user.plot(reconstructed_user_data, savefile="cah_recon.png", stats=stats)
 
+    # reconstructed = np.zeros_like(true_user_data["data"])
+    # for sample in reconstructed_user_data["data"]:
+    #     l2_dists = np.power(sample[None] - np.array(true_user_data["data"]), 2).mean(
+    #         axis=(1, 2, 3)
+    #     )
+    #     min_dist, min_idx = np.min(l2_dists, axis=0), np.argmin(l2_dists, axis=0)
+    #     # if min_dist < 1e-1:
+    #     reconstructed[min_idx] = sample
+    #     dists.append(min_dist)
+    # for idx, sample in tqdm(
+    #     enumerate(true_user_data["data"]),
+    #     total=true_user_data["data"].shape[0],
+    #     leave=False,
+    #     desc="make aligned recon grid",
+    # ):
+    #     l2_dists = np.power(
+    #         sample[None] - np.array(reconstructed_user_data["data"]), 2
+    #     ).mean(axis=(1, 2, 3))
+    #     min_dist, min_idx = np.min(l2_dists, axis=0), np.argmin(l2_dists, axis=0)
+    #     # if min_dist < 1e-1:
+    #     reconstructed[idx] = reconstructed_user_data["data"][min_idx]
+    #     dists.append(min_dist)
 
-l2_dists = np.power(
-    np.array(true_user_data["data"][:, None, ...])
-    - np.array(reconstructed_user_data["data"]),
-    2,
-).mean(axis=(2, 3, 4))
+    rec_denormalized = torch.clamp(
+        torch.from_numpy(np.array(reconstructed_user_data["data"])).to(**setup) * ds
+        + dm,
+        0,
+        1,
+    ).float()
+    imgs = rec_denormalized.numpy().transpose(0, 2, 3, 1)
+    imgs = imgs - imgs.min(axis=tuple(range(1, len(imgs.shape))), keepdims=True)
+    imgs /= imgs.max(axis=tuple(range(1, len(imgs.shape))), keepdims=True)
+    imgs *= 255.0
+    imgs = imgs[..., [2, 1, 0]]
+    batch_p = p / f"{batch}/"
+    if not batch_p.is_dir():
+        batch_p.mkdir(parents=True)
+    for img in imgs:
+        cv2.imwrite(str(batch_p / f"{counter}.png"), img)
+        # plt.imshow(img)
+        # plt.save(f"reconstructions/{counter}.png")
+        counter += 1
 
-thresh = 1e-3
+    denormalized_images = torch.clamp(
+        torch.from_numpy(np.array(true_user_data["data"])).to(**setup) * ds + dm,
+        0,
+        1,
+    ).float()
+    features_gt_raw = breaching.analysis.calc_perceptual_features(
+        lpips_scorer,
+        denormalized_images,
+    )
+    features_rec_raw = breaching.analysis.calc_perceptual_features(
+        lpips_scorer,
+        rec_denormalized,
+    )
 
-min_dist, min_idx = np.min(perc_dist, axis=1), np.argmin(perc_dist, axis=1)
-l2min_dist, l2min_idx = np.min(l2_dists, axis=1), np.argmin(l2_dists, axis=1)
-reconstructed = reconstructed_user_data["data"][min_idx]
+    features_gt = flatten_features(features_gt_raw)
+    features_rec = flatten_features(features_rec_raw)
+
+    perc_dist = np.power(features_gt[:, None, ...] - features_rec, 2).mean(axis=2)
+
+    # l2_dists = np.power(
+    #     np.array(true_user_data["data"][:, None, ...])
+    #     - np.array(reconstructed_user_data["data"]),
+    #     2,
+    # ).mean(axis=(2, 3, 4))
+
+    thresh = 1e-3
+
+    min_dist, min_idx = np.min(perc_dist, axis=1), np.argmin(perc_dist, axis=1)
+    # l2min_dist, l2min_idx = np.min(l2_dists, axis=1), np.argmin(l2_dists, axis=1)
+    # reconstructed = reconstructed_user_data["data"][min_idx]
+
+    min_dist_total.append(min_dist)
+
+min_dist_total = np.concatenate(min_dist_total, axis=0)
 
 calc_rero = (
-    lambda min_dist, thresh: 100.0 * (min_dist < thresh).sum(axis=0) / min_dist.shape[0]
+    lambda distances, thresh: 100.0
+    * (distances < thresh).sum(axis=0)
+    / distances.shape[0]
 )
 
-print(f"ReRo@{thresh}: {calc_rero(min_dist, thresh):.2f}%")
+print(f"ReRo@{thresh}: {calc_rero(min_dist_total, thresh):.2f}%")
 
-idcs_pcpt = np.argsort(min_dist)
-idcs_l2 = np.argsort(l2min_dist)
+# idcs_pcpt = np.argsort(min_dist)
+# idcs_l2 = np.argsort(l2min_dist)
 
-
-def make_compare_img(true_img, recon_img):
-    assert all([ts == rs for ts, rs in zip(true_img.shape, recon_img.shape)])
-    show_img = np.zeros(
-        (recon_img.shape[0] * 2, *recon_img.shape[1:]), dtype=recon_img.dtype
-    )
-    show_img[::2] = true_img
-    show_img[1::2] = recon_img
-    return show_img
-
-
-def double_labels(labels):
-    db_labels = np.zeros(2 * labels.shape[0])
-    db_labels[::2] = labels
-    db_labels[1::2] = labels
-    return db_labels
-
-
-user.plot(
-    dict(
-        data=make_compare_img(
-            true_user_data["data"][idcs_pcpt], reconstructed[idcs_pcpt]
-        ),
-        labels=double_labels(min_dist[idcs_pcpt]).tolist(),
-    ),
-    savefile=f"cah_recon_sorted_by_pcpt",
-    stats=stats,
-)
-user.plot(
-    dict(
-        data=make_compare_img(true_user_data["data"][idcs_l2], reconstructed[idcs_l2]),
-        labels=double_labels(l2min_dist[idcs_l2]).tolist(),
-    ),
-    savefile=f"cah_recon_sorted_by_l2",
-    stats=stats,
-)
+# user.plot(
+#     dict(
+#         data=make_compare_img(
+#             true_user_data["data"][idcs_pcpt], reconstructed[idcs_pcpt]
+#         ),
+#         labels=double_labels(min_dist[idcs_pcpt]).tolist(),
+#     ),
+#     savefile=f"cah_recon_sorted_by_pcpt",
+#     stats=stats,
+# )
+# user.plot(
+#     dict(
+#         data=make_compare_img(true_user_data["data"][idcs_l2], reconstructed[idcs_l2]),
+#         labels=double_labels(l2min_dist[idcs_l2]).tolist(),
+#     ),
+#     savefile=f"cah_recon_sorted_by_l2",
+#     stats=stats,
+# )
 
 # for rerothresh in [1e-8, 1e-6, 1e-5, 1e-4, 1e-3, 2e-3, 5e-3]:
 #     reconstructed_user_data = dict(
@@ -332,25 +365,24 @@ user.plot(
 #         stats=stats,
 #     )
 
-import matplotlib.pyplot as plt
 
 # x = np.logspace(-12, 0, num=1000)
 # y = calc_rero(min_dist[:, None], x[None, :])
 
 
-x = min_dist.copy()
+x = min_dist_total.copy()
 x.sort()
 y = 100.0 * np.linspace(0, x.shape[0], num=x.shape[0]) / x.shape[0]
 
 plt.plot(x, y)
 plt.xscale("log")
-plt.savefig("rerothresholding")
+plt.savefig("rerothresholding.png")
 
-plt.clf()
-plt.scatter(min_dist, l2min_dist)
-# plt.xscale("log")
-# plt.yscale("log")
-plt.savefig("pcptvsl2")
+# plt.clf()
+# plt.scatter(min_dist, l2min_dist)
+# # plt.xscale("log")
+# # plt.yscale("log")
+# plt.savefig("pcptvsl2")
 
 
 # %%

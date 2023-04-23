@@ -21,6 +21,7 @@ dependencies:
   - conda-forge::pandas
   - conda-forge::opacus
   - conda-forge::seaborn
+  - conda-forge::opencv
   - black
   - pytest
   - pylint

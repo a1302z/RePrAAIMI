@@ -26,6 +26,13 @@ from warnings import warn
 from copy import deepcopy
 import lpips
 from matplotlib import pyplot as plt, colors as mplcolors, ticker as mtick
+from matplotlib import image as mpimg
+from pathlib import Path
+from tqdm import tqdm
+from datetime import datetime
+import cv2
+import pandas as pd
+
 
 from opacus.accountants import create_accountant
 from opacus.accountants.utils import get_noise_multiplier
@@ -55,6 +62,15 @@ from breaching import breaching
 from breachingobjaxutils.initialize import make_configs
 
 
+def flatten_features(ftrs):
+    return np.stack(
+        [np.concatenate([v.flatten().numpy() for v in d.values()]) for d in ftrs],
+        axis=0,
+    )
+
+
+calc_rero = lambda dist, thresh: 100.0 * (dist < thresh).sum(axis=0) / dist.shape[0]
+
 # Redirects logs directly into the jupyter notebook
 # import logging, sys
 # logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stdout)], format='%(message)s')
@@ -71,7 +87,7 @@ cfg, config = make_configs(
     ["attack=imprint", "case/server=malicious-model-cah"],
     # "breaching/test_train_config.yaml",
     # "configs/ham10000.yaml",
-    "configs/radimagenet_dp.yaml",
+    "configs/imagefolder.yaml",
 )
 # if train_config.general.cpu:
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -91,6 +107,17 @@ device = torch.device(f"cuda") if torch.cuda.is_available() else torch.device("c
 torch.backends.cudnn.benchmark = cfg.case.impl.benchmark
 setup = dict(device=device, dtype=getattr(torch, cfg.case.impl.dtype))
 
+
+# eps_values = [8, 1e6] + [10**i for i in range(9, 18, 1)] + ["Non-private"]
+# eps_values = [1, 1e6, 1e9, 1e12]
+eps_values = [10] + ["Non-private"]
+
+recon_data_per_eps = []
+lpips_scorer = lpips.LPIPS(net="alex", verbose=False).to(**setup)
+p = Path(
+    f"reconstructions/{str(config.dataset.name).split('.')[-1]}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}/"
+)
+N_batches = 1
 
 train_loader, _, _ = make_loader_from_config(config)
 
@@ -117,18 +144,24 @@ PRIVACY_FOR_ENTIRE_TRAINING = True
 
 
 class ProxySet(torch.utils.data.Dataset):
-    def __init__(self, batch) -> None:
+    def __init__(self, batches: list) -> None:
         super().__init__()
-        self.batch = batch
+        self.batches: list = batches
 
     def __len__(self):
-        return 1
+        return len(self.batches)
 
-    def __getitem__(self, _):
-        return self.batch
+    def __getitem__(self, i: int):
+        return self.batches[i]
 
 
-proxy_dataset = ProxySet(next(iter(train_loader)))
+batches = []
+for i, batch in enumerate(train_loader):
+    batches.append(batch)
+    if i > N_batches * config.hyperparams.grad_acc_steps + 1:
+        break
+
+proxy_dataset = ProxySet(batches)
 proxy_loader = torch.utils.data.DataLoader(
     proxy_dataset, batch_size=1, collate_fn=lambda _: _[0]
 )
@@ -143,7 +176,7 @@ else:
     aug_stats = get_aug_normalization(config)
     if aug_stats is None:
         warn("Did not find stats. Will continue assuming unnormalized input.")
-        dm, ds = np.array(0.0), np.array(1.0)
+        dm, ds = np.array([0.0]), np.array([1.0])
     else:
         dm, ds, aug_fn = aug_stats
 
@@ -153,12 +186,33 @@ dm, ds = dm.reshape(*new_shape), ds.reshape(*new_shape)
 stats = (dm, ds)
 
 
-eps_values = [10**i for i in range(0, 16, 3)] + ["Non-private"]
-# eps_values = [1, 1e6, 1e9, 1e12]
+def save_imgs_to_path(imgs, batch_p_recon):
+    counter = 0
+    if not batch_p_recon.is_dir():
+        batch_p_recon.mkdir(parents=True)
+    for img in imgs:
+        cv2.imwrite(str(batch_p_recon / f"{counter}.png"), img.astype(np.uint8))
+        counter += 1
 
-recon_data_per_eps = []
 
-for eps in eps_values:
+def convert_to_cv2(recon_imgs):
+    recon_imgs = recon_imgs.transpose(0, 2, 3, 1)
+    recon_imgs = recon_imgs - recon_imgs.min(
+        axis=tuple(range(1, len(recon_imgs.shape))), keepdims=True
+    )
+    recon_imgs /= recon_imgs.max(
+        axis=tuple(range(1, len(recon_imgs.shape))), keepdims=True
+    )
+    recon_imgs *= 255.0
+    if recon_imgs.shape[-1] == 3:  # convert RBG to BRG
+        recon_imgs = recon_imgs[..., [2, 1, 0]]
+    return recon_imgs
+
+
+# save_imgs_to_path(convert_to_cv2(np.array(example_batch)), Path("./test_path"))
+
+for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=False):
+    eps_path = p / (eps if isinstance(eps, str) else f"eps={eps:.0f}")
     # if eps == "Random noise":
     #     true_user_data = dict(data=example_batch, label=example_label)
     #     reconstructed_user_data = dict(
@@ -222,9 +276,8 @@ for eps in eps_values:
     # You can use `.attribute` access to modify any of these configurations for the attack, or the case:
 
     # %%
-    cfg.case.user.num_data_points = (
-        train_config.hyperparams.batch_size
-    )  # How many data points does this user own
+    cfg.case.user.num_data_points = config.hyperparams.batch_size
+    # How many data points does this user own
     cfg.case.server.model_modification.type = "CuriousAbandonHonesty"  # What type of Imprint block will be grafted to the model
     cfg.case.server.model_modification.num_bins = 128  # How many bins are in the block
 
@@ -269,7 +322,7 @@ for eps in eps_values:
     attacker = breaching.attacks.prepare_attack(
         model_fn, make_loss_gv_from_model, cfg.attack, stats
     )
-    breaching.utils.overview(server, user, attacker)
+    # breaching.utils.overview(server, user, attacker)
 
     # %% [markdown]
     # ### Simulate an attacked FL protocol
@@ -279,116 +332,90 @@ for eps in eps_values:
 
     # %%
     server_payload = server.distribute_payload()
-    shared_data, true_user_data = user.compute_local_updates(server_payload)
+    min_dist_total = []
+    recon_counter = 0
+    gt_counter = 0
+    stats_df = None
+    for batch in tqdm(
+        range(N_batches), total=N_batches, desc="reconstructing inputs", leave=False
+    ):
+        shared_data, true_user_data = user.compute_local_updates(server_payload)
 
-    # %%
-    # user.plot(true_user_data, savefile="cah_true_data.png", stats=stats)
-
-    # %% [markdown]
-    # ### Reconstruct user data:
-
-    # %% [markdown]
-    # Now we launch the attack, reconstructing user data based on only the `server_payload` and the `shared_data`.
-    #
-    # For this attack, we also share secret information from the malicious server with the attack (`server.secrets`), which here is the location and structure of the imprint block.
-
-    # %%
-    reconstructed_user_data, recon_stats = attacker.reconstruct(
-        [server_payload], [shared_data], server.secrets, dryrun=cfg.dryrun
-    )
-
-    # %% [markdown]
-    # Next we'll evaluate metrics, comparing the `reconstructed_user_data` to the `true_user_data`.
-
-    # %% [markdown]
-    # ### Remove mixed images by direct GT comparison
-
-    # %%
-    # user.plot(reconstructed_user_data, savefile="cah_recon.png", stats=stats)
-
-    # reconstructed = np.zeros_like(true_user_data["data"])
-    # for sample in reconstructed_user_data["data"]:
-    #     l2_dists = np.power(sample[None] - np.array(true_user_data["data"]), 2).mean(
-    #         axis=(1, 2, 3)
-    #     )
-    #     min_dist, min_idx = np.min(l2_dists, axis=0), np.argmin(l2_dists, axis=0)
-    #     # if min_dist < 1e-1:
-    #     reconstructed[min_idx] = sample
-    #     dists.append(min_dist)
-    # for idx, sample in tqdm(
-    #     enumerate(true_user_data["data"]),
-    #     total=true_user_data["data"].shape[0],
-    #     leave=False,
-    #     desc="make aligned recon grid",
-    # ):
-    #     l2_dists = np.power(
-    #         sample[None] - np.array(reconstructed_user_data["data"]), 2
-    #     ).mean(axis=(1, 2, 3))
-    #     min_dist, min_idx = np.min(l2_dists, axis=0), np.argmin(l2_dists, axis=0)
-    #     # if min_dist < 1e-1:
-    #     reconstructed[idx] = reconstructed_user_data["data"][min_idx]
-    #     dists.append(min_dist)
-
-    lpips_scorer = lpips.LPIPS(net="alex", verbose=False).to(**setup)
-
-    rec_denormalized = torch.clamp(
-        torch.from_numpy(np.array(reconstructed_user_data["data"])).to(**setup) * ds
-        + dm,
-        0,
-        1,
-    ).float()
-    denormalized_images = torch.clamp(
-        torch.from_numpy(np.array(true_user_data["data"])).to(**setup) * ds + dm,
-        0,
-        1,
-    ).float()
-    features_gt_raw = breaching.analysis.calc_perceptual_features(
-        lpips_scorer,
-        denormalized_images,
-    )
-    features_rec_raw = breaching.analysis.calc_perceptual_features(
-        lpips_scorer,
-        rec_denormalized,
-    )
-
-    def flatten_features(ftrs):
-        return np.stack(
-            [np.concatenate([v.flatten().numpy() for v in d.values()]) for d in ftrs],
-            axis=0,
+        reconstructed_user_data, recon_stats = attacker.reconstruct(
+            [server_payload], [shared_data], server.secrets, dryrun=cfg.dryrun
         )
 
-    features_gt = flatten_features(features_gt_raw)
-    features_rec = flatten_features(features_rec_raw)
+        rec_denormalized = torch.clamp(
+            torch.from_numpy(np.array(reconstructed_user_data["data"])).to(**setup) * ds
+            + dm,
+            0,
+            1,
+        ).float()
+        denormalized_images = torch.clamp(
+            torch.from_numpy(np.array(true_user_data["data"])).to(**setup) * ds + dm,
+            0,
+            1,
+        ).float()
 
-    perc_dist = np.power(features_gt[:, None, ...] - features_rec, 2).mean(axis=2)
+        recon_imgs = convert_to_cv2(np.array(reconstructed_user_data["data"]))
+        gt_imgs = convert_to_cv2(np.array(true_user_data["data"]))
+        batch_p = eps_path / f"{batch}"
+        batch_p_recon = batch_p / "recon"
+        batch_p_gt = batch_p / "gt"
+        save_imgs_to_path(recon_imgs, batch_p_recon)
+        save_imgs_to_path(gt_imgs, batch_p_gt)
 
-    l2_dists = np.power(
-        np.array(true_user_data["data"][:, None, ...])
-        - np.array(reconstructed_user_data["data"]),
-        2,
-    ).mean(axis=(2, 3, 4))
+        features_gt_raw = breaching.analysis.calc_perceptual_features(
+            lpips_scorer,
+            denormalized_images,
+        )
+        features_rec_raw = breaching.analysis.calc_perceptual_features(
+            lpips_scorer,
+            rec_denormalized,
+        )
 
-    thresh = 1e-3
+        features_gt = flatten_features(features_gt_raw)
+        features_rec = flatten_features(features_rec_raw)
 
-    min_dist, min_idx = np.min(perc_dist, axis=1), np.argmin(perc_dist, axis=1)
-    l2min_dist, l2min_idx = np.min(l2_dists, axis=1), np.argmin(l2_dists, axis=1)
-    reconstructed = reconstructed_user_data["data"][min_idx]
+        perc_dist = np.power(features_gt[:, None, ...] - features_rec, 2).mean(axis=2)
 
-    calc_rero = (
-        lambda min_dist, thresh: 100.0
-        * (min_dist < thresh).sum(axis=0)
-        / min_dist.shape[0]
-    )
+        # l2_dists = np.power(
+        #     np.array(true_user_data["data"][:, None, ...])
+        #     - np.array(reconstructed_user_data["data"]),
+        #     2,
+        # ).mean(axis=(2, 3, 4))
 
-    rero = calc_rero(min_dist, thresh)
-    print(f"ReRo@{thresh}: {rero:.2f}%")
+        thresh = 1e-3
 
-    # idcs_pcpt = np.argsort(min_dist)
-    # idcs_l2 = np.argsort(l2min_dist)
+        min_dist, min_idx = np.min(perc_dist, axis=1), np.argmin(perc_dist, axis=1)
+        # np.save(str(batch_p / "distances_closest.npy"), min_dist)
+        # np.save(str(batch_p / "idcs_closest.npy"), min_idx)
 
-    recon_data_per_eps.append(
-        (reconstructed_user_data["data"], min_dist, l2min_dist, min_idx, l2min_idx)
-    )
+        batch_df = pd.DataFrame.from_dict(
+            {
+                "min_distance": min_dist,
+                "gt_path": [
+                    str(batch_p_gt / f"{i}.png") for i in range(min_dist.shape[0])
+                ],
+                "recon_path": [str(batch_p_recon / f"{i}.png") for i in min_idx],
+            }
+        )
+        batch_df.to_csv(str(batch_p / "recon_assignment.csv"), index=False)
+        # l2min_dist, l2min_idx = np.min(l2_dists, axis=1), np.argmin(l2_dists, axis=1)
+        # reconstructed = reconstructed_user_data["data"][min_idx]
+
+        # rero = calc_rero(min_dist, thresh)
+        # print(f"ReRo@{thresh}: {rero:.2f}%")
+        min_dist_total.append(min_dist)
+
+        # idcs_pcpt = np.argsort(min_dist)
+        # idcs_l2 = np.argsort(l2min_dist)
+        if stats_df is None:
+            stats_df = batch_df
+        else:
+            stats_df = pd.concat([stats_df, batch_df])
+    stats_df.to_csv(eps_path / "recon_assignment.csv", index=False)
+    recon_data_per_eps.append(stats_df)
 
 
 def turn_axis_off(ax):
@@ -398,7 +425,7 @@ def turn_axis_off(ax):
     ax.set_yticks([])
 
 
-TOP_N = 5
+TOP_N = 10
 example_batch = example_batch.transpose(0, 2, 3, 1)
 cmap = plt.cm.Dark2
 cmaplist = [cmap(i) for i in range(cmap.N)]
@@ -415,46 +442,52 @@ if example_batch.shape[-1] == 1:
 fig, axs = plt.subplots(
     len(eps_values), 2 * TOP_N, figsize=(10 * TOP_N, 5 * len(eps_values)), sharey=True
 )
-fig2, ax2 = plt.subplots(1, 2, figsize=(10, 5), sharey=True)
-ax2[0].set_xlabel("Perceptual distance")
-ax2[1].set_xlabel("Mean squared distance")
-ax2[0].set_ylabel("Images within distance")
-ax2[0].yaxis.set_major_formatter(mtick.PercentFormatter())
-for ax, eps, (recon_data, perc_dist, l2_dist, perc_idcs, l2_idcs), col in zip(
-    axs, eps_values, recon_data_per_eps, cmaplist
+fig2, ax2 = plt.subplots(1, 1, figsize=(5, 5), sharey=True)
+ax2.set_xlabel("Perceptual distance")
+# ax2[1].set_xlabel("Mean squared distance")
+ax2.set_ylabel("Images within distance")
+ax2.yaxis.set_major_formatter(mtick.PercentFormatter())
+for ax, eps, stats_df, col in tqdm(
+    zip(axs, eps_values, recon_data_per_eps, cmaplist),
+    total=len(eps_values),
+    desc="building figures",
+    leave=False,
 ):
     eps_formatted = f"ε={eps:.0f}" if isinstance(eps, (float, int)) else eps
-    recon_data = recon_data.transpose(0, 2, 3, 1)
-    idcs_pcpt = np.argsort(perc_dist)
-    idcs_l2 = np.argsort(l2_dist)
+
+    stats_df = stats_df.iloc[stats_df.min_distance.argsort()]
+    # reduced_stats_df = stats_df.drop_duplicates(subset="gt_path")
+    # recon_data = recon_data.transpose(0, 2, 3, 1)
+    # idcs_pcpt = np.argsort(perc_dist)
+    # idcs_l2 = np.argsort(l2_dist)
     ax[0].set_ylabel(eps_formatted, fontsize=20)
     for i in range(TOP_N):
-        idx = idcs_pcpt[i]
-        ax[2 * i].imshow(example_batch[idx], **plt_kwargs)
-        ax[2 * i + 1].imshow(recon_data[perc_idcs[idx]], **plt_kwargs)
+        dist, gt_p, recon_p = stats_df.iloc[i]
+        ax[2 * i].imshow(mpimg.imread(gt_p), **plt_kwargs)
+        ax[2 * i + 1].imshow(mpimg.imread(recon_p), **plt_kwargs)
         turn_axis_off(ax[2 * i])
         turn_axis_off(ax[2 * i + 1])
-        ax[2 * i + 1].set_xlabel(f"d={perc_dist[idx]:.3f}", fontsize=16)
+        ax[2 * i + 1].set_xlabel(f"d={dist:.3f}", fontsize=16)
         ax[2 * i].set_title("Original", fontsize=20)
         ax[2 * i + 1].set_title("Closest Reconstruction", fontsize=20)
 
     # col = cmap(norm(eps))
-    x1 = perc_dist.copy()
-    x2 = l2_dist.copy()
+    x1 = stats_df.min_distance.to_numpy().copy()
+    # x2 = l2_dist.copy()
     x1.sort()
-    x2.sort()
+    # x2.sort()
     y = 100.0 * np.linspace(0, x1.shape[0], num=x1.shape[0]) / x1.shape[0]
-    ax2[0].step(x1, y, label=eps_formatted, color=col)
-    ax2[1].step(x2, y, color=col)
+    ax2.step(x1, y, label=eps_formatted, color=col)
+    # ax2[1].step(x2, y, color=col)
     # ax2[0].set_title("Perceptual")
     # ax2[1].set_title("MSE")
 fig2.legend(loc="upper left", bbox_to_anchor=(0.12, 0.89))
 
 
-fig.savefig("cah_analysis.png", dpi=600, bbox_inches="tight")
-fig.savefig("cah_analysis.svg", bbox_inches="tight")
-fig2.savefig("rero_thresholding.png", dpi=600, bbox_inches="tight")
-fig2.savefig("rero_thresholding.svg", bbox_inches="tight")
+fig.savefig(str(p / "cah_analysis.png"), dpi=600, bbox_inches="tight")
+fig.savefig(str(p / "cah_analysis.svg"), bbox_inches="tight")
+fig2.savefig(str(p / "rero_thresholding.png"), dpi=600, bbox_inches="tight")
+fig2.savefig(str(p / "rero_thresholding.svg"), bbox_inches="tight")
 
 
 # user.plot(

@@ -1,12 +1,18 @@
-from typing import Any
+from typing import Any, Callable, Optional
 from torch.utils.data import Dataset
 
 
 class DataSubset(Dataset):
-    def __init__(self, total_dataset: Dataset, indices: list[int]) -> None:
+    def __init__(
+        self,
+        total_dataset: Dataset,
+        indices: list[int],
+        transform: Optional[Callable] = None,
+    ) -> None:
         super().__init__()
         self.total_dataset: Dataset = total_dataset
         self.indices: list[int] = indices
+        self.tf = transform
         assert max(self.indices) < len(
             self.total_dataset
         ), "Indices cover larger range than total dataset"
@@ -16,7 +22,13 @@ class DataSubset(Dataset):
 
     def __getitem__(self, index: Any) -> Any:
         index = index % self.__len__()
-        return self.total_dataset[self.indices[index]]
+        sample = self.total_dataset[self.indices[index]]
+        if self.tf:
+            sample = list(sample)
+            sample[0] = self.tf(sample[0])
+            return tuple(sample)
+        else:
+            return sample
 
 
 class FixedAndShadowDatasetFromOneSet(DataSubset):

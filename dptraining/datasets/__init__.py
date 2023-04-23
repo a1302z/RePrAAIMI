@@ -22,6 +22,7 @@ from dptraining.datasets.nifti.creator import NiftiSegCreator
 from dptraining.datasets.ham10000 import HAM10000Creator
 from dptraining.datasets.attack_datasets import AttackCreator
 from dptraining.datasets.mnist import MNISTCreator
+from dptraining.datasets.imagefolder import ImageFolderCreator
 from dptraining.datasets.subset import (
     FixedAndShadowDatasetFromOneSet,
     DataSubset,
@@ -66,6 +67,8 @@ def select_creator(config):
             creator = AttackCreator
         case DatasetName.mnist:
             creator = MNISTCreator
+        case DatasetName.imagefolder:
+            creator = ImageFolderCreator
         case _ as unsupported:
             raise ValueError(f"Unsupported dataset '{unsupported}'.")
     return creator
@@ -207,7 +210,7 @@ def make_loader_from_config(config: Config) -> tuple[DataLoader]:
         config
     )
     overfitting = config.hyperparams.overfit is not None
-    if not config.DP or overfitting:
+    if not config.DP or overfitting or not config.DP.use_batch_sampling:
         train_loader_kwargs["batch_size"] = config.hyperparams.batch_size
         train_loader_kwargs["shuffle"] = not overfitting
         if overfitting and config.DP:
