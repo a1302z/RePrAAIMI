@@ -39,6 +39,26 @@ from opacus.accountants.utils import get_noise_multiplier
 
 import seaborn as sn
 
+from argparse import ArgumentParser
+
+parser = ArgumentParser()
+parser.add_argument("-cn", "--config", required=True, help="Path to training config.")
+parser.add_argument(
+    "-b", "--num_bins", default=None, help="Number of reconstruction images", type=int
+)
+parser.add_argument(
+    "-nb", "--N_batches", default=5, help="How many batches to reconstruct", type=int
+)
+parser.add_argument(
+    "-ni",
+    "--N_images",
+    default=5,
+    help="How many images to visualize in summary",
+    type=int,
+)
+args = parser.parse_args()
+
+
 sn.set_theme(
     context="notebook",
     style="white",
@@ -71,23 +91,12 @@ def flatten_features(ftrs):
 
 calc_rero = lambda dist, thresh: 100.0 * (dist < thresh).sum(axis=0) / dist.shape[0]
 
-# Redirects logs directly into the jupyter notebook
-# import logging, sys
-# logging.basicConfig(level=logging.INFO, handlers=[logging.StreamHandler(sys.stdout)], format='%(message)s')
-# logger = logging.getLogger()
-
-# %% [markdown]
-# ### Initialize cfg object and system setup:
-
-# %% [markdown]
-# This will load the full configuration object. This includes the configuration for the use case and threat model as `cfg.case` and the hyperparameters and implementation of the attack as `cfg.attack`. All parameters can be modified below, or overriden with `overrides=` as if they were cmd-line arguments.
-
 # %%
 cfg, config = make_configs(
     ["attack=imprint", "case/server=malicious-model-cah"],
     # "breaching/test_train_config.yaml",
     # "configs/ham10000.yaml",
-    "configs/imagefolder.yaml",
+    args.config,
 )
 # if train_config.general.cpu:
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
@@ -108,35 +117,19 @@ torch.backends.cudnn.benchmark = cfg.case.impl.benchmark
 setup = dict(device=device, dtype=getattr(torch, cfg.case.impl.dtype))
 
 
-# eps_values = [8, 1e6] + [10**i for i in range(9, 18, 1)] + ["Non-private"]
+eps_values = [8] + [10**i for i in range(9, 18, 1)] + ["Non-private"]
 # eps_values = [1, 1e6, 1e9, 1e12]
-eps_values = [10] + ["Non-private"]
+# eps_values = [8] + ["Non-private"]
 
 recon_data_per_eps = []
 lpips_scorer = lpips.LPIPS(net="alex", verbose=False).to(**setup)
 p = Path(
     f"reconstructions/{str(config.dataset.name).split('.')[-1]}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}/"
 )
-N_batches = 1
+
 
 train_loader, _, _ = make_loader_from_config(config)
 
-
-# def make_compare_img(true_img, recon_img):
-#     assert all([ts == rs for ts, rs in zip(true_img.shape, recon_img.shape)])
-#     show_img = np.zeros(
-#         (recon_img.shape[0] * 2, *recon_img.shape[1:]), dtype=recon_img.dtype
-#     )
-#     show_img[::2] = true_img
-#     show_img[1::2] = recon_img
-#     return show_img
-
-
-# def double_labels(labels):
-#     db_labels = np.zeros(2 * labels.shape[0])
-#     db_labels[::2] = labels
-#     db_labels[1::2] = labels
-#     return db_labels
 
 accountant = create_accountant(config.DP.mechanism)
 
@@ -158,7 +151,7 @@ class ProxySet(torch.utils.data.Dataset):
 batches = []
 for i, batch in enumerate(train_loader):
     batches.append(batch)
-    if i > N_batches * config.hyperparams.grad_acc_steps + 1:
+    if i > args.N_batches * config.hyperparams.grad_acc_steps + 1:
         break
 
 proxy_dataset = ProxySet(batches)
@@ -210,7 +203,6 @@ def convert_to_cv2(recon_imgs):
 
 
 # save_imgs_to_path(convert_to_cv2(np.array(example_batch)), Path("./test_path"))
-
 for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=False):
     eps_path = p / (eps if isinstance(eps, str) else f"eps={eps:.0f}")
     # if eps == "Random noise":
@@ -269,17 +261,15 @@ for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=
             f"actual epsilon: {analyse_epsilon(accountant,steps,cfg.case.user.total_noise,sampling_rate,delta, config.DP.alphas):.2f} with noise multiplier {total_noise}"
         )
 
-    # %% [markdown]
-    # ### Modify config options here
-
-    # %% [markdown]
-    # You can use `.attribute` access to modify any of these configurations for the attack, or the case:
-
     # %%
     cfg.case.user.num_data_points = config.hyperparams.batch_size
     # How many data points does this user own
     cfg.case.server.model_modification.type = "CuriousAbandonHonesty"  # What type of Imprint block will be grafted to the model
-    cfg.case.server.model_modification.num_bins = 128  # How many bins are in the block
+    cfg.case.server.model_modification.num_bins = (
+        args.num_bins
+        if args.num_bins
+        else config.hyperparams.batch_size * config.hyperparams.grad_acc_steps * 2
+    )  # How many bins are in the block
 
     cfg.case.server.model_modification.position = None  # '4.0.conv'
     cfg.case.server.model_modification.connection = "addition"
@@ -304,14 +294,6 @@ for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=
     cfg.case.server.model_modification.scale_factor = -0.9990
     cfg.attack.breach_reduction = None  # Will be done manually
 
-    # %% [markdown]
-    # ### Instantiate all parties
-
-    # %% [markdown]
-    # The following lines generate "server, "user" and "attacker" objects and print an overview of their configurations.
-
-    # %%
-    # user, server, model, loss_fn = breaching.cases.construct_case(cfg.case, setup)
     user, server, model_fn = breaching.cases.construct_case(
         train_config,
         cfg.case,
@@ -322,22 +304,16 @@ for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=
     attacker = breaching.attacks.prepare_attack(
         model_fn, make_loss_gv_from_model, cfg.attack, stats
     )
-    # breaching.utils.overview(server, user, attacker)
-
-    # %% [markdown]
-    # ### Simulate an attacked FL protocol
-
-    # %% [markdown]
-    # This exchange is a simulation of a single query in a federated learning protocol. The server sends out a `server_payload` and the user computes an update based on their private local data. This user update is `shared_data` and contains, for example, the parameter gradient of the model in the simplest case. `true_user_data` is also returned by `.compute_local_updates`, but of course not forwarded to the server or attacker and only used for (our) analysis.
-
-    # %%
     server_payload = server.distribute_payload()
     min_dist_total = []
     recon_counter = 0
     gt_counter = 0
     stats_df = None
     for batch in tqdm(
-        range(N_batches), total=N_batches, desc="reconstructing inputs", leave=False
+        range(args.N_batches),
+        total=args.N_batches,
+        desc="reconstructing inputs",
+        leave=False,
     ):
         shared_data, true_user_data = user.compute_local_updates(server_payload)
 
@@ -356,14 +332,6 @@ for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=
             0,
             1,
         ).float()
-
-        recon_imgs = convert_to_cv2(np.array(reconstructed_user_data["data"]))
-        gt_imgs = convert_to_cv2(np.array(true_user_data["data"]))
-        batch_p = eps_path / f"{batch}"
-        batch_p_recon = batch_p / "recon"
-        batch_p_gt = batch_p / "gt"
-        save_imgs_to_path(recon_imgs, batch_p_recon)
-        save_imgs_to_path(gt_imgs, batch_p_gt)
 
         features_gt_raw = breaching.analysis.calc_perceptual_features(
             lpips_scorer,
@@ -387,9 +355,29 @@ for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=
 
         thresh = 1e-3
 
-        min_dist, min_idx = np.min(perc_dist, axis=1), np.argmin(perc_dist, axis=1)
+        min_dist, closest_recon_to_gt = np.min(perc_dist, axis=1), np.argmin(
+            perc_dist, axis=1
+        )
+        min_idx_rec = np.argsort(np.min(perc_dist, axis=0))
+
+        recon_imgs = convert_to_cv2(
+            np.array(reconstructed_user_data["data"])[min_idx_rec]
+        )
+        gt_imgs = convert_to_cv2(np.array(true_user_data["data"]))
+        batch_p = eps_path / f"{batch}"
+        batch_p_recon = batch_p / "recon"
+        batch_p_gt = batch_p / "gt"
+        save_imgs_to_path(recon_imgs, batch_p_recon)
+        save_imgs_to_path(gt_imgs, batch_p_gt)
+
         # np.save(str(batch_p / "distances_closest.npy"), min_dist)
         # np.save(str(batch_p / "idcs_closest.npy"), min_idx)
+        def get_indices_of_values(larger_array, smaller_array):
+            indices = []
+            for value in smaller_array:
+                matching_indices = np.where(larger_array == value)[0]
+                indices.append(matching_indices)
+            return np.concatenate(indices)
 
         batch_df = pd.DataFrame.from_dict(
             {
@@ -397,7 +385,13 @@ for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=
                 "gt_path": [
                     str(batch_p_gt / f"{i}.png") for i in range(min_dist.shape[0])
                 ],
-                "recon_path": [str(batch_p_recon / f"{i}.png") for i in min_idx],
+                "recon_path": [
+                    str(batch_p_recon / f"{i}.png")
+                    for i in get_indices_of_values(min_idx_rec, closest_recon_to_gt)
+                ],
+                "gt_id": [
+                    batch * min_dist.shape[0] + i for i in range(min_dist.shape[0])
+                ],
             }
         )
         batch_df.to_csv(str(batch_p / "recon_assignment.csv"), index=False)
@@ -413,8 +407,9 @@ for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=
         if stats_df is None:
             stats_df = batch_df
         else:
-            stats_df = pd.concat([stats_df, batch_df])
+            stats_df = pd.concat([stats_df, batch_df], ignore_index=True)
     stats_df.to_csv(eps_path / "recon_assignment.csv", index=False)
+    stats_df["eps"] = eps
     recon_data_per_eps.append(stats_df)
 
 
@@ -425,7 +420,6 @@ def turn_axis_off(ax):
     ax.set_yticks([])
 
 
-TOP_N = 10
 example_batch = example_batch.transpose(0, 2, 3, 1)
 cmap = plt.cm.Dark2
 cmaplist = [cmap(i) for i in range(cmap.N)]
@@ -435,12 +429,23 @@ cmaplist = [cmap(i) for i in range(cmap.N)]
 #     + [2 * eps_values[-1] - eps_values[-2] for i in range(2)],
 #     cmap.N,
 # )
+total_df = pd.concat(recon_data_per_eps, ignore_index=True)
+total_df = total_df.sort_values(by="min_distance")
+total_df = total_df.drop_duplicates(subset="gt_id")
+total_df = total_df.drop(columns=["recon_path", "gt_path"])
+total_df = total_df.rename(
+    columns={"min_distance": "global_min_distance", "eps": "eps_best_recon"}
+)
+total_df.to_csv(str(p / "global_ordering.csv"))
 plt_kwargs = {}
 if example_batch.shape[-1] == 1:
     plt_kwargs["cmap"] = "gray"
 
 fig, axs = plt.subplots(
-    len(eps_values), 2 * TOP_N, figsize=(10 * TOP_N, 5 * len(eps_values)), sharey=True
+    len(eps_values),
+    2 * args.N_images,
+    figsize=(10 * args.N_images, 5 * len(eps_values)),
+    sharey=True,
 )
 fig2, ax2 = plt.subplots(1, 1, figsize=(5, 5), sharey=True)
 ax2.set_xlabel("Perceptual distance")
@@ -454,15 +459,22 @@ for ax, eps, stats_df, col in tqdm(
     leave=False,
 ):
     eps_formatted = f"ε={eps:.0f}" if isinstance(eps, (float, int)) else eps
+    stats_df = pd.merge(left=total_df, right=stats_df, on="gt_id")
+    stats_df = stats_df.sort_values(by="global_min_distance")
 
-    stats_df = stats_df.iloc[stats_df.min_distance.argsort()]
+    # stats_df = stats_df.iloc[stats_df.min_distance.argsort()]
     # reduced_stats_df = stats_df.drop_duplicates(subset="gt_path")
     # recon_data = recon_data.transpose(0, 2, 3, 1)
     # idcs_pcpt = np.argsort(perc_dist)
     # idcs_l2 = np.argsort(l2_dist)
     ax[0].set_ylabel(eps_formatted, fontsize=20)
-    for i in range(TOP_N):
-        dist, gt_p, recon_p = stats_df.iloc[i]
+    for i in range(args.N_images):
+        row = stats_df.iloc[i]
+        dist, gt_p, recon_p = (
+            row.min_distance,
+            row.gt_path,
+            row.recon_path,
+        )
         ax[2 * i].imshow(mpimg.imread(gt_p), **plt_kwargs)
         ax[2 * i + 1].imshow(mpimg.imread(recon_p), **plt_kwargs)
         turn_axis_off(ax[2 * i])
@@ -488,58 +500,3 @@ fig.savefig(str(p / "cah_analysis.png"), dpi=600, bbox_inches="tight")
 fig.savefig(str(p / "cah_analysis.svg"), bbox_inches="tight")
 fig2.savefig(str(p / "rero_thresholding.png"), dpi=600, bbox_inches="tight")
 fig2.savefig(str(p / "rero_thresholding.svg"), bbox_inches="tight")
-
-
-# user.plot(
-#     dict(
-#         data=make_compare_img(
-#             true_user_data["data"][idcs_pcpt], reconstructed[idcs_pcpt]
-#         ),
-#         labels=double_labels(min_dist[idcs_pcpt]).tolist(),
-#     ),
-#     savefile=f"cah_recon_sorted_by_pcpt",
-#     stats=stats,
-# )
-# user.plot(
-#     dict(
-#         data=make_compare_img(
-#             true_user_data["data"][idcs_l2], reconstructed[idcs_l2]
-#         ),
-#         labels=double_labels(l2min_dist[idcs_l2]).tolist(),
-#     ),
-#     savefile=f"cah_recon_sorted_by_l2",
-#     stats=stats,
-# )
-
-# for rerothresh in [1e-8, 1e-6, 1e-5, 1e-4, 1e-3, 2e-3, 5e-3]:
-#     reconstructed_user_data = dict(
-#         data=np.where(
-#             (min_dist < rerothresh)[:, None, None, None],
-#             reconstructed,
-#             np.zeros_like(reconstructed),
-#         ),
-#         labels=min_dist.tolist(),
-#     )
-
-#     user.plot(
-#         reconstructed_user_data,
-#         savefile=f"cah_recon_aligned@{rerothresh}.png",
-#         stats=stats,
-#     )
-
-# x = np.logspace(-12, 0, num=1000)
-# y = calc_rero(min_dist[:, None], x[None, :])
-
-# x = min_dist.copy()
-# x.sort()
-# y = 100.0 * np.linspace(0, x.shape[0], num=x.shape[0]) / x.shape[0]
-
-# plt.plot(x, y)
-# plt.xscale("log")
-# plt.savefig("rerothresholding")
-
-# plt.clf()
-# plt.scatter(min_dist, l2min_dist)
-# # plt.xscale("log")
-# # plt.yscale("log")
-# plt.savefig("pcptvsl2")
