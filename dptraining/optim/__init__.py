@@ -2,6 +2,7 @@ from objax import optimizer
 
 from dptraining.config import Config, OptimName
 from dptraining.optim.nadam import NAdam
+from dptraining.optim.gradaccopt import AccumulateGrad
 
 
 def make_optim_from_config(config: Config, model_vars):

@@ -1,0 +1,113 @@
+defaults:
+  - base_config
+  - _self_
+general:
+  log_wandb: False
+  parallel: False
+  eval_train: True
+  make_save_str_unique: True
+  eval_init: True
+  # save_path:
+wandb:
+  project: ukbb
+  log_image_batch: 10
+# checkpoint:
+#   logdir:
+#   keep_ckpts: 10
+#   makedir: True
+dataset: 
+  task: segmentation
+  name: ukbb_seg
+  root: ./data/mini_ukbb/
+  train_val_split: 0.9
+  nifti_seg_options:
+    image_file_root: ./data/mini_ukbb/niftis/
+    label_file_root: ./data/mini_ukbb/segmentations/
+    new_data_root: ./data/mini_ukbb/
+    limit_dataset: 20
+    test_split: 0.1
+    # resolution: 128
+    cache: False
+    # slice_thickness: 1.0
+    normalization_type: raw
+    # n_slices: 50
+    # data_stats:
+    #   mean: 66.0
+    #   std: 143.1
+    normalize_per_scan: False
+    database: "./data/ukbb_database"
+    filter_options:
+      resolution:
+        - 224
+        - 168
+        - 363
+      min_pixels_per_organ:
+        - 0
+        - 1000
+        - 1000
+        - 1000
+        - 1000
+        - 1000
+      length_threshold: 100
+      save_filtered_files: "./filtered_nifti_keys"
+      # reuse_filtered_files: "./filtered_nifti_keys"
+    # ct_window: 
+    #   low: -150
+    #   high: 200
+loader: 
+  num_workers: 16
+  prefetch_factor: 2
+  collate_fn: numpy
+model:
+  dim3: True
+  name: unet
+  in_channels: 1
+  activation: mish
+  conv: convws_nw
+  upconv: convws_nw
+  pooling: maxpool
+  normalization: gn
+  extra_args:
+    out_channels: 6
+    channels: 16
+optim:
+  name: nadam
+loss: 
+  type: dice
+  reduction: mean
+  binary_loss: False
+  # class_weights: 
+  #   - 1e-2
+  #   - 0.5
+  #   - 1.0
+ema:
+  use_ema: False
+  decay: 0.999
+hyperparams:
+  epochs: 10
+  batch_size: 2
+  batch_size_test: 10
+  lr: 2e-3
+  # momentum: 0.9
+  # l2regularization: 1e-5
+  # overfit: 2
+metrics:
+  main:     
+    fscore_avg:
+  logging:
+    fscore_avg:
+    weighted_fscore_avg:
+    fscore:
+    mean_squared_error:
+    # mean_absolute_error:
+  per_batch_metrics: True
+# scheduler:
+#   type: reduceonplateau
+#   normalize_lr: False
+#   patience: 20
+#   min_delta: 0.01
+#   factor: 0.5
+# earlystopping:
+#   mode: maximize
+#   patience: 100
+#   min_delta: 0.01

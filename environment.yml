@@ -12,11 +12,16 @@ dependencies:
   - conda-forge::wandb
   - conda-forge::scikit-learn
   - conda-forge::scikit-image
+  - conda-forge::nibabel
+  - conda-forge::nilearn
   - nvidia::cuda-nvcc
   - ipykernel
   - matplotlib
   - conda-forge::h5py
   - conda-forge::pandas
+  - conda-forge::opacus
+  - conda-forge::seaborn
+  - conda-forge::opencv
   - black
   - pytest
   - pylint
@@ -27,5 +32,8 @@ dependencies:
     - perflint
     - pytest-profiling
     - deepee
-    - split-folders
+    - git+https://github.com/cs-mshah/split-folders
     - pyyaml
+    - lpips
+    - kornia
+    - autodp

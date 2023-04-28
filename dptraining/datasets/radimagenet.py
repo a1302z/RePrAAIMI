@@ -1,7 +1,7 @@
 import sys
 from bisect import bisect_right
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Union, cast
 
 import numpy as np
 from PIL import Image
@@ -14,11 +14,17 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path.cwd()))
 
 
-from dptraining.datasets.base_creator import DataLoaderCreator
+from dptraining.datasets.base_creator import (
+    DataLoaderCreator,
+    mk_subdirectories,
+)
+from dptraining.config import Config
 from dptraining.utils.transform import NormalizeNumpyImg
 from dptraining.config import DatasetTask
 
-DATA_OUTPUT_TYPE = Tuple[np.array, Union[int, np.array]]  # pylint:disable=invalid-name
+# from dptraining.datasets.utils import calc_mean_std
+
+DATA_OUTPUT_TYPE = tuple[np.array, Union[int, np.array]]  # pylint:disable=invalid-name
 
 
 SUPPORTED_MODALITIES = ("mr", "ct", "us")
@@ -31,7 +37,7 @@ STATS = {
 }
 
 
-def find_classes(directory: str) -> Tuple[Dict[str, Path], Dict[str, int]]:
+def find_classes(directory: str) -> tuple[Dict[str, Path], Dict[str, int]]:
     """Finds the class folders in a dataset.
 
     See :class:`DatasetFolder` for details.
@@ -113,16 +119,15 @@ class ExtendedImageFolder(ImageFolder):
         self.samples = samples
         self.targets = [s[1] for s in samples]
 
-    def find_classes(self, directory: str) -> Tuple[List[str], Dict[str, int]]:
+    def find_classes(self, directory: str) -> tuple[List[str], Dict[str, int]]:
         return find_classes(directory)
 
     def make_dataset(  # pylint:disable=arguments-renamed
         self,
         directory: str,
-        extensions: Optional[Tuple[str, ...]] = None,
+        extensions: Optional[tuple[str, ...]] = None,
         is_valid_file: Optional[Callable[[str], bool]] = None,
-    ) -> List[Tuple[str, int]]:
-
+    ) -> List[tuple[str, int]]:
         directory = Path(directory)
 
         both_none = extensions is None and is_valid_file is None
@@ -208,7 +213,6 @@ class ConcatExtendedImageFolder(ConcatDataset):
 
 
 class RadImageNet(Dataset):
-
     NORMLIZATION_TRANSFORMS = {
         modality: NormalizeNumpyImg(*stats) for modality, stats in STATS.items()
     }
@@ -359,65 +363,33 @@ class RadImageNet(Dataset):
         return self.transform(image), self.target_transform(label)
 
 
-def mk_subdirectories(path: Path, subdirs: List[str]) -> List[Path]:
-    new_dirs = []
-    for subdir in subdirs:
-        new_path: Path = path / subdir
-        if not new_path.is_dir():
-            new_path.mkdir()
-        new_dirs.append(new_path)
-    return new_dirs
-
-
-def calc_mean_std(dataset: DataLoader):
-    mean = 0.0
-    for images, _ in tqdm(
-        dataset, total=len(dataset), desc="calculating mean", leave=False
-    ):
-        batch_samples = images.shape[0]
-        images = images.reshape((batch_samples, images.shape[1], -1))
-        mean += images.mean(2).sum(0)
-    mean = mean / len(dataset.dataset)
-
-    var = 0.0
-    reshaped_mean = mean[np.newaxis, ...]
-    for images, _ in tqdm(
-        dataset, total=len(dataset), desc="calculating std", leave=False
-    ):
-        batch_samples = images.shape[0]
-        images = images.reshape(batch_samples, images.shape[1], -1)
-        var += ((images - reshaped_mean) ** 2).sum(2).sum(0)
-    std = np.sqrt(var / (len(dataset.dataset) * 224 * 224))
-    return mean, std
-
-
 class RadImageNetCreator(DataLoaderCreator):
     @staticmethod
     def make_datasets(
-        config: dict, transforms: Tuple
-    ) -> Tuple[Dataset, Dataset, Dataset]:
+        config: Config, transforms: tuple
+    ) -> tuple[Dataset, Dataset, Dataset]:
         task = config.dataset.task
         root_folder = Path(config.dataset.root)
+        if root_folder.is_symlink():
+            root_folder = root_folder.readlink()
         train_split, test_split = (
             config.dataset.train_val_split,
             config.dataset.test_split,
         )
         val_split = 1.0 - train_split - test_split
         assert val_split > 0, "Train and test split are combined larger than 1"
-        seed = (
-            config.dataset.radimagenet.datasplit_seed
-            if config.dataset.radimagenet.datasplit_seed
-            else config.general.seed
-        )
-        copy_folder = (
+        seed = config.dataset.datasplit_seed
+        copy_folder = Path(
             config.dataset.radimagenet.split_folder
             if config.dataset.radimagenet.split_folder
             else root_folder.parent
-            / (
-                f"{root_folder.name}_dataset_split_{train_split}_"
-                f"{val_split:.2f}_{test_split}_seed={seed}"
-            )
+        ) / (
+            f"{root_folder.name}_dataset_split_{train_split}_"
+            f"{val_split:.2f}_{test_split}_seed={seed}"
         )
+
+        if copy_folder.is_symlink():
+            copy_folder = copy_folder.readlink()
         if copy_folder.is_dir():
             train_val_test_dirs = [
                 copy_folder / subdir for subdir in ["train", "val", "test"]
@@ -428,7 +400,7 @@ class RadImageNetCreator(DataLoaderCreator):
                 "If changes happen which require a rebuild please delete manually."
             )
         else:
-            copy_folder.mkdir()
+            copy_folder.mkdir(parents=True)
             classes, _ = find_classes(root_folder)
             out_class_paths = []
             for _, class_path in tqdm(
@@ -447,7 +419,7 @@ class RadImageNetCreator(DataLoaderCreator):
                     seed=seed,
                     prog_bar=None,
                     group_prefix=None,
-                    move=False,
+                    move=str(config.dataset.radimagenet.move),
                 )
                 out_class_paths.append(out_class_path)
             train_val_test_dirs = mk_subdirectories(
@@ -504,7 +476,6 @@ class RadImageNetCreator(DataLoaderCreator):
 
 
 if __name__ == "__main__":
-
     # from collections import Counter
 
     from dptraining.datasets.utils import collate_np_classification

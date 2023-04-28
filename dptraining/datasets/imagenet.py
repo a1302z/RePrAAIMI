@@ -1,5 +1,3 @@
-from typing import Tuple
-
 from torch import Generator  # pylint:disable=no-name-in-module
 from torch.utils.data import Dataset, random_split
 from torchvision.datasets import ImageNet
@@ -10,7 +8,7 @@ from dptraining.datasets.base_creator import DataLoaderCreator
 
 class ImageNetCreator(DataLoaderCreator):
     @staticmethod
-    def make_datasets(config: Config, transforms) -> Tuple[Dataset, Dataset]:
+    def make_datasets(config: Config, transforms) -> tuple[Dataset, Dataset]:
         train_tf, val_tf, test_tf = transforms
         train_kwargs = {
             "root": config.dataset.root,
@@ -44,10 +42,14 @@ class ImageNetCreator(DataLoaderCreator):
             #     raise ValueError(f"train_val_split {train_val_split} could not be parsed.")
             # We do it like that to avoid problems when train and val transforms are different
             train_ds, _ = random_split(
-                train_ds, lengths, generator=Generator().manual_seed(42)
+                train_ds,
+                lengths,
+                generator=Generator().manual_seed(config.dataset.datasplit_seed),
             )
             _, val_ds = random_split(
-                val_ds, lengths, generator=Generator().manual_seed(42)
+                val_ds,
+                lengths,
+                generator=Generator().manual_seed(config.dataset.datasplit_seed),
             )
         test_ds = ImageNet(**test_kwargs)
         return train_ds, val_ds, test_ds

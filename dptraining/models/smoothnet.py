@@ -105,7 +105,12 @@ class SmoothBlock(Module):
 
         if not dsc:
             self.conv_layers = conv_cls(
-                in_channels, out_channels, k=3, strides=1, padding=1, use_bias=False,
+                in_channels,
+                out_channels,
+                k=3,
+                strides=1,
+                padding=1,
+                use_bias=False,
             )
         else:
             self.conv_layers = nn.Sequential(
@@ -316,7 +321,7 @@ class SmoothNet(Module):
         self.adaptive_pool = AdaptivePooling(functional.average_pool_2d, 4)
         # self.adaptive_pool = lambda x: x.mean((2, 3))
 
-        self.fc1 = linear_cls(width_stage_one * output_dim ** 2, 256)
+        self.fc1 = linear_cls(width_stage_one * output_dim**2, 256)
         self.fc2 = linear_cls(256, 128)
         self.fc3 = linear_cls(128, num_classes)
         self.relu1 = act_func

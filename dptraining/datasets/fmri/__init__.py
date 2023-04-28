@@ -5,15 +5,14 @@ from dptraining.datasets.fmri.transforms import UnetDataTransform
 from dptraining.datasets.fmri.data_module import FastMriDataModule
 from dptraining.datasets.base_creator import DataLoaderCreator
 
-from typing import Tuple
 from torch.utils.data import Dataset
 
 
 class FMRICreator(DataLoaderCreator):
     @staticmethod
     def make_datasets(
-        config: dict, transforms: Tuple
-    ) -> Tuple[Dataset, Dataset, Dataset]:
+        config: dict, transforms: tuple
+    ) -> tuple[Dataset, Dataset, Dataset]:
         if not (
             transforms is None
             or (isinstance(transforms, tuple) and all((t is None for t in transforms)))

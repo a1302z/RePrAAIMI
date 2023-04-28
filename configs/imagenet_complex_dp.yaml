@@ -1,11 +1,12 @@
 defaults:
   - base_config
   - _self_
-project: imagenet-dp
 general:
   log_wandb: False
   parallel: False
   eval_train: False
+wandb:
+  project: imagenet-dp
 dataset: 
   task: classification
   name: imagenet
@@ -70,6 +71,7 @@ optim:
 loss: 
   type: cse
   reduction: sum
+  binary_loss: False
 model:
   complex: True
   name: resnet9
@@ -79,7 +81,8 @@ model:
   activation: conjmish
   normalization: gnw
   pooling: avgpool
-  scale_norm: True
+  extra_args:
+    scale_norm: True
 ema:
   use_ema: False
   decay: 0.04
@@ -88,6 +91,7 @@ hyperparams:
   batch_size: 64
   batch_size_test: 256
   lr: 1e-3
+  grad_acc_steps: 64
 scheduler:
   type: reduceonplateau
   normalize_lr: False
@@ -99,5 +103,4 @@ DP:
   max_per_sample_grad_norm: 1.0
   delta: 8e-7
   norm_acc: False
-  grad_acc_steps: 64
   adapt_noise: True

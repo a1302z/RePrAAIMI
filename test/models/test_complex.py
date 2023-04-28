@@ -43,7 +43,7 @@ def test_complex_model_options(utils):
         }
         config = utils.extend_base_config(config_dict)
         try:
-            model = make_complex_model_from_config(config)
+            model = make_complex_model_from_config(config.model)
             pred = model(fake_data)
             assert pred.shape[1] == 7
         except Exception as e:
@@ -57,6 +57,10 @@ def test_complex_model_options_reconstruction(utils):
             "model": {
                 "name": ComplexModelName.unet.name,
                 "in_channels": 3,
+                "num_classes": 0,
+                "conv": "conv",
+                "upconv": "conv",
+                "pooling": "avgpool",
                 "activation": act,
                 "extra_args": {
                     "out_channels": 3,
@@ -66,7 +70,7 @@ def test_complex_model_options_reconstruction(utils):
         }
         config = utils.extend_base_config(config_dict)
         try:
-            model = make_complex_model_from_config(config)
+            model = make_complex_model_from_config(config.model)
             pred = model(fake_data)
             assert all([pred.shape[i] == fake_data.shape[i] for i in range(4)])
         except Exception as e:

@@ -1,11 +1,12 @@
 defaults:
   - base_config
   - _self_
-project: cifar
 general:
   log_wandb: False
   parallel: False
   eval_train: True
+wandb:
+  project: cifar
 dataset: 
   task: classification
   name: CIFAR10
@@ -27,20 +28,19 @@ loader:
 # test_augmentations:
 model:
   complex: False
-  name: smoothnet
-  in_channels: 3
-  num_classes: 10
-  conv: conv
-  activation: mish
-  normalization: gn
-  pooling: avgpool
+  name: mlp
+  activation: elu
   extra_args:
-    scale_norm: True
+    sizes: 
+      - 100
+    inp_size: 3072
+    outp_size: 10
 optim:
   name: nadam
 loss: 
   type: cse
   reduction: sum
+  binary_loss: False
 ema:
   use_ema: True
   decay: 0.995
@@ -50,6 +50,7 @@ hyperparams:
   batch_size_test: 512
   lr: 2e-3
   # momentum: 0.9
+  grad_acc_steps: 2
 scheduler:
   type: reduceonplateau
   normalize_lr: False

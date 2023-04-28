@@ -1,0 +1,64 @@
+defaults:
+  - base_config
+  - _self_
+general:
+  log_wandb: False
+  parallel: False
+  eval_train: False
+  eval_init: False
+  # save_path: cifar10_attack_data
+wandb:
+  project: cifar_attack
+dataset: 
+  task: reconstruction
+  name: attack
+  attack:
+    attack_data_path: cifar10_attack_data_mlp_100.pt
+    pca_dim: 100
+    rescale_params: True
+    include_eval_data_in_rescale_and_pca: False
+metrics:
+  main: 
+    mean_squared_error: 
+  logging:
+    mean_squared_error:
+    # mean_absolute_error:
+    # structural_similarity:
+    #   win_size: 7
+    #   channel_axis: 1
+    #   data_range: 4
+loader: 
+  num_workers: 16
+  prefetch_factor: 16
+  collate_fn: numpy
+# augmentations:
+# test_augmentations:
+model:
+  complex: False
+  name: mlp
+  activation: relu
+  extra_args:
+    inp_size: 100
+    outp_size: 3072
+    sizes:
+      - 1000
+      - 1000
+optim:
+  name: nadam
+loss: 
+  type: mse
+  reduction: sum
+  binary_loss: False
+ema:
+  use_ema: True
+  decay: 0.995
+hyperparams:
+  epochs: 10000
+  batch_size: 1024
+  batch_size_test: 1024
+  lr: 2e-3
+  # momentum: 0.9
+  grad_acc_steps: 1
+attack:
+  type: RECON_INFORMED
+  

@@ -2,6 +2,7 @@
 from objax import nn, Module
 from objax.functional import average_pool_2d, pad
 from jax import numpy as jn
+from math import floor, ceil
 
 # import sys
 # from pathlib import Path
@@ -34,6 +35,11 @@ class Unet(Module):
         channels: int = 32,
         num_pool_layers: int = 4,
         actv=Cardioid,
+        conv_layer: Module = ComplexConv2D,
+        upconv_layer: Module = ComplexWSConv2DNoWhitenTranspose,
+        norm_layer: Module = ComplexGroupNorm2DWhitening,
+        pool_fn=SeparablePool2D,
+        dim_mode: int = 2,  # how many dimension will the input have
     ):
         """
         Args:
@@ -49,35 +55,63 @@ class Unet(Module):
         self.out_channels = out_channels
         self.channels = channels
         self.num_pool_layers = num_pool_layers
+        self.dim_mode = dim_mode
+        assert self.dim_mode in [2, 3], "Unet only supports 2D or 3D input"
 
         self.down_sample_layers = nn.Sequential(
-            [ConvBlock(in_channels, channels, actv)]
+            [
+                ConvBlock(
+                    in_channels,
+                    channels,
+                    actv,
+                    conv_layer=conv_layer,
+                    norm_layer=norm_layer,
+                )
+            ]
         )
         ch = channels
         for _ in range(num_pool_layers - 1):
-            self.down_sample_layers.append(ConvBlock(ch, ch * 2, actv))
+            self.down_sample_layers.append(
+                ConvBlock(
+                    ch, ch * 2, actv, conv_layer=conv_layer, norm_layer=norm_layer
+                )
+            )
             ch *= 2
-        self.conv = ConvBlock(ch, ch * 2, actv)
+        self.conv = ConvBlock(
+            ch, ch * 2, actv, conv_layer=conv_layer, norm_layer=norm_layer
+        )
 
         self.up_conv = nn.Sequential()
         self.up_transpose_conv = nn.Sequential()
         for _ in range(num_pool_layers - 1):
-            self.up_transpose_conv.append(TransposeConvBlock(ch * 2, ch, actv))
-            self.up_conv.append(ConvBlock(ch * 2, ch, actv))
+            self.up_transpose_conv.append(
+                TransposeConvBlock(
+                    ch * 2, ch, actv, conv_layer=upconv_layer, norm_layer=norm_layer
+                )
+            )
+            self.up_conv.append(
+                ConvBlock(
+                    ch * 2, ch, actv, conv_layer=conv_layer, norm_layer=norm_layer
+                )
+            )
             ch //= 2
 
-        self.up_transpose_conv.append(TransposeConvBlock(ch * 2, ch, actv))
+        self.up_transpose_conv.append(
+            TransposeConvBlock(
+                ch * 2, ch, actv, conv_layer=upconv_layer, norm_layer=norm_layer
+            )
+        )
         self.up_conv.append(
             nn.Sequential(
                 [
-                    ConvBlock(ch * 2, ch, actv),
-                    ComplexConv2D(ch, self.out_channels, k=1, strides=1, padding=0),
+                    ConvBlock(
+                        ch * 2, ch, actv, conv_layer=conv_layer, norm_layer=norm_layer
+                    ),
+                    conv_layer(ch, self.out_channels, k=1, strides=1, padding=0),
                 ],
             )
         )
-        self.pool = SeparablePool2D(
-            size=2, strides=2, padding=0, pool_func=average_pool_2d
-        )
+        self.pool = pool_fn
 
     def __call__(self, image, **kwargs):
         """
@@ -104,13 +138,30 @@ class Unet(Module):
             output = transpose_conv(output)
 
             # reflect pad on the right/botton if needed to handle odd input dimensions
-            padding = [[0, 0], [0, 0], [0, 0], [0, 0]]
-            if output.shape[-1] != downsample_layer.shape[-1]:
-                padding[-1] = [1, 1]  # padding right
-            if output.shape[-2] != downsample_layer.shape[-2]:
-                padding[-2] = [1, 1]  # padding bottom
-            if sum([sum(p) for p in padding]) != 0:
-                output = pad(output, pad_width=padding, mode="reflect")
+            match self.dim_mode:
+                case 2:
+                    padding = [[0, 0], [0, 0], [0, 0], [0, 0]]
+                    if output.shape[-1] != downsample_layer.shape[-1]:
+                        padding[-1] = [1, 1]  # padding right
+                    if output.shape[-2] != downsample_layer.shape[-2]:
+                        padding[-2] = [1, 1]  # padding bottom
+                    if sum([sum(p) for p in padding]) != 0:
+                        output = pad(output, pad_width=padding, mode="reflect")
+                case 3:
+                    padding = [[0, 0], [0, 0], [0, 0], [0, 0], [0, 0]]
+                    if output.shape[-1] != downsample_layer.shape[-1]:
+                        diff = abs(output.shape[-1] - downsample_layer.shape[-1]) / 2.0
+                        padding[-1] = [int(floor(diff)), int(ceil(diff))]
+                    if output.shape[-2] != downsample_layer.shape[-2]:
+                        diff = abs(output.shape[-2] - downsample_layer.shape[-2]) / 2.0
+                        padding[-2] = [int(floor(diff)), int(ceil(diff))]
+                    if output.shape[-3] != downsample_layer.shape[-3]:
+                        diff = abs(output.shape[-3] - downsample_layer.shape[-3]) / 2.0
+                        padding[-3] = [int(floor(diff)), int(ceil(diff))]
+                    if sum([sum(p) for p in padding]) != 0:
+                        output = pad(output, pad_width=padding, mode="reflect")
+                case other:
+                    raise ValueError(f"{other} dimensions not supported")
 
             output = jn.concatenate([output, downsample_layer], axis=1)
             output = conv(output)
@@ -129,6 +180,8 @@ class ConvBlock(Module):
         in_channels: int,
         out_chans: int,
         actv: Module,
+        conv_layer: Module = ComplexConv2D,
+        norm_layer: Module = ComplexGroupNorm2DWhitening,
     ):
         """
         Args:
@@ -143,17 +196,17 @@ class ConvBlock(Module):
 
         self.layers = nn.Sequential(
             [
-                ComplexConv2D(
+                conv_layer(
                     in_channels,
                     out_chans,
                     k=3,
                     padding=1,
                 ),
-                ComplexGroupNorm2DWhitening(nin=out_chans, groups=16),
-                actv(),
-                ComplexConv2D(out_chans, out_chans, k=3, padding=1),
-                ComplexGroupNorm2DWhitening(nin=out_chans, groups=out_chans),
-                actv(),
+                norm_layer(nin=out_chans, groups=16),
+                actv,
+                conv_layer(out_chans, out_chans, k=3, padding=1),
+                norm_layer(nin=out_chans, groups=out_chans),
+                actv,
             ]
         )
 
@@ -174,7 +227,14 @@ class TransposeConvBlock(Module):
     layers followed by instance normalization and LeakyReLU activation.
     """
 
-    def __init__(self, in_chans: int, out_chans: int, actv: Module):
+    def __init__(
+        self,
+        in_chans: int,
+        out_chans: int,
+        actv: Module,
+        conv_layer: Module = ComplexWSConv2DNoWhitenTranspose,
+        norm_layer: Module = ComplexGroupNorm2DWhitening,
+    ):
         """
         Args:
             in_chans: Number of channels in the input.
@@ -187,7 +247,7 @@ class TransposeConvBlock(Module):
 
         self.layers = nn.Sequential(
             [
-                ComplexWSConv2DNoWhitenTranspose(
+                conv_layer(
                     in_chans,
                     out_chans,
                     k=2,
@@ -195,8 +255,8 @@ class TransposeConvBlock(Module):
                     padding=0,
                     # output_padding=0,
                 ),
-                ComplexGroupNorm2DWhitening(groups=16, nin=out_chans),
-                actv(),
+                norm_layer(groups=16, nin=out_chans),
+                actv,
             ]
         )
 

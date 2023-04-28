@@ -1,11 +1,12 @@
 defaults:
   - base_config
   - _self_
-project: pppp-dp
 general:
-  log_wandb: True
+  log_wandb: False
   parallel: False
-  eval_train: False
+  eval_train: True
+wandb:
+  project: pppp-dp
 dataset: 
   task: classification
   name: pppp
@@ -38,7 +39,6 @@ loader:
   # prefetch_factor: 6
   pin_memory: True
 augmentations:
-  pil_to_jax:
   normalize_jax:
       mean:
         - 0.5705
@@ -56,7 +56,6 @@ augmentations:
   # random_horizontal_flips:
   #     flip_prob: 0.5
 test_augmentations:
-  pil_to_jax:
   normalize_jax:
       mean:
         - 0.5705
@@ -67,6 +66,7 @@ optim:
 loss: 
   type: cse
   reduction: sum
+  binary_loss: False
 model:
   name: resnet9
   in_channels: 1
@@ -82,9 +82,10 @@ model:
 #   decay: 0.04
 hyperparams:
   epochs: 50
-  batch_size: 64
+  batch_size: 4
   batch_size_test: 64
   lr: 1e-3
+  grad_acc_steps: 4
 scheduler:
   type: const
   normalize_lr: False

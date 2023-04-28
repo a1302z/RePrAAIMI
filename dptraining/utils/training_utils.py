@@ -1,13 +1,12 @@
 import wandb
-import time
 import contextlib
-from typing import Callable
+from typing import Callable, Optional, Iterable
 
 import numpy as np
 
 import objax
 import sys
-
+from time import time
 from jax import numpy as jn, local_device_count
 from pathlib import Path
 from tqdm import tqdm
@@ -15,9 +14,68 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path.cwd()))
 
 from dptraining.config import Config, DatasetTask
-from dptraining.privacy import ClipAndAccumulateGrads
+from dptraining.privacy import ClipAndAccumulateGrads, analyse_epsilon
+from dptraining.optim import AccumulateGrad, make_optim_from_config
+from dptraining.utils.metrics import (
+    calculate_metrics,
+    summarise_batch_metrics,
+    summarise_dict_metrics,
+)
+from dptraining.utils import ExponentialMovingAverage
+from dptraining.utils.misc import get_num_params, make_grid_numpy
+
+from torch.random import manual_seed as torch_manual_seed
+
 
 N_DEVICES = local_device_count()
+
+
+def fix_seeds(config):
+    np.random.seed(config.general.seed)
+    objax.random.DEFAULT_GENERATOR.seed(config.general.seed)
+    torch_manual_seed(config.general.seed)
+
+
+def make_train_op(
+    model,
+    model_vars,
+    config: Config,
+    loss_class,
+    augment_op,
+    label_augment_op,
+    grad_acc,
+    total_noise,
+    effective_batch_size,
+    n_augmentations,
+    only_individual_train_vars: bool = True,
+):
+    ema: Optional[ExponentialMovingAverage] = None
+    if config.ema.use_ema:
+        ema = ExponentialMovingAverage(
+            model_vars, config.ema.decay, update_every=config.ema.update_every
+        )
+    opt = make_optim_from_config(config, model_vars)
+    train_loss_fn = loss_class.create_train_loss_fn(model_vars, model)
+    loss_gv = create_loss_gradient(config, model_vars, train_loss_fn)
+    individual_vars = model_vars + loss_gv.vars() + opt.vars()
+    if ema is not None:
+        individual_vars += ema.vars()
+    all_vars = individual_vars + objax.random.DEFAULT_GENERATOR.vars()
+    train_op = create_train_op(
+        all_vars,
+        loss_gv,
+        opt,
+        augment_op,
+        label_augment_op,
+        grad_accumulation=grad_acc > 1,
+        noise=total_noise,
+        effective_batch_size=effective_batch_size,
+        n_augmentations=n_augmentations,
+        parallel=config.general.parallel,
+        ema=ema,
+    )
+
+    return train_op, all_vars, individual_vars
 
 
 def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
@@ -34,7 +92,7 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
     ema=None,
 ):
     if grad_accumulation:
-        assert isinstance(grad_calc, ClipAndAccumulateGrads)
+        assert isinstance(grad_calc, (ClipAndAccumulateGrads, AccumulateGrad))
 
         @objax.Function.with_vars(train_vars)
         def calc_grads(image_batch, label_batch):
@@ -48,12 +106,14 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
                 label_batch = jn.repeat(
                     label_batch[:, jn.newaxis], n_augmentations, axis=1
                 )
-            else:
+                if not isinstance(grad_calc, ClipAndAccumulateGrads):
+                    ibs = image_batch.shape
+                    image_batch = image_batch.reshape(ibs[0] * ibs[1], *ibs[2:])
+                    label_batch = label_batch.flatten()
+            elif isinstance(grad_calc, ClipAndAccumulateGrads):
                 image_batch = image_batch[:, jn.newaxis, ...]
                 label_batch = label_batch[:, jn.newaxis, ...]
-            clipped_grad, loss_value = grad_calc.calc_per_sample_grads(
-                image_batch, label_batch
-            )
+            clipped_grad, loss_value = grad_calc(image_batch, label_batch)
             grad_calc.accumulate_grad(clipped_grad, loss_value)
             if parallel:
                 loss_value = objax.functional.parallel.psum(loss_value)
@@ -66,8 +126,11 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
             grad_calc.reset_accumulated_grads()
             if parallel:
                 grads = objax.functional.parallel.psum(grads)
-            grads = grad_calc.add_noise(grads, noise, objax.random.DEFAULT_GENERATOR)
-            grads = [gx / effective_batch_size for gx in grads]
+            if isinstance(grad_calc, ClipAndAccumulateGrads):
+                grads = grad_calc.add_noise(
+                    grads, noise, objax.random.DEFAULT_GENERATOR
+                )
+                grads = [gx / effective_batch_size for gx in grads]
             opt(learning_rate, grads)
             if ema is not None:
                 ema()
@@ -85,9 +148,8 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
                 vc=train_vars,
             )
         else:
-            # pass
-            calc_grads = objax.Jit(calc_grads)
-            apply_grads = objax.Jit(apply_grads)
+            calc_grads = objax.Jit(calc_grads, vc=train_vars)
+            apply_grads = objax.Jit(apply_grads, vc=train_vars)
 
         # @objax.Function.with_vars(train_vars)
         def train_op(  # pylint:disable=inconsistent-return-statements
@@ -145,25 +207,32 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
             return loss, grads
 
         if parallel:
-            train_op = objax.Parallel(train_op, reduce=np.mean, vc=train_vars)
+            train_op = objax.Parallel(
+                train_op, reduce=np.mean, vc=train_vars, static_argnums=(2,)
+            )
         else:
-            train_op = objax.Jit(train_op, static_argnums=(3,))
+            train_op = objax.Jit(train_op, vc=train_vars, static_argnums=(2,))
 
     return train_op
 
 
 def create_loss_gradient(config: Config, model_vars, loss_fn):
-    if not config.DP:
-        loss_gv = objax.GradValues(loss_fn, model_vars)
-    else:
+    if config.hyperparams.grad_acc_steps > 1 and not config.DP:
+        loss_gv = AccumulateGrad(
+            loss_fn,
+            model_vars,
+        )
+    elif config.DP:
         loss_gv = ClipAndAccumulateGrads(
             loss_fn,
             model_vars,
             config.DP.max_per_sample_grad_norm,
             batch_axis=(0, 0),
             use_norm_accumulation=config.DP.norm_acc,
-            gradient_accumulation_steps=config.DP.grad_acc_steps,
+            gradient_accumulation_steps=config.hyperparams.grad_acc_steps,
         )
+    else:
+        loss_gv = objax.GradValues(loss_fn, model_vars)
 
     return loss_gv
 
@@ -177,7 +246,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
     parallel,
     grad_acc: int,
 ):
-    start_time = time.time()
+    start_time = time()
     max_batches = (
         config.hyperparams.overfit
         if config.hyperparams.overfit is not None
@@ -204,7 +273,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
             add_args = {}
             if grad_acc > 1:
                 add_args["apply_norm_acc"] = (i + 1) % grad_acc == 0
-            train_result = train_op(img, label, np.array(learning_rate), **add_args)
+            train_result = train_op(img, label, np.float32(learning_rate), **add_args)
             if train_result is not None:
                 train_loss, grads = train_result
                 train_loss = train_loss.item()
@@ -213,7 +282,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                 log_dict = {
                     "train_loss": train_loss,
                     "total_grad_norm": jn.linalg.norm(
-                        [jn.linalg.norm(g) for g in grads]
+                        jn.stack([jn.linalg.norm(g) for g in grads])
                     ).item(),
                 }
                 wandb.log(
@@ -223,33 +292,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
 
             if i + 1 >= max_batches:
                 break
-    return time.time() - start_time
-
-
-def calculate_metrics(task, metrics, loss_fn, correct, predicted):
-    loss = loss_fn(predicted, correct).item()
-    if task == DatasetTask.classification:
-        predicted = predicted.argmax(axis=1)
-    correct, predicted = correct.squeeze(), predicted.squeeze()
-    if np.iscomplexobj(correct):
-        correct = np.abs(correct)
-    if np.iscomplexobj(predicted):
-        predicted = np.abs(predicted)
-
-    main_metric_fn, logging_fns = metrics
-    main_metric = (
-        main_metric_fn[0],
-        loss
-        if main_metric_fn[0] == "loss" and main_metric_fn[1] is None
-        else main_metric_fn[1](correct, predicted),
-    )
-    logging_metrics = {
-        func_name: lfn(correct, predicted) for func_name, lfn in logging_fns.items()
-    }
-    if main_metric[0] != "loss":
-        logging_metrics["loss"] = loss
-    logging_metrics[f"{main_metric[0]}"] = main_metric[1]
-    return main_metric, logging_metrics
+    return time() - start_time
 
 
 def test(  # pylint:disable=too-many-arguments,too-many-branches
@@ -263,7 +306,7 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
     dataset_split: str,
     metrics: tuple,
     loss_fn: Callable,
-):
+) -> float:
     ctx_mngr = (model_vars).replicate() if parallel else contextlib.suppress()
     per_batch_metrics = (
         config.metrics.per_batch_metrics
@@ -288,28 +331,79 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
         ):
             image = test_aug(image)
             label = test_label_aug(label)
-            n_images = image.shape[0]
+            n_images = (
+                image[0].shape[0]
+                if isinstance(image, (list, tuple))
+                else image.shape[0]
+            )
             if parallel and not (n_images % N_DEVICES) == 0:
                 max_samples = n_images - (n_images % N_DEVICES)
                 image = image[:max_samples]
                 label = label[:max_samples]
             y_pred = predict_op(image)
             y_pred, label = np.array(y_pred), np.array(label)
+            if config.dataset.task in [
+                # DatasetTask.segmentation,
+                DatasetTask.reconstruction,
+            ]:
+                y_pred = y_pred.reshape(label.shape)
             if per_batch_metrics:
                 main_metric_batch, logging_metric_batch = calculate_metrics(
-                    config.dataset.task, metrics, loss_fn, label, y_pred
+                    config.dataset.task,
+                    metrics,
+                    loss_fn,
+                    label,
+                    y_pred,
+                    config.loss.binary_loss,
                 )
                 main_metric_list.append(main_metric_batch)
                 logging_metric_list.append(logging_metric_batch)
             else:
                 correct.append(label)
                 scores.append(y_pred)
+            if i == 0 and config.general.wandb_log_images > 0:
+                N = config.general.wandb_log_images
+                match config.dataset.task:
+                    case DatasetTask.reconstruction:
+                        gt_images = wandb.Image(
+                            make_grid_numpy(label[:N]), caption="Ground Truth"
+                        )
+                        pred_images = wandb.Image(
+                            make_grid_numpy(y_pred[:N]), caption="Prediction"
+                        )
+                        log_dict = {
+                            f"{dataset_split}_gt_images": gt_images,
+                            f"{dataset_split}_pred_images": pred_images,
+                        }
+                    case DatasetTask.classification:
+                        inp_images = wandb.Image(
+                            image[:N], caption="Inputs"
+                        )  # TODO display labels
+                        log_dict = {f"{dataset_split}_inputs": inp_images}
+                    case DatasetTask.segmentation:  # TODO support for 3D
+                        inp_images = wandb.Image(
+                            image[:N],
+                            masks={
+                                "predictions": {"mask_data": y_pred[:N]},
+                                "groundtruth": {"mask_data": label[:N]},
+                            },
+                        )
+                        log_dict = {f"{dataset_split}_segmentations": inp_images}
+                    case other:
+                        raise ValueError(f"Logging for task {other} not implemented")
+
+                wandb.log(log_dict)
+
             if i + 1 >= max_batches:
                 break
     if per_batch_metrics:
         main_metric = (
             metrics[0][0],
-            np.mean([batch_metric[1] for batch_metric in main_metric_list]),
+            summarise_dict_metrics(
+                [batch_metric[1] for batch_metric in main_metric_list]
+            )
+            if isinstance(main_metric_list[0][1], dict)
+            else np.mean([batch_metric[1] for batch_metric in main_metric_list]),
         )
         logging_metrics = summarise_batch_metrics(
             metrics[1].keys(), logging_metric_list
@@ -318,7 +412,12 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
         correct = np.concatenate(correct)
         predicted = np.concatenate(scores)
         main_metric, logging_metrics = calculate_metrics(
-            config.dataset.task, metrics, loss_fn, correct, predicted
+            config.dataset.task,
+            metrics,
+            loss_fn,
+            correct,
+            predicted,
+            config.loss.binary_loss,
         )
 
     if config.general.log_wandb:
@@ -331,8 +430,154 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
     return main_metric[1]
 
 
-def summarise_batch_metrics(metric_names, metric_list):
-    return {
-        func_name: np.mean([metric[func_name] for metric in metric_list])
-        for func_name in metric_names
-    }
+def train_loop(
+    config: Config,
+    train_loader,
+    val_loader,
+    model,
+    unfreeze_schedule,
+    checkpoint,
+    predict_op_parallel,
+    predict_op_jit,
+    grad_acc,
+    sampling_rate,
+    delta,
+    sigma,
+    total_noise,
+    batch_expansion_factor,
+    effective_batch_size,
+    accountant,
+    metric_fns,
+    n_augmentations,
+    augment_op,
+    label_augment_op,
+    test_aug,
+    test_label_aug,
+    scheduler,
+    stopper,
+    loss_class,
+    test_loss_fn,
+    train_op,
+    train_vars,
+):
+    epoch_time = []
+    epoch_iter: Iterable
+    if config.general.log_wandb:
+        epoch_iter = tqdm(
+            range(config.hyperparams.epochs),
+            total=config.hyperparams.epochs,
+            desc="Epoch",
+            leave=True,
+        )
+    else:
+        epoch_iter = range(config.hyperparams.epochs)
+    if config.general.eval_init:
+        if config.general.eval_train:
+            test(
+                config,
+                train_loader,
+                predict_op_parallel if config.general.parallel else predict_op_jit,
+                test_aug,
+                test_label_aug,
+                model.vars(),
+                config.general.parallel,
+                "train",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
+            )
+        if val_loader is not None:
+            metric = test(
+                config,
+                val_loader,
+                predict_op_parallel if config.general.parallel else predict_op_jit,
+                test_aug,
+                test_label_aug,
+                model.vars(),
+                config.general.parallel,
+                "val",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
+            )
+    for epoch, learning_rate in zip(epoch_iter, scheduler):
+        cur_epoch_time = train(
+            config,
+            train_loader,
+            train_op,
+            learning_rate,
+            train_vars,
+            config.general.parallel,
+            grad_acc,
+        )
+        if config.general.log_wandb:
+            wandb.log({"epoch": epoch, "lr": learning_rate})
+        else:
+            print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
+        epoch_time.append(cur_epoch_time)
+        if config.general.eval_train:
+            test(
+                config,
+                train_loader,
+                predict_op_parallel if config.general.parallel else predict_op_jit,
+                test_aug,
+                test_label_aug,
+                model.vars(),
+                config.general.parallel,
+                "train",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
+            )
+        if val_loader is not None:
+            metric = test(
+                config,
+                val_loader,
+                predict_op_parallel if config.general.parallel else predict_op_jit,
+                test_aug,
+                test_label_aug,
+                model.vars(),
+                config.general.parallel,
+                "val",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
+            )
+            scheduler.update_score(metric)
+        else:
+            metric = None
+        if config.DP:
+            epsilon = analyse_epsilon(
+                accountant,
+                (len(train_loader) // batch_expansion_factor) * (epoch + 1),
+                sigma,
+                sampling_rate,
+                delta,
+            add_alphas=config.DP.alphas,
+            )
+            if config.general.log_wandb:
+                wandb.log({"epsilon": epsilon})
+            else:
+                print(f"\tPrivacy: (ε = {epsilon:.2f}, δ = {delta})")
+        if config.unfreeze_schedule is not None:
+            model_vars, fresh_model_vars = unfreeze_schedule(epoch + 1)
+            if fresh_model_vars:
+                train_op, train_vars = make_train_op(
+                    model,
+                    model_vars,
+                    config,
+                    loss_class,
+                    augment_op,
+                    label_augment_op,
+                    grad_acc,
+                    total_noise,
+                    effective_batch_size,
+                    n_augmentations,
+                )
+            n_train_vars_cur = get_num_params(model_vars)
+            if config.general.log_wandb:
+                wandb.log({"num_trained_vars": n_train_vars_cur})
+            else:
+                print(f"\tNum Train Vars: {n_train_vars_cur:,}")
+        if checkpoint is not None:
+            checkpoint.save(model.vars(), idx=epoch)
+        if metric is not None and stopper(metric):
+            print("Early Stopping was activated -> Stopping Training")
+            break
+    return epoch_time

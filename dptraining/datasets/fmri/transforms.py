@@ -6,7 +6,7 @@ LICENSE file in the root directory of this source tree.
 """
 # pylint: skip-file
 
-from typing import Dict, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import Dict, NamedTuple, Optional, Sequence, Union
 
 import numpy as np
 import torch
@@ -56,9 +56,9 @@ def apply_mask(
     data: torch.Tensor,
     mask_func: MaskFunc,
     offset: Optional[int] = None,
-    seed: Optional[Union[int, Tuple[int, ...]]] = None,
+    seed: Optional[Union[int, tuple[int, ...]]] = None,
     padding: Optional[Sequence[int]] = None,
-) -> Tuple[torch.Tensor, torch.Tensor, int]:
+) -> tuple[torch.Tensor, torch.Tensor, int]:
     """
     Subsample given k-space by multiplying with a mask.
 
@@ -141,7 +141,7 @@ def batched_mask_center(
     return mask
 
 
-def center_crop(data: torch.Tensor, shape: Tuple[int, int]) -> torch.Tensor:
+def center_crop(data: torch.Tensor, shape: tuple[int, int]) -> torch.Tensor:
     """
     Apply a center crop to the input real image or batch of real images.
 
@@ -166,7 +166,7 @@ def center_crop(data: torch.Tensor, shape: Tuple[int, int]) -> torch.Tensor:
     return data[..., w_from:w_to, h_from:h_to]
 
 
-def complex_center_crop(data: torch.Tensor, shape: Tuple[int, int]) -> torch.Tensor:
+def complex_center_crop(data: torch.Tensor, shape: tuple[int, int]) -> torch.Tensor:
     """
     Apply a center crop to the input image or batch of complex images.
 
@@ -193,7 +193,7 @@ def complex_center_crop(data: torch.Tensor, shape: Tuple[int, int]) -> torch.Ten
 
 def center_crop_to_smallest(
     x: torch.Tensor, y: torch.Tensor
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Apply a center crop on the larger image to the size of the smaller.
 
@@ -263,7 +263,7 @@ def normalize_std(
 
 def normalize_instance(
     data: torch.Tensor, eps: Union[float, torch.Tensor] = 0.0
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Normalize the given tensor  with instance norm/
 
@@ -307,7 +307,6 @@ class UnetSample(NamedTuple):
 
 
 def resize_complex(image, size):
-
     image = image.unsqueeze(0)
     image_r = resize(image[..., 0], size)
     image_i = resize(image[..., 1], size)
@@ -352,7 +351,7 @@ class UnetDataTransform:
         attrs: Dict,
         fname: str,
         slice_num: int,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, str, int, float]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, str, int, float]:
         """
         Args:
             kspace: Input k-space of shape (num_coils, rows, cols) for
@@ -452,7 +451,7 @@ class VarNetSample(NamedTuple):
     fname: str
     slice_num: int
     max_value: float
-    crop_size: Tuple[int, int]
+    crop_size: tuple[int, int]
 
 
 class VarNetDataTransform:
@@ -576,7 +575,7 @@ class MiniCoilSample(NamedTuple):
     fname: str
     slice_num: int
     max_value: float
-    crop_size: Tuple[int, int]
+    crop_size: tuple[int, int]
 
 
 class MiniCoilTransform:

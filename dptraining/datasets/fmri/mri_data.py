@@ -20,7 +20,6 @@ from typing import (
     NamedTuple,
     Optional,
     Sequence,
-    Tuple,
     Union,
 )
 from warnings import warn
@@ -131,7 +130,7 @@ class CombinedSliceDataset(torch.utils.data.Dataset):
         volume_sample_rates: Optional[Sequence[Optional[float]]] = None,
         use_dataset_cache: bool = False,
         dataset_cache_file: Union[str, Path, os.PathLike] = "dataset_cache.pkl",
-        num_cols: Optional[Tuple[int]] = None,
+        num_cols: Optional[tuple[int]] = None,
         raw_sample_filter: Optional[Callable] = None,
         overfit: Optional[int] = None,
     ):
@@ -235,7 +234,7 @@ class SliceDataset(torch.utils.data.Dataset):
         sample_rate: Optional[float] = None,
         volume_sample_rate: Optional[float] = None,
         dataset_cache_file: Union[str, Path, os.PathLike] = "dataset_cache.pkl",
-        num_cols: Optional[Tuple[int]] = None,
+        num_cols: Optional[tuple[int]] = None,
         raw_sample_filter: Optional[Callable] = None,
         overfit: Optional[int] = None,
     ):
@@ -441,7 +440,7 @@ class AnnotatedSliceDataset(SliceDataset):
         sample_rate: Optional[float] = None,
         volume_sample_rate: Optional[float] = None,
         dataset_cache_file: Union[str, Path, os.PathLike] = "dataset_cache.pkl",
-        num_cols: Optional[Tuple[int]] = None,
+        num_cols: Optional[tuple[int]] = None,
         annotation_version: Optional[str] = None,
     ):
         """

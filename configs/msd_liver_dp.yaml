@@ -1,0 +1,105 @@
+defaults:
+  - base_config
+  - _self_
+general:
+  log_wandb: False
+  parallel: False
+  eval_train: True
+  make_save_str_unique: True
+  eval_init: True
+  # use_pretrained_model: msd_pancreas_unet_4-3-convwsnw_mp_gn_mish_resilient-flower-4_2023-01-04_11-51-58.npz
+wandb:
+  project: msd_dp
+# ckpt:
+#   logdir: msd_ckpts
+#   keep_ckpts: 2
+#   makedir: True
+dataset: 
+  task: segmentation
+  name: msd
+  root: ./data/MSD/
+  train_val_split: 0.9
+  nifti_seg_options:
+    test_split: 0.1
+    resolution: 128
+    msd_subtask: liver
+    cache: True
+    # slice_thickness: 1.0
+    normalization_type: gaussian
+    n_slices: 50
+    data_stats:
+      mean: -81.91
+      std: 8.736
+    ct_window: 
+      low: -150
+      high: 200
+    assume_same_settings: True
+# augmentations:
+#   consecutive_augmentations:
+#     multiplicity: 16
+#     consecutive_augmentations:
+#       random_horizontal_flips:
+#         flip_prob: 0.2
+#       random_vertical_flips:
+#         flip_prob: 0.2
+#       random_z_flips:
+#         flip_prob: 0.2
+loader: 
+  num_workers: 16
+  prefetch_factor: 2
+  collate_fn: numpy
+model:
+  dim3: True
+  name: unet
+  in_channels: 1
+  activation: mish
+  conv: convws_nw
+  upconv: convws_nw
+  pooling: maxpool
+  normalization: gn
+  extra_args:
+    out_channels: 3
+    channels: 4
+optim:
+  name: nadam
+loss: 
+  type: dice
+  reduction: mean
+  binary_loss: False
+  class_weights: 
+    - 0.1
+    - 0.4
+    - 0.5
+ema:
+  use_ema: False
+  decay: 0.999
+hyperparams:
+  epochs: 50
+  batch_size: 1
+  batch_size_test: 1
+  lr: 2e-3
+  # momentum: 0.9
+  # l2regularization: 1e-5
+  # overfit: 2
+  grad_acc_steps: 8
+metrics:
+  main:     
+    fscore_avg:
+  logging:
+    fscore_avg:
+    weighted_fscore_avg:
+    fscore:
+    mean_squared_error:
+    # mean_absolute_error:
+  per_batch_metrics: True
+scheduler:
+  type: reduceonplateau
+  normalize_lr: False
+  patience: 20
+  min_delta: 0.01
+  factor: 0.5
+DP:
+  epsilon: 8.0
+  max_per_sample_grad_norm: 1.0
+  delta: 8e-7
+  norm_acc: False

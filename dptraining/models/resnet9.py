@@ -1,6 +1,6 @@
 from typing import Callable
 from objax import nn, functional, Module
-from objax.util import local_kwargs
+from objax.util import local_kwargs, class_name
 from functools import partial
 from objax.constants import ConvPadding
 
@@ -169,3 +169,19 @@ class ResNet9(Module):  # pylint:disable=too-many-instance-attributes
         out = self.classifier(out, *args, **local_kwargs(kwargs, self.classifier))
         out = self.out_func(out)
         return out
+
+    def __repr__(self) -> str:
+        return_str = f"{class_name(self)}"
+        return_str += f"\n\t{str(self.conv1)}"
+        return_str += f"\n\t{str(self.conv2)}"
+        return_str += f"\n\t{str(self.res1)}"
+        return_str += f"\n\t{str(self.scale_norm_1)}"
+        return_str += f"\n\t{str(self.conv3)}"
+        return_str += f"\n\t{str(self.conv4)}"
+        return_str += f"\n\t{str(self.res2)}"
+        return_str += f"\n\t{str(self.scale_norm_2)}"
+        return_str += f"\n\t{str(self.pooling)}"
+        return_str += f"\n\t{str(self.flatten)}"
+        return_str += f"\n\t{str(self.classifier)}"
+        return_str += f"\n\t{str(self.out_func)}"
+        return return_str

@@ -26,7 +26,7 @@ def test_cselogitssparse_loss(utils):
     model_vars = model.vars()
     for reduction in get_allowed_values(LossReduction):
         config_dict = {
-            "loss": {"type": "cse", "reduction": reduction},
+            "loss": {"type": "cse", "reduction": reduction, "binary_loss": False},
             "hyperparams": {},
         }
         config = utils.extend_base_config(config_dict)
@@ -42,7 +42,7 @@ def test_combinedl2regularization(utils):
     model_vars = model.vars()
     for reduction in get_allowed_values(LossReduction):
         config_dict = {
-            "loss": {"type": "cse", "reduction": reduction},
+            "loss": {"type": "cse", "reduction": reduction, "binary_loss": False},
             "hyperparams": {"l2regularization": 0.5},
         }
         config = utils.extend_base_config(config_dict)
