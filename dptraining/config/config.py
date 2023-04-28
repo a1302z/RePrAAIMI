@@ -168,6 +168,9 @@ class DPConfig:
     grad_acc_steps: int = 1
     rsqrt_noise_adapt: bool = False
     glrt_assumption: bool = False
+    bam:Optional[bool] = False
+    r:Optional[float] = None
+    alpha:Optional[float] = None
 
 
 @dataclass

@@ -8,6 +8,7 @@ from objax.module import Function, Vectorize
 from objax import random, ModuleList, StateVar
 from objax.variable import VarCollection
 from objax.privacy.dpsgd import PrivateGradValues
+import wandb
 
 
 class ClipAndAccumulateGrads(PrivateGradValues):
@@ -20,6 +21,7 @@ class ClipAndAccumulateGrads(PrivateGradValues):
         use_norm_accumulation: bool = False,
         gradient_accumulation_steps: int = 1,
         num_augmented_samples: int = 1,
+        log_grad_metrics: bool = True,
     ):
         super().__init__(
             loss_fn,
@@ -30,6 +32,7 @@ class ClipAndAccumulateGrads(PrivateGradValues):
             batch_axis,
             use_norm_accumulation,
         )
+        self.log_grad_metrics = log_grad_metrics
         self.gradient_accumulation_steps = gradient_accumulation_steps
         self.counter = StateVar(jnp.array(0, dtype=jnp.int32))
         # self.num_elements = StateVar(jnp.array(0, dtype=jnp.int32))
@@ -51,9 +54,6 @@ class ClipAndAccumulateGrads(PrivateGradValues):
         self.accumulated_loss.value += loss_values[0]
 
     def get_accumulated_grads(self):
-        # accumulated_grads = [jnp.copy(g) for g in self.accumulated_grads]
-        # self._reset_values()
-        # return accumulated_grads
         return [gx.value for gx in self.accumulated_grads]
 
     def reset_accumulated_grads(self):
@@ -64,6 +64,23 @@ class ClipAndAccumulateGrads(PrivateGradValues):
             self.accumulated_grads[i].value = jnp.zeros_like(accumulated_grad)
         self.accumulated_loss.value = jnp.array(0.0)
         self.counter.value = jnp.array(0).astype(jnp.int32)
+
+    def cos_sim(self, g1, g2):
+        """Computes cosine similarity between g1 and g2"""
+        flatten = lambda grad_list: jnp.concatenate(
+            [g.flatten() for g in grad_list], axis=0
+        )
+        dot_product = jnp.dot(flatten(g1), flatten(g2))
+        norm_g1 = jnp.linalg.norm(jnp.array([jnp.linalg.norm(g) for g in g1]))
+        norm_g2 = jnp.linalg.norm(jnp.array([jnp.linalg.norm(g) for g in g2]))
+        return dot_product / (norm_g1 * norm_g2)
+
+    def l2_bias(self, g, g_clip):
+        """Computes L2-norm of bias vector ||Bias(\hat{g}, \hat{g}_priv)||_2"""
+        flatten = lambda grad_list: jnp.concatenate(
+            [g.flatten() for g in grad_list], axis=0
+        )
+        return jnp.linalg.norm(flatten(g_clip) - flatten(g))
 
     def __call__(self, *args):
         """Returns the computed DP-SGD gradients.
@@ -89,17 +106,27 @@ class ClipAndAccumulateGrads(PrivateGradValues):
             grads, values = gv(*args)
             total_grad_norm = jnp.linalg.norm([jnp.linalg.norm(g) for g in grads])
             idivisor = 1 / jnp.maximum(total_grad_norm / self.l2_norm_clip, 1.0)
-            return [g * idivisor for g in grads], values
+            unclipped_grads = grads if self.log_grad_metrics else None
+            return [g * idivisor for g in grads], values, unclipped_grads
 
         clipped_grad_vectorized = Vectorize(
             clipped_grad_single_example, batch_axis=self.batch_axis
         )
 
         def clipped_grad(*args):
-            grads, loss = clipped_grad_vectorized(*args)
+            grads, loss, unclipped_grads = clipped_grad_vectorized(*args)
             grads, loss = jax.tree_util.tree_map(
                 functools.partial(jnp.sum, axis=0), (grads, loss)
             )
+            if self.log_grad_metrics:
+                unclipped_grads = jax.tree_util.tree_map(
+                    functools.partial(jnp.sum, axis=0), (unclipped_grads)
+                )
+                stoch_alignment = self.cos_sim(unclipped_grads, grads)
+                bias = self.l2_bias(unclipped_grads, grads)
+                wandb.log(
+                    {"stoch_aligment": stoch_alignment, "l2_bias": bias}
+                )
             return grads, loss
 
         return clipped_grad
@@ -107,6 +134,11 @@ class ClipAndAccumulateGrads(PrivateGradValues):
     def _make_clipped_grad_fn_norm_accumulation(
         self, f: Callable, gv: GradValues, vc: VarCollection
     ) -> Callable:
+        if self.log_grad_metrics:
+            raise NotImplementedError(
+                "logging grad metrics isn't supported for norm accumulation yet"
+            )
+
         @Function.with_vars(gv.vars())
         def grad_norm_fn(*args):
             grads, values = gv(*args)
@@ -139,3 +171,92 @@ class ClipAndAccumulateGrads(PrivateGradValues):
             )
 
         return clipped_grad
+
+
+class BAM_ClipAndAccumulateGrads(ClipAndAccumulateGrads):
+    def __init__(
+        self,
+        loss_fn: Callable,
+        variables: VarCollection,
+        l2_norm_clip: float,
+        batch_axis: Tuple[Optional[int], ...] = (0,),
+        use_norm_accumulation: bool = False,
+        gradient_accumulation_steps: int = 1,
+        num_augmented_samples: int = 1,
+        log_grad_metrics:bool=False,
+        r: float = 0.05,
+        alpha: float = 1.0,  # alpha=1 corresponds to SAM
+    ):
+        super().__init__(
+            loss_fn=loss_fn,
+            variables=variables,
+            l2_norm_clip=l2_norm_clip,
+            batch_axis=batch_axis,
+            use_norm_accumulation=use_norm_accumulation,
+            gradient_accumulation_steps=gradient_accumulation_steps,
+            num_augmented_samples=num_augmented_samples,
+            log_grad_metrics=log_grad_metrics
+        )
+        self.r = r
+        self.alpha = alpha
+        if use_norm_accumulation:
+            raise NotImplementedError(
+                "Norm accumulation is currently not supported for BAM"
+            )
+        else:
+            print("... creating clip function BAM")
+            gv = GradValues(loss_fn, variables)
+            self.clipped_grad = self._make_clipped_grad_fn_simple(loss_fn, gv, variables)
+    
+
+        def _make_clipped_grad_fn_simple(
+            self, f: Callable, gv: GradValues, vc: VarCollection
+        ) -> Callable:
+            @Function.with_vars(gv.vars())
+            def clipped_grad_single_example(sample_x, sample_y):
+                grads, values = self.get_augmented_grads_values(
+                    sample_x, sample_y, vec_gv
+                )
+                grad_norm = jnp.linalg.norm(jnp.array([jnp.linalg.norm(g) for g in grads]))
+                # pertub parameters by scaled gradient
+                for v, g in zip(vc, grads):
+                    v.assign(v.value + (self.r * g / grad_norm))
+                l_dash_grad_fn = GradValues(f, vc)
+                l_dash_grads, l_dash_values = l_dash_grad_fn(sample_x, sample_y)
+                # BAM gradient
+                total_grad = [
+                    ((1 - self.alpha) * g) + (self.alpha * dash_grad)
+                    for g, dash_grad in zip(grads, l_dash_grads)
+                ]
+                # clipping business as usual
+                total_grad_norm = jnp.linalg.norm(
+                    jnp.array([jnp.linalg.norm(g) for g in total_grad])
+                )
+                idivisor = 1 / jnp.maximum(total_grad_norm / self.l2_norm_clip, 1.0)
+                unclipped_grads = grads if self.log_grad_metrics else None
+                # undo parameter perturbation
+                for v, g in zip(vc, grads):
+                    v.assign(v.value - (self.r * g / grad_norm))
+                return [g * idivisor for g in total_grad], values, unclipped_grads
+
+            clipped_grad_vectorized = Vectorize(
+                clipped_grad_single_example, batch_axis=self.batch_axis
+            )
+
+            def clipped_grad(*args):
+                grads, loss, unclipped_grads = clipped_grad_vectorized(*args)
+                grads, loss = jax.tree_util.tree_map(
+                    functools.partial(jnp.sum, axis=0), (grads, loss)
+                )
+                if self.log_grad_metrics:
+                    unclipped_grads = jax.tree_util.tree_map(
+                        functools.partial(jnp.sum, axis=0), (unclipped_grads)
+                    )
+                    stoch_alignment = self.cos_sim(unclipped_grads, grads)
+                    bias = self.l2_bias(unclipped_grads, grads)
+                    wandb.log(
+                        {"stoch_aligment": stoch_alignment, "l2_bias": bias}
+                    )
+                return grads, loss
+
+            return clipped_grad

@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path.cwd()))
 
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 # os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["XLA_FLAGS"] = "--xla_gpu_force_compilation_parallelism=1"
 # os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
 
 from dptraining.config import Config, DatasetTask

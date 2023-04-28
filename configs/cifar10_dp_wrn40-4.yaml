@@ -3,7 +3,7 @@ defaults:
   - _self_
 project: cifar10-DP
 general:
-  log_wandb: True
+  log_wandb: False
   parallel: False
   eval_train: True
   use_pretrained_model: 
@@ -32,14 +32,14 @@ loader:
   collate_fn: numpy
 augmentations:
   consecutive_augmentations:
-    multiplicity: 2
+    multiplicity: 16
     consecutive_augmentations:
       random_img_shift:
         max_shift: 4
       random_vertical_flips:
         flip_prob: 0.5
 model:
-  name: resnet9
+  name: wide_resnet
   in_channels: 3
   num_classes: 10
   conv: convws_nw
@@ -48,6 +48,8 @@ model:
   pooling: avgpool
   ensemble: 1
   extra_args:
+    depth: 40
+    width: 4
     scale_norm: True
 optim:
   name: nadam
@@ -59,7 +61,7 @@ ema:
   decay: 0.04
 hyperparams:
   epochs: 200
-  batch_size: 512
+  batch_size: 64
   batch_size_test: 512
   lr: 2e-3
   # momentum: 0.9
@@ -79,7 +81,7 @@ DP:
   max_per_sample_grad_norm: 1.0
   delta: 1e-5
   norm_acc: False
-  grad_acc_steps: 8
+  grad_acc_steps: 64
   rsqrt_noise_adapt: False
   glrt_assumption: False
   bam: True

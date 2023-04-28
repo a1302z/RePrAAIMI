@@ -15,7 +15,7 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path.cwd()))
 
 from dptraining.config import Config, DatasetTask
-from dptraining.privacy import ClipAndAccumulateGrads
+from dptraining.privacy import ClipAndAccumulateGrads, BAM_ClipAndAccumulateGrads
 
 N_DEVICES = local_device_count()
 
@@ -86,7 +86,7 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
             )
         else:
             # pass
-            calc_grads = objax.Jit(calc_grads)
+            #calc_grads = objax.Jit(calc_grads)
             apply_grads = objax.Jit(apply_grads)
 
         # @objax.Function.with_vars(train_vars)
@@ -154,8 +154,23 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
 
 def create_loss_gradient(config: Config, model_vars, loss_fn):
     if not config.DP:
+        print("... CAREFUL! Not using DP")
         loss_gv = objax.GradValues(loss_fn, model_vars)
+    elif config.DP.bam:
+        print("... using BAM")
+        loss_gv = BAM_ClipAndAccumulateGrads(
+            loss_fn,
+            model_vars,
+            config.DP.max_per_sample_grad_norm,
+            batch_axis=(0, 0),
+            use_norm_accumulation=config.DP.norm_acc,
+            gradient_accumulation_steps=config.DP.grad_acc_steps,
+            r=config.DP.r,
+            alpha=config.DP.alpha,
+            log_grad_metrics=config.general.log_wandb
+        )
     else:
+        print("... not using BAM")
         loss_gv = ClipAndAccumulateGrads(
             loss_fn,
             model_vars,
@@ -163,7 +178,9 @@ def create_loss_gradient(config: Config, model_vars, loss_fn):
             batch_axis=(0, 0),
             use_norm_accumulation=config.DP.norm_acc,
             gradient_accumulation_steps=config.DP.grad_acc_steps,
+            log_grad_metrics=config.general.log_wandb
         )
+        
 
     return loss_gv
 
