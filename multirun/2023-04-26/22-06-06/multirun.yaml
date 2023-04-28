@@ -1,0 +1,274 @@
+hydra:
+  run:
+    dir: outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
+  launcher:
+    _target_: hydra._internal.core_plugins.basic_launcher.BasicLauncher
+  sweeper:
+    _target_: hydra._internal.core_plugins.basic_sweeper.BasicSweeper
+    max_batch_size: null
+    params: null
+  help:
+    app_name: ${hydra.job.name}
+    header: '${hydra.help.app_name} is powered by Hydra.
+
+      '
+    footer: 'Powered by Hydra (https://hydra.cc)
+
+      Use --hydra-help to view Hydra specific help
+
+      '
+    template: '${hydra.help.header}
+
+      == Configuration groups ==
+
+      Compose your configuration from those groups (group=option)
+
+
+      $APP_CONFIG_GROUPS
+
+
+      == Config ==
+
+      Override anything in the config (foo.bar=value)
+
+
+      $CONFIG
+
+
+      ${hydra.help.footer}
+
+      '
+  hydra_help:
+    template: 'Hydra (${hydra.runtime.version})
+
+      See https://hydra.cc for more info.
+
+
+      == Flags ==
+
+      $FLAGS_HELP
+
+
+      == Configuration groups ==
+
+      Compose your configuration from those groups (For example, append hydra/job_logging=disabled
+      to command line)
+
+
+      $HYDRA_CONFIG_GROUPS
+
+
+      Use ''--cfg hydra'' to Show the Hydra config.
+
+      '
+    hydra_help: ???
+  hydra_logging:
+    version: 1
+    formatters:
+      simple:
+        format: '[%(asctime)s][HYDRA] %(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout
+    root:
+      level: INFO
+      handlers:
+      - console
+    loggers:
+      logging_example:
+        level: DEBUG
+    disable_existing_loggers: false
+  job_logging:
+    version: 1
+    formatters:
+      simple:
+        format: '[%(asctime)s][%(name)s][%(levelname)s] - %(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout
+      file:
+        class: logging.FileHandler
+        formatter: simple
+        filename: ${hydra.runtime.output_dir}/${hydra.job.name}.log
+    root:
+      level: INFO
+      handlers:
+      - console
+      - file
+    disable_existing_loggers: false
+  env: {}
+  mode: MULTIRUN
+  searchpath: []
+  callbacks: {}
+  output_subdir: .hydra
+  overrides:
+    hydra:
+    - hydra.mode=MULTIRUN
+    task:
+    - DP.epsilon=8,6,5,4,3,2,0.5
+  job:
+    name: train
+    chdir: null
+    override_dirname: DP.epsilon=8,6,5,4,3,2,0.5
+    id: ???
+    num: ???
+    config_name: pppp_dp.yaml
+    env_set: {}
+    env_copy: []
+    config:
+      override_dirname:
+        kv_sep: '='
+        item_sep: ','
+        exclude_keys: []
+  runtime:
+    version: 1.2.0
+    version_base: '1.2'
+    cwd: /home/sarah/end2end
+    config_sources:
+    - path: hydra.conf
+      schema: pkg
+      provider: hydra
+    - path: /home/sarah/end2end/configs
+      schema: file
+      provider: main
+    - path: ''
+      schema: structured
+      provider: schema
+    output_dir: ???
+    choices:
+      hydra/env: default
+      hydra/callbacks: null
+      hydra/job_logging: default
+      hydra/hydra_logging: default
+      hydra/hydra_help: default
+      hydra/help: default
+      hydra/sweeper: basic
+      hydra/launcher: basic
+      hydra/output: default
+  verbose: false
+project: pppp-dp
+general:
+  log_wandb: true
+  parallel: false
+  cpu: false
+  seed: 0
+  use_pretrained_model: null
+  save_path: null
+  eval_train: false
+  make_save_str_unique: null
+dataset:
+  name: pppp
+  root: ???
+  version: null
+  train_val_split: ???
+  normalization: false
+  download: false
+  fft: false
+  task: classification
+  test_split: 0.1
+  radimagenet: null
+  fmri: null
+checkpoint: {}
+train_transforms:
+  Resize:
+    size: 224
+  RandomCrop:
+    size: 224
+  pil_to_numpy: null
+test_transforms:
+  Resize:
+    size: 224
+  CenterCrop:
+    size: 224
+  pil_to_numpy: null
+val_transforms: {}
+loader:
+  num_workers: 0
+  prefetch_factor: null
+  collate_fn: numpy
+  pin_memory: true
+augmentations:
+  pil_to_jax: null
+  normalize_jax:
+    mean:
+    - 0.5705
+    std:
+    - 0.1778
+  consecutive_augmentations:
+    multiplicity: 2
+    consecutive_augmentations:
+      random_img_shift:
+        max_shift: 4
+      random_vertical_flips:
+        flip_prob: 0.5
+test_augmentations:
+  pil_to_jax: null
+  normalize_jax:
+    mean:
+    - 0.5705
+    std:
+    - 0.1778
+label_augmentations: {}
+test_label_augmentations: {}
+model:
+  name: resnet9
+  ensemble: null
+  complex: false
+  in_channels: 1
+  num_classes: 3
+  conv: convws_nw
+  activation: mish
+  normalization: gn
+  pooling: avgpool
+  extra_args:
+    scale_norm: true
+optim:
+  name: nadam
+  args: {}
+loss:
+  type: cse
+  reduction: sum
+ema:
+  use_ema: false
+  decay: 0.04
+  update_every: 1
+hyperparams:
+  epochs: 200
+  batch_size: 2
+  batch_size_test: 2
+  batch_size_val: null
+  lr: 0.001
+  l2regularization: null
+  overfit: null
+earlystopping: null
+scheduler:
+  type: const
+  normalize_lr: false
+  mode: maximize
+  cumulative_delta: true
+  min_delta: 0.01
+  patience: 20
+  factor: 0.5
+metrics:
+  main:
+    matthews_corrcoef: null
+  logging:
+    classification_report:
+      output_dict: true
+      zero_division: 0
+DP:
+  epsilon: 1.0
+  max_per_sample_grad_norm: 1.0
+  delta: 1.0e-05
+  sigma: null
+  norm_acc: false
+  grad_acc_steps: 32
+  rsqrt_noise_adapt: false
+  glrt_assumption: false

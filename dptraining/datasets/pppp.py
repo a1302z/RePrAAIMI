@@ -135,7 +135,7 @@ class CustomDataLoader():
         if stats_file.is_file():
             with open(stats_file, "rb") as f:   # load stats
                 mean, std = pickle.load(f)    
-                print(mean, std)
+                # print(mean, std)
 
         else: 
             tf = transforms.Compose([
@@ -182,7 +182,7 @@ class CustomDataLoader():
 class PPPPCreator(DataLoaderCreator):
     @staticmethod
     def make_datasets(config, transform):
-        data_dir = Path("/home/sarah/Coding/new-beginning/data/raw/pppp")
+        data_dir = Path("/media/sarah/data/raw/pppp")
 
         dataloader = CustomDataLoader(data_dir=data_dir)
         train, val, test = dataloader.make_datasets(train_size=0.9, transform=transform)

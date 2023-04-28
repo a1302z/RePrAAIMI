@@ -3,7 +3,7 @@ defaults:
   - _self_
 project: pppp-dp
 general:
-  log_wandb: False
+  log_wandb: True
   parallel: False
   eval_train: False
 dataset: 
@@ -74,16 +74,16 @@ model:
   conv: convws_nw
   activation: mish
   normalization: gn
-  pooling: avgpool
+  pooling: maxpool
   extra_args:
     scale_norm: True
-ema:
-  use_ema: False
-  decay: 0.04
+# ema:
+#   use_ema: False
+#   decay: 0.04
 hyperparams:
-  epochs: 200
-  batch_size: 2
-  batch_size_test: 2
+  epochs: 50
+  batch_size: 64
+  batch_size_test: 64
   lr: 1e-3
 scheduler:
   type: const
@@ -91,9 +91,9 @@ scheduler:
   patience: 20
   min_delta: 0.01
   factor: 0.5
-DP:
-  epsilon: 8.0
-  max_per_sample_grad_norm: 1.0
-  delta: 1e-5
-  norm_acc: False
-  grad_acc_steps: 32
+# DP:
+#   epsilon: 1.0
+#   max_per_sample_grad_norm: 1.0
+#   delta: 1e-5
+#   norm_acc: False
+#   grad_acc_steps: 32

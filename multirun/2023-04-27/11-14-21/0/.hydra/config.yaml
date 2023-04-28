@@ -1,0 +1,111 @@
+project: pppp-dp
+general:
+  log_wandb: true
+  parallel: false
+  cpu: false
+  seed: 0
+  use_pretrained_model: null
+  save_path: null
+  eval_train: false
+  make_save_str_unique: null
+dataset:
+  name: pppp
+  root: ???
+  version: null
+  train_val_split: ???
+  normalization: false
+  download: false
+  fft: false
+  task: classification
+  test_split: 0.1
+  radimagenet: null
+  fmri: null
+checkpoint: {}
+train_transforms:
+  Resize:
+    size: 224
+  RandomCrop:
+    size: 224
+  pil_to_numpy: null
+test_transforms:
+  Resize:
+    size: 224
+  CenterCrop:
+    size: 224
+  pil_to_numpy: null
+val_transforms: {}
+loader:
+  num_workers: 0
+  prefetch_factor: null
+  collate_fn: numpy
+  pin_memory: true
+augmentations:
+  pil_to_jax: null
+  normalize_jax:
+    mean:
+    - 0.5705
+    std:
+    - 0.1778
+  consecutive_augmentations:
+    multiplicity: 2
+    consecutive_augmentations:
+      random_img_shift:
+        max_shift: 4
+      random_vertical_flips:
+        flip_prob: 0.5
+test_augmentations:
+  pil_to_jax: null
+  normalize_jax:
+    mean:
+    - 0.5705
+    std:
+    - 0.1778
+label_augmentations: {}
+test_label_augmentations: {}
+model:
+  name: resnet9
+  ensemble: null
+  complex: false
+  in_channels: 1
+  num_classes: 3
+  conv: convws_nw
+  activation: mish
+  normalization: gn
+  pooling: avgpool
+  extra_args:
+    scale_norm: true
+optim:
+  name: nadam
+  args: {}
+loss:
+  type: cse
+  reduction: sum
+ema:
+  use_ema: false
+  decay: 0.04
+  update_every: 1
+hyperparams:
+  epochs: 50
+  batch_size: 2
+  batch_size_test: 2
+  batch_size_val: null
+  lr: 0.001
+  l2regularization: null
+  overfit: null
+earlystopping: null
+scheduler:
+  type: const
+  normalize_lr: false
+  mode: maximize
+  cumulative_delta: true
+  min_delta: 0.01
+  patience: 20
+  factor: 0.5
+metrics:
+  main:
+    matthews_corrcoef: null
+  logging:
+    classification_report:
+      output_dict: true
+      zero_division: 0
+DP: null
