@@ -82,6 +82,6 @@ DP:
   grad_acc_steps: 8
   rsqrt_noise_adapt: False
   glrt_assumption: False
-  bam: True
+  bam: False
   r: 0.05
   alpha: 0.8

@@ -3,7 +3,7 @@ defaults:
   - _self_
 project: cifar10-DP
 general:
-  log_wandb: False
+  log_wandb: True
   parallel: False
   eval_train: True
   use_pretrained_model: 
@@ -32,7 +32,7 @@ loader:
   collate_fn: numpy
 augmentations:
   consecutive_augmentations:
-    multiplicity: 16
+    multiplicity: 8
     consecutive_augmentations:
       random_img_shift:
         max_shift: 4
@@ -60,7 +60,7 @@ ema:
   use_ema: True
   decay: 0.04
 hyperparams:
-  epochs: 200
+  epochs: 250
   batch_size: 64
   batch_size_test: 512
   lr: 2e-3
@@ -84,6 +84,6 @@ DP:
   grad_acc_steps: 64
   rsqrt_noise_adapt: False
   glrt_assumption: False
-  bam: True
+  bam: False
   r: 0.05
   alpha: 0.8

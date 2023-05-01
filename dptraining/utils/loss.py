@@ -65,14 +65,7 @@ class CSELogitsSparse(LossFunctionCreator):
     def create_test_loss_fn(self):
         def loss_fn(predicted, correct):
             loss = objax.functional.loss.cross_entropy_logits_sparse(predicted, correct)
-            match self._config.reduction:
-                case LossReduction.sum:
-                    return loss.sum()
-                case LossReduction.mean:
-                    return loss.mean()
-                case _ as reduction:
-                    raise RuntimeError(f"Not supported loss reduction: {reduction}")
-
+            return loss.mean()
         return loss_fn
 
 

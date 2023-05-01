@@ -6,7 +6,7 @@ general:
   log_wandb: False
   parallel: False
   eval_train: False
-dataset: 
+dataset:
   task: classification
   name: imagenet
   root: ./data/ILSVRC2012
@@ -76,7 +76,8 @@ model:
   activation: mish
   normalization: gn
   pooling: avgpool
-  scale_norm: True
+  extra_args:
+    scale_norm: True
 ema:
   use_ema: False
   decay: 0.04
