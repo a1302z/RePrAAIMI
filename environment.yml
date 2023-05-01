@@ -7,7 +7,11 @@ dependencies:
   - python==3.10
   - pytorch::pytorch==1.11
   - pytorch::torchvision
-  - conda-forge::cudatoolkit
+  # - nvidia::cudatoolkit==11.4
+  # - nvidia::cuda==11.4
+  # - nvidia::cuda-nvcc==11.4.48
+  # - nvidia/label/cuda-11.4.2::cuda-nvcc
+  # - conda-forge::cudatoolkit-dev==11.4.0
   - conda-forge::cudnn==8.2.1.32
   - conda-forge::wandb
   - conda-forge::scikit-learn
