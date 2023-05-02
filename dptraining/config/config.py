@@ -294,6 +294,11 @@ class UnfreezingSchedule:
 
 
 @dataclass
+class BAMConfig:
+    use: bool = True
+
+
+@dataclass
 class DPConfig:
     epsilon: float = MISSING
     max_per_sample_grad_norm: float = MISSING
@@ -303,7 +308,7 @@ class DPConfig:
     rsqrt_noise_adapt: bool = False
     glrt_assumption: bool = False
     mechanism: str = "rdp"
-    eps_tol: float = 1e-5
+    eps_tol: Optional[float] = None
     alphas: list[float] = field(default_factory=list)
     use_batch_sampling: bool = True
 

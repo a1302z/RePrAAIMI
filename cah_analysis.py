@@ -28,7 +28,7 @@ import lpips
 from matplotlib import pyplot as plt, colors as mplcolors, ticker as mtick
 from matplotlib import image as mpimg
 from pathlib import Path
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from datetime import datetime
 import cv2
 import pandas as pd
@@ -84,7 +84,7 @@ from breachingobjaxutils.initialize import make_configs
 
 def flatten_features(ftrs):
     return np.stack(
-        [np.concatenate([v.flatten().numpy() for v in d.values()]) for d in ftrs],
+        [np.concatenate([v.flatten().cpu().numpy() for v in d.values()]) for d in ftrs],
         axis=0,
     )
 
@@ -99,7 +99,12 @@ cfg, config = make_configs(
     args.config,
 )
 # if train_config.general.cpu:
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+# os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
+
+from jax import numpy as jn
+
 
 from dptraining.privacy import setup_privacy, analyse_epsilon
 from dptraining.datasets import make_loader_from_config
@@ -112,7 +117,72 @@ from breachingobjaxutils.objaxbasedfunctions import (
 
 fix_seeds(config)
 
-device = torch.device(f"cuda") if torch.cuda.is_available() else torch.device("cpu")
+# from jax import vmap, numpy as jn
+
+
+# mean_diff = jax.pmap(
+#     lambda x, y: jn.mean(jn.square(jn.subtract(x, y)), axis=1), (0, None), 0
+# )
+# def mean_diff(x, y):
+#     results = []
+#     for element in tqdm(x, total=x.shape[0], leave=False, desc="Calc dist"):
+#         res = np.mean(np.square(np.subtract(element, y)), axis=1)
+#         results.append(res)
+#     return np.stack(results, axis=0)
+
+
+def mean_diff_jax_alongX(a1: jn.DeviceArray, a2: jn.DeviceArray):
+    X, N = a1.shape
+    X1, M = a2.shape
+    assert X == X1
+    out = jn.zeros((N, M))
+    for l, r in tqdm(zip(a1, a2), total=X):
+        out += jn.square(l[:, None] - r)
+    out /= X
+    return out
+
+
+def mean_diff_np_alongNX(a1, a2, patchsize=1000):
+    N, X = a1.shape
+    M, X1 = a2.shape
+    assert X == X1
+    out = np.zeros((N, M))
+    a1 = a1.T.copy()
+    a2 = jn.array(a2.T.copy())
+    N_patches = N // patchsize + (N % patchsize > 0) * 1
+    for i in trange(N_patches):
+        patch = jn.array(a1[:, i * patchsize : (i + 1) * patchsize])
+        out[i * patchsize : (i + 1) * patchsize] = np.array(
+            mean_diff_jax_alongX(patch, a2)
+        )
+        del patch
+    return out
+
+
+# def mean_diff_jax(a1, a2, max_bins=20):
+#     N, X = a1.shape
+#     M, X1 = a2.shape
+#     assert X == X1
+#     out = np.zeros((N, M))
+#     a1, a2 = a1.T.copy(), jn.array(a2.T.copy())
+#     N_patches = N // max_bins + (N % max_bins > 0) * 1
+#     for i in trange(N_patches, leave=False):
+#         patch = jn.array(a1[:, i * N_patches : (i + 1) * N_patches])
+#         for l, r in tqdm(
+#             zip(patch, a2),
+#             total=X,
+#             leave=False,
+#             desc="Calc perc dist",
+#         ):
+#             out[i * N_patches : (i + 1) * N_patches] += jn.square(
+#                 jn.array(l[:, None]) - jn.array(r)
+#             )
+#     out /= X
+#     return out
+
+
+# device = torch.device(f"cuda") if torch.cuda.is_available() else torch.device("cpu")
+device = torch.device("cpu")
 torch.backends.cudnn.benchmark = cfg.case.impl.benchmark
 setup = dict(device=device, dtype=getattr(torch, cfg.case.impl.dtype))
 
@@ -320,10 +390,12 @@ for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=
         reconstructed_user_data, recon_stats = attacker.reconstruct(
             [server_payload], [shared_data], server.secrets, dryrun=cfg.dryrun
         )
-
+        true_user_data = {k: np.array(v) for k, v in true_user_data.items()}
+        del shared_data
         rec_denormalized = torch.clamp(
-            torch.from_numpy(np.array(reconstructed_user_data["data"])).to(**setup) * ds
-            + dm,
+            torch.from_numpy(np.array(reconstructed_user_data["data"])).to(**setup)
+            * torch.from_numpy(ds).to(**setup)
+            + torch.from_numpy(dm).to(**setup),
             0,
             1,
         ).float()
@@ -333,19 +405,27 @@ for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=
             1,
         ).float()
 
-        features_gt_raw = breaching.analysis.calc_perceptual_features(
+        features_gt = breaching.analysis.calc_perceptual_features(
             lpips_scorer,
             denormalized_images,
         )
-        features_rec_raw = breaching.analysis.calc_perceptual_features(
+        features_rec = breaching.analysis.calc_perceptual_features(
             lpips_scorer,
             rec_denormalized,
         )
 
-        features_gt = flatten_features(features_gt_raw)
-        features_rec = flatten_features(features_rec_raw)
+        features_gt = flatten_features(features_gt)
+        features_rec = flatten_features(features_rec)
 
-        perc_dist = np.power(features_gt[:, None, ...] - features_rec, 2).mean(axis=2)
+        N, M, X = features_gt.shape[0], features_rec.shape[0], features_gt.shape[1]
+        if (
+            N * M * X < 1e10
+        ):  # this is just an empirical threshold and strongly depends on the hardware
+            perc_dist = np.power(features_gt[:, None, ...] - features_rec, 2).mean(
+                axis=2
+            )
+        else:  # memory optimised version
+            perc_dist = mean_diff_np_alongNX(features_rec, features_gt, 1500).T
 
         # l2_dists = np.power(
         #     np.array(true_user_data["data"][:, None, ...])

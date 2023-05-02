@@ -549,7 +549,7 @@ def train_loop(
                 sigma,
                 sampling_rate,
                 delta,
-            add_alphas=config.DP.alphas,
+                add_alphas=config.DP.alphas,
             )
             if config.general.log_wandb:
                 wandb.log({"epsilon": epsilon})

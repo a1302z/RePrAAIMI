@@ -7,6 +7,8 @@ from dptraining.config import Config
 
 
 def setup_privacy(config: Config, train_loader):
+    if config.DP is not None and config.DP.eps_tol is None:
+        config.DP.eps_tol = config.DP.epsilon / 1e6
     grad_acc = config.hyperparams.grad_acc_steps
     accountant: Optional[IAccountant] = None
     if not config.DP:
