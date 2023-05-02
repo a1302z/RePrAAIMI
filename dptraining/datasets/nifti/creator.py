@@ -197,7 +197,7 @@ def create_database(config, scan_files, label_files):
                             data=label,
                         )
 
-            database_file = h5py.File(config.dataset.nifti_seg_options.database, "r")
+            database_file = h5py.File(config.dataset.nifti_seg_options.database, "a")
 
     return database_file
 
