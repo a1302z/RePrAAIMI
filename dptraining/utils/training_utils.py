@@ -15,7 +15,7 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path.cwd()))
 
 from dptraining.config import Config, DatasetTask
-from dptraining.privacy import ClipAndAccumulateGrads, BAM_ClipAndAccumulateGrads
+from dptraining.privacy import ClipAndAccumulateGrads
 
 N_DEVICES = local_device_count()
 
@@ -55,7 +55,7 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
                 image_batch, label_batch
             )
             loss_value, metric_dict = values
-            grad_calc.accumulate_grad(clipped_grad, loss_value)
+            grad_calc.accumulate_grad(clipped_grad)
             if parallel:
                 loss_value = objax.functional.parallel.psum(loss_value)
             n_samples = image_batch.shape[0] + image_batch.shape[1]
@@ -89,9 +89,9 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
                 vc=train_vars,
             )
         else:
-            pass
-            # calc_grads = objax.Jit(calc_grads)
-            # apply_grads = objax.Jit(apply_grads)
+            #pass
+            calc_grads = objax.Jit(calc_grads)
+            apply_grads = objax.Jit(apply_grads)
 
         # @objax.Function.with_vars(train_vars)
         def train_op(  # pylint:disable=inconsistent-return-statements
@@ -137,7 +137,7 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
                     grads = objax.functional.parallel.pmean(grads)
                     loss = objax.functional.parallel.pmean(loss)
             if isinstance(grad_calc, ClipAndAccumulateGrads):
-                loss = loss[0] / image_batch.shape[0]
+                loss = loss[0]
                 grads = grad_calc.add_noise(
                     grads, noise, objax.random.DEFAULT_GENERATOR
                 )
@@ -163,16 +163,17 @@ def create_loss_gradient(config: Config, model_vars, loss_fn):
         loss_gv = objax.GradValues(loss_fn, model_vars)
     elif config.DP.bam:
         print("... using BAM")
-        loss_gv = BAM_ClipAndAccumulateGrads(
+        loss_gv = ClipAndAccumulateGrads(
             loss_fn,
             model_vars,
             config.DP.max_per_sample_grad_norm,
             batch_axis=(0, 0),
             use_norm_accumulation=config.DP.norm_acc,
             gradient_accumulation_steps=config.DP.grad_acc_steps,
+            log_grad_metrics=config.general.log_wandb,
+            bam=True,
             r=config.DP.r,
             alpha=config.DP.alpha,
-            log_grad_metrics=config.general.log_wandb,
         )
     else:
         print("... not using BAM")

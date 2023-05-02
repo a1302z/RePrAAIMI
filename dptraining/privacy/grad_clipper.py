@@ -1,16 +1,14 @@
-import functools
-import jax
+import jax, objax, functools
 from jax import numpy as jnp
 
 from typing import Optional, Callable, Tuple
 from objax.gradient import GradValues
 from objax.module import Function, Vectorize
-from objax import random, ModuleList, StateVar
+from objax import random, ModuleList, StateVar, Module
 from objax.variable import VarCollection
-from objax.privacy.dpsgd import PrivateGradValues
 
 
-class ClipAndAccumulateGrads(PrivateGradValues):
+class ClipAndAccumulateGrads(Module):
     def __init__(
         self,
         loss_fn: Callable,
@@ -21,36 +19,47 @@ class ClipAndAccumulateGrads(PrivateGradValues):
         gradient_accumulation_steps: int = 1,
         num_augmented_samples: int = 1,
         log_grad_metrics: bool = True,
+        bam:bool=False,
+        r:float=0.05,
+        alpha=0.8,
     ):
-        super().__init__(
-            loss_fn,
-            variables,
-            0.0,
-            l2_norm_clip,
-            num_augmented_samples,
-            batch_axis,
-            use_norm_accumulation,
-        )
+        super().__init__()
+        self.batch_axis = batch_axis
+        self.l2_norm_clip = l2_norm_clip
         self.log_grad_metrics = log_grad_metrics
         self.gradient_accumulation_steps = gradient_accumulation_steps
         self.counter = StateVar(jnp.array(0, dtype=jnp.int32))
         # self.num_elements = StateVar(jnp.array(0, dtype=jnp.int32))
-        self.accumulated_loss = StateVar(jnp.array(0.0))
         self.accumulated_grads = ModuleList(
             StateVar(jnp.zeros_like(tv)) for tv in variables
         )
+        gv = GradValues(loss_fn, variables)
+        if not bam:
+            if use_norm_accumulation:
+                self.clipped_grad = self.make_clipped_grad_fn_norm_accumulation(
+                    loss_fn, gv, variables
+                )
+            else:
+                self.clipped_grad = self.make_clipped_grad_fn_simple(
+                    loss_fn, gv, variables
+                )
+        else:
+            print("... creating clip function for BAM")
+            self.clipped_grad = self.make_clipped_grad_fn_bam(
+                    loss_fn, gv, variables
+                )
+            self.r = r
+            self.alpha = alpha
 
     def calc_per_sample_grads(self, *args):
         self.counter.value += 1
         clipped_grad, loss_value = self.clipped_grad(*args)
         return clipped_grad, loss_value
 
-    def accumulate_grad(self, clipped_grads, loss_values):
+    def accumulate_grad(self, clipped_grads):
         assert len(clipped_grads) == len(self.accumulated_grads)
         for i, clipped_grad in enumerate(clipped_grads):
             self.accumulated_grads[i].value += clipped_grad
-        assert len(loss_values) == 1, "We assumed only one loss term"
-        self.accumulated_loss.value += loss_values[0]
 
     def get_accumulated_grads(self):
         return [gx.value for gx in self.accumulated_grads]
@@ -61,7 +70,6 @@ class ClipAndAccumulateGrads(PrivateGradValues):
     def _reset_values(self):
         for i, accumulated_grad in enumerate(self.accumulated_grads):
             self.accumulated_grads[i].value = jnp.zeros_like(accumulated_grad)
-        self.accumulated_loss.value = jnp.array(0.0)
         self.counter.value = jnp.array(0).astype(jnp.int32)
 
     def cos_sim(self, g1, g2):
@@ -97,7 +105,7 @@ class ClipAndAccumulateGrads(PrivateGradValues):
             for gx in grad
         ]
 
-    def _make_clipped_grad_fn_simple(
+    def make_clipped_grad_fn_simple(
         self, f: Callable, gv: GradValues, vc: VarCollection
     ) -> Callable:
         @Function.with_vars(gv.vars())
@@ -132,7 +140,7 @@ class ClipAndAccumulateGrads(PrivateGradValues):
 
         return clipped_grad
 
-    def _make_clipped_grad_fn_norm_accumulation(
+    def make_clipped_grad_fn_norm_accumulation(
         self, f: Callable, gv: GradValues, vc: VarCollection
     ) -> Callable:
         if self.log_grad_metrics:
@@ -174,60 +182,8 @@ class ClipAndAccumulateGrads(PrivateGradValues):
             )
 
         return clipped_grad
-
-
-class BAM_ClipAndAccumulateGrads(ClipAndAccumulateGrads):
-    def __init__(
-        self,
-        loss_fn: Callable,
-        variables: VarCollection,
-        l2_norm_clip: float,
-        batch_axis: Tuple[Optional[int], ...] = (0,),
-        use_norm_accumulation: bool = False,
-        gradient_accumulation_steps: int = 1,
-        num_augmented_samples: int = 1,
-        log_grad_metrics: bool = False,
-        r: float = 0.05,
-        alpha: float = 1.0,  # alpha=1 corresponds to SAM
-    ):
-        super().__init__(
-            loss_fn=loss_fn,
-            variables=variables,
-            l2_norm_clip=l2_norm_clip,
-            batch_axis=batch_axis,
-            use_norm_accumulation=use_norm_accumulation,
-            gradient_accumulation_steps=gradient_accumulation_steps,
-            num_augmented_samples=num_augmented_samples,
-            log_grad_metrics=log_grad_metrics,
-        )
-        self.r = r
-        self.alpha = alpha
-        if use_norm_accumulation:
-            raise NotImplementedError(
-                "Norm accumulation is currently not supported for BAM"
-            )
-        else:
-            print("... creating clip function BAM")
-            gv = GradValues(loss_fn, variables)
-            self.clipped_grad = self._make_clipped_grad_fn_bam(
-                loss_fn, gv, variables
-            )
-
-        def calc_per_sample_grads(self, *args):
-            self.counter.value += 1
-            clipped_grad, loss_value = self.clipped_grad(*args)
-            return clipped_grad, loss_value
-
-        def __call__(self, *args):
-            """Returns the computed DP-SGD gradients.
-            Note: This function is not serializable. Hence we recommend
-            to use the single function calls which are serializable.
-
-            Returns:
-                A tuple (gradients, value of f)."""
-            return self.calc_per_sample_grads(*args)
-
-        def _make_clipped_grad_fn_bam(
+    
+    def make_clipped_grad_fn_bam(
             self, f: Callable, gv: GradValues, vc: VarCollection
         ) -> Callable:
             @Function.with_vars(gv.vars())
@@ -246,23 +202,24 @@ class BAM_ClipAndAccumulateGrads(ClipAndAccumulateGrads):
                     ((1 - self.alpha) * g) + (self.alpha * dash_grad)
                     for g, dash_grad in zip(grads, l_dash_grads)
                 ]
+                # undo parameter perturbation
+                for v, g in zip(vc, grads):
+                    v.assign(v.value - (self.r * g / grad_norm))
+                del grads
+                del l_dash_grads
                 # clipping business as usual
                 total_grad_norm = jnp.linalg.norm(
                     jnp.array([jnp.linalg.norm(g) for g in total_grad])
                 )
                 idivisor = 1 / jnp.maximum(total_grad_norm / self.l2_norm_clip, 1.0)
                 unclipped_grads = grads if self.log_grad_metrics else None
-                # undo parameter perturbation
-                for v, g in zip(vc, grads):
-                    v.assign(v.value - (self.r * g / grad_norm))
-                #return [g * idivisor for g in total_grad], values, unclipped_grads
-                return None
+                return [g * idivisor for g in total_grad], values, unclipped_grads
+
             clipped_grad_vectorized = Vectorize(
                 clipped_grad_single_example, batch_axis=self.batch_axis
             )
 
             def clipped_grad(*args):
-                raise ValueError("finna reached dis bitch")
                 grads, loss, unclipped_grads = clipped_grad_vectorized(*args)
                 grads, loss = jax.tree_util.tree_map(
                     functools.partial(jnp.sum, axis=0), (grads, loss)
