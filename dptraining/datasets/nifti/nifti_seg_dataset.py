@@ -1,6 +1,5 @@
 from pathlib import Path
-from typing import Callable, Optional, Tuple
-
+from typing import Callable, Optional
 
 import ctypes
 import multiprocessing as mp
@@ -112,18 +111,21 @@ class NiftiSegmentationDataset(Dataset):
         elif self.database and (
             self.corrected_database_entry or not self.database_needs_correction
         ):
-            data = self.database[file_key][
-                "corrected_img_label_pair"
-                if self.database_needs_correction
-                else "img_label_pair"
-            ]
-            scan, label = data[0], data[1]
+            if self.database_needs_correction:
+                scan = self.database[file_key]["image_corrected"]
+                label = self.database[file_key]["label_corrected"]
+            else:
+                scan = self.database[file_key]["image"]
+                label = self.database[file_key]["label"]
+
         else:
             scan, label = self.load_nifti_files(index, img_file, label_file)
             if self.database:
-                data = np.stack([scan, label], axis=0)
                 self.database[file_key].create_dataset(
-                    "corrected_img_label_pair", data.shape, data.dtype, data
+                    "image_corrected", shape=scan.shape, dtype=scan.dtype, data=scan
+                )
+                self.database[file_key].create_dataset(
+                    "label_corrected", shape=label.shape, dtype=label.dtype, data=label
                 )
                 self.corrected_database_entry = True
         scan = self.transform(scan) if self.transform is not None else scan
