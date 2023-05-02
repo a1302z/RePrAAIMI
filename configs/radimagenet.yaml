@@ -6,8 +6,8 @@ general:
   parallel: False
   eval_train: True
   # save_path: radimagenet_resnet9.npz
-  make_save_str_unique: True
-  use_pretrained_model: imagenet_resnet9_convws_nw_gn_mp_sn.npz
+#  make_save_str_unique: True
+#  use_pretrained_model: imagenet_resnet9_convws_nw_gn_mp_sn.npz
 # checkpoint:
 #   logdir: radimagenet_resnet9_ckpt
 #   keep_ckpts: 10
@@ -37,6 +37,12 @@ augmentations:
         - 0.22039941
       std:
         - 0.24865805
+  random_vertical_flips:
+    flip_prob: 0.2
+  random_horizontal_flips:
+    flip_prob: 0.1
+  # gaussiannoise:
+  #   std: 0.01
 test_augmentations:
   normalize_jax:
       mean:
@@ -44,67 +50,69 @@ test_augmentations:
       std:
         - 0.24865805
 model:
-  name: resnet9
-  in_channels: 3
-  num_classes: 1000
+  name: wide_resnet
+  in_channels: 1
+  num_classes: 165
   conv: convws_nw
   activation: mish
-  normalization: gn
+  normalization: bn
   pooling: maxpool
   extra_args:
-    scale_norm: True
-  #   depth: 40
-  #   width: 4
-  pretrained_model_changes:
-    in_channels: 1
-    num_classes: 165
-    only_finetune: False
-unfreeze_schedule:
-  trigger_points: 
-    - 2
-    - 4
-    - 6
-scheduler:
-  type: manual
-  epoch_triggers:
-    - 2
-    - 4
-    - 6
-  lr_list:
-    - 1e-3
-    - 1e-4
-    - 1e-5
+    # scale_norm: True
+    depth: 40
+    width: 4
+  #pretrained_model_changes:
+  #  in_channels: 1
+  #  num_classes: 165
+  #  only_finetune: False
+#unfreeze_schedule:
+#  trigger_points: 
+#    - 2
+#    - 4
+#    - 6
+#scheduler:
+#  type: manual
+#  epoch_triggers:
+#    - 2
+#    - 4
+#    - 6
+#  lr_list:
+#    - 1e-3
+#    - 1e-4
+#    - 1e-5
 optim:
   name: nadam
-ema:
-  use_ema: True
-  decay: 0.995
+#ema:
+#  use_ema: True
+#  decay: 0.995
 hyperparams:
-  epochs: 10
-  batch_size: 64
+  epochs: 200
+  batch_size: 16
   batch_size_test: 128
   lr: 2e-3
   # overfit: 10
   # momentum: 0.9
+  grad_acc_steps: 8
 metrics:
   main: 
-    accuracy_score: 
+    matthews_corrcoef:
   logging:
     classification_report:
       output_dict: True
       zero_division: 0
-    matthews_corrcoef:
+    accuracy_score: 
 loss: 
   type: cse
   reduction: sum
   binary_loss: False
+  # calculate_class_weights: True
 # scheduler:
 #   type: reduceonplateau
 #   normalize_lr: False
 #   patience: 5
 #   min_delta: 0.01
 #   factor: 0.9
-# earlystopping:
-#   mode: maximize
-#   patience: 100
-#   min_delta: 0.01
+earlystopping:
+  mode: maximize
+  patience: 5
+  min_delta: 0.001

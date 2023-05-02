@@ -16,7 +16,7 @@ wandb:
 dataset: 
   name: radimagenet
   task: classification
-  root: ./data/radiology_ai
+  root: ./data/radiology_ai/
   train_val_split: 0.8
   test_split: 0.1
   datasplit_seed: 0
@@ -26,7 +26,7 @@ dataset:
     allowed_body_regions: all
     allowed_labels: all
 loader: 
-  num_workers: 32
+  num_workers: 16
   prefetch_factor: 16
   collate_fn: numpy
   pin_memory: True
@@ -38,7 +38,7 @@ augmentations:
         std:
           - 0.24865805
     # consecutive_augmentations:
-    #   multiplicity: 16
+    #   multiplicity: 4
     #   consecutive_augmentations:
     #     random_horizontal_flips:
     #       flip_prob: 0.2
@@ -59,8 +59,8 @@ model:
   normalization: gn
   pooling: maxpool
   extra_args:
-    # depth: 40
-    # width: 4
+    #depth: 40
+    #width: 4
     scale_norm: True
 #   pretrained_model_changes:
 #     in_channels: 1
@@ -73,32 +73,32 @@ model:
 #     - 6
 optim:
   name: nadam
-ema:
-  use_ema: True
-  decay: 0.995
+#ema:
+#  use_ema: True
+#  decay: 0.995
 hyperparams:
-  epochs: 10
-  batch_size: 64
+  epochs: 1
+  batch_size: 128
   batch_size_test: 128
   lr: 2e-3
   # overfit: 256
   # momentum: 0.9
-  grad_acc_steps: 120
+  grad_acc_steps: 26
 metrics:
   main: 
-    accuracy_score: 
+    matthews_corrcoef:
   logging:
     classification_report:
       output_dict: True
       zero_division: 0
-    matthews_corrcoef:
+    accuracy_score: 
 loss: 
   type: cse
   reduction: sum
   binary_loss: False
 DP:
-  epsilon: 8.0
-  max_per_sample_grad_norm: 1.0
+  epsilon: 8
+  max_per_sample_grad_norm: 5.66
   delta: 8e-7
   norm_acc: False
-  # mechanism: rdp
+  mechanism: rdp

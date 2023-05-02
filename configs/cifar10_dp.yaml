@@ -56,9 +56,9 @@ loss:
   type: cse
   reduction: sum
   binary_loss: False
-ema:
-  use_ema: True
-  decay: 0.04
+# ema:
+#   use_ema: True
+#   decay: 0.04
 hyperparams:
   epochs: 10
   batch_size: 512
@@ -85,3 +85,4 @@ DP:
   rsqrt_noise_adapt: False
   glrt_assumption: False
   mechanism: rdp
+    use: True
