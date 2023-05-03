@@ -317,18 +317,18 @@ for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=
             opt_func = lambda noise: analyse_epsilon(
                 accountant, steps, noise, sampling_rate, delta
             )
-            total_noise = get_noise_multiplier(
+            sigma = get_noise_multiplier(
                 target_epsilon=train_config.DP.epsilon,
                 target_delta=delta,
                 sample_rate=sampling_rate,
                 steps=steps,
                 accountant=config.DP.mechanism,
             )
-
+            total_noise = sigma * config.DP.max_per_sample_grad_norm
         with open_dict(cfg):
             cfg.case.user.total_noise = total_noise
         print(
-            f"actual epsilon: {analyse_epsilon(accountant,steps,cfg.case.user.total_noise,sampling_rate,delta, config.DP.alphas):.2f} with noise multiplier {total_noise}"
+            f"actual epsilon: {analyse_epsilon(accountant,steps,sigma,sampling_rate,delta, config.DP.alphas):.2f} with noise multiplier {sigma}"
         )
 
     # %%
