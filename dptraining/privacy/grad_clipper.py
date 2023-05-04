@@ -157,8 +157,6 @@ class ClipAndAccumulateGrads(Module):
             # undo parameter perturbation
             for v, g in zip(vc, grads):
                 v.assign(v.value - (self.r * g / grad_norm))
-            del grads
-            del l_dash_grads
             # clipping business as usual
             total_grad_norm = jnp.linalg.norm(
                 jnp.array([jnp.linalg.norm(g) for g in total_grad])
@@ -166,6 +164,8 @@ class ClipAndAccumulateGrads(Module):
             idivisor = 1 / jnp.maximum(total_grad_norm / self.l2_norm_clip, 1.0)
             unclipped_grads = grads if self.log_grad_metrics else None
             values = (loss, {"sample_grad_norm":total_grad_norm})
+            del l_dash_grads
+            del grads
             return [g * idivisor for g in total_grad], values, unclipped_grads
 
         clipped_grad_vectorized = Vectorize(
@@ -186,10 +186,8 @@ class ClipAndAccumulateGrads(Module):
                 )
                 stoch_alignment = self.cos_sim(unclipped_grads, grads)
                 bias = self.l2_bias(unclipped_grads, grads)
-                metric_dict = {"stoch_aligment": stoch_alignment, "l2_bias": bias}
-                values = (loss, metric_dict)
-            else:
-                values = (loss, {})
+                values[1]["stoch_aligment"] = stoch_alignment
+                values[1]["l2_bias"] = bias
             return grads, values
 
         return clipped_grad
