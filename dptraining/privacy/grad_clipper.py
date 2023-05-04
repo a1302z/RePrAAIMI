@@ -19,8 +19,8 @@ class ClipAndAccumulateGrads(Module):
         gradient_accumulation_steps: int = 1,
         num_augmented_samples: int = 1,
         log_grad_metrics: bool = True,
-        bam:bool=False,
-        r:float=0.05,
+        bam: bool = False,
+        r: float = 0.05,
         alpha=0.8,
     ):
         super().__init__()
@@ -36,18 +36,14 @@ class ClipAndAccumulateGrads(Module):
         gv = GradValues(loss_fn, variables)
         if not bam:
             if use_norm_accumulation:
-                self.clipped_grad = self.make_clipped_grad_fn_norm_accumulation(
-                    loss_fn, gv, variables
-                )
+                raise NotImplementedError()
             else:
                 self.clipped_grad = self.make_clipped_grad_fn_simple(
                     loss_fn, gv, variables
                 )
         else:
             print("... creating clip function for BAM")
-            self.clipped_grad = self.make_clipped_grad_fn_bam(
-                    loss_fn, gv, variables
-                )
+            self.clipped_grad = self.make_clipped_grad_fn_bam(loss_fn, gv, variables)
             self.r = r
             self.alpha = alpha
 
@@ -110,10 +106,11 @@ class ClipAndAccumulateGrads(Module):
     ) -> Callable:
         @Function.with_vars(gv.vars())
         def clipped_grad_single_example(*args):
-            grads, values = gv(*args)
+            grads, loss = gv(*args)
             total_grad_norm = jnp.linalg.norm([jnp.linalg.norm(g) for g in grads])
             idivisor = 1 / jnp.maximum(total_grad_norm / self.l2_norm_clip, 1.0)
             unclipped_grads = grads if self.log_grad_metrics else None
+            values = (loss, {"sample_grad_norm": total_grad_norm})
             return [g * idivisor for g in grads], values, unclipped_grads
 
         clipped_grad_vectorized = Vectorize(
@@ -121,17 +118,74 @@ class ClipAndAccumulateGrads(Module):
         )
 
         def clipped_grad(*args):
-            grads, loss, unclipped_grads = clipped_grad_vectorized(*args)
-            grads, loss = jax.tree_util.tree_map(
-                functools.partial(jnp.sum, axis=0), (grads, loss)
-            )
+            grads, values, unclipped_grads = clipped_grad_vectorized(*args)
+            grads = jax.tree_util.tree_map(
+                functools.partial(jnp.sum, axis=0), (grads)
+            ) # sum for grads
+            values = jax.tree_util.tree_map(
+                functools.partial(jnp.mean, axis=0), (values)
+            ) # mean for metrics
             if self.log_grad_metrics:
                 unclipped_grads = jax.tree_util.tree_map(
                     functools.partial(jnp.sum, axis=0), (unclipped_grads)
                 )
                 stoch_alignment = self.cos_sim(unclipped_grads, grads)
                 bias = self.l2_bias(unclipped_grads, grads)
+                values[1]["stoch_aligment"] = stoch_alignment
+                values[1]["l2_bias"] = bias
+            return grads, values
 
+        return clipped_grad
+
+    def make_clipped_grad_fn_bam(
+        self, f: Callable, gv: GradValues, vc: VarCollection
+    ) -> Callable:
+        @Function.with_vars(gv.vars())
+        def clipped_grad_single_example(*args):
+            grads, loss = gv(*args)
+            grad_norm = jnp.linalg.norm(jnp.array([jnp.linalg.norm(g) for g in grads]))
+            # pertub parameters by scaled gradient
+            for v, g in zip(vc, grads):
+                v.assign(v.value + (self.r * g / grad_norm))
+            l_dash_grad_fn = GradValues(f, vc)
+            l_dash_grads, _ = l_dash_grad_fn(*args)
+            # BAM gradient
+            total_grad = [
+                ((1 - self.alpha) * g) + (self.alpha * dash_grad)
+                for g, dash_grad in zip(grads, l_dash_grads)
+            ]
+            # undo parameter perturbation
+            for v, g in zip(vc, grads):
+                v.assign(v.value - (self.r * g / grad_norm))
+            del grads
+            del l_dash_grads
+            # clipping business as usual
+            total_grad_norm = jnp.linalg.norm(
+                jnp.array([jnp.linalg.norm(g) for g in total_grad])
+            )
+            idivisor = 1 / jnp.maximum(total_grad_norm / self.l2_norm_clip, 1.0)
+            unclipped_grads = grads if self.log_grad_metrics else None
+            values = (loss, {"sample_grad_norm":total_grad_norm})
+            return [g * idivisor for g in total_grad], values, unclipped_grads
+
+        clipped_grad_vectorized = Vectorize(
+            clipped_grad_single_example, batch_axis=self.batch_axis
+        )
+
+        def clipped_grad(*args):
+            grads, values, unclipped_grads = clipped_grad_vectorized(*args)
+            grads = jax.tree_util.tree_map(
+                functools.partial(jnp.sum, axis=0), (grads)
+            ) # sum for grads
+            values = jax.tree_util.tree_map(
+                functools.partial(jnp.mean, axis=0), (values)
+            ) # mean for metrics
+            if self.log_grad_metrics:
+                unclipped_grads = jax.tree_util.tree_map(
+                    functools.partial(jnp.sum, axis=0), (unclipped_grads)
+                )
+                stoch_alignment = self.cos_sim(unclipped_grads, grads)
+                bias = self.l2_bias(unclipped_grads, grads)
                 metric_dict = {"stoch_aligment": stoch_alignment, "l2_bias": bias}
                 values = (loss, metric_dict)
             else:
@@ -139,101 +193,3 @@ class ClipAndAccumulateGrads(Module):
             return grads, values
 
         return clipped_grad
-
-    def make_clipped_grad_fn_norm_accumulation(
-        self, f: Callable, gv: GradValues, vc: VarCollection
-    ) -> Callable:
-        if self.log_grad_metrics:
-            raise NotImplementedError(
-                "logging grad metrics isn't supported for norm accumulation yet"
-            )
-
-        @Function.with_vars(gv.vars())
-        def grad_norm_fn(*args):
-            grads, values = gv(*args)
-            total_grad_norm = jnp.linalg.norm([jnp.linalg.norm(g) for g in grads])
-            return total_grad_norm, values
-
-        grad_norm_fn_vectorized = Vectorize(grad_norm_fn, batch_axis=self.batch_axis)
-        loss_fn_vectorized = Vectorize(
-            Function.with_vars(gv.vars())(f), batch_axis=self.batch_axis
-        )
-
-        def weighted_loss_fn(weights, *args):
-            returned = loss_fn_vectorized(*args)
-            # the following assumes that the loss is the first element output by loss_fn_vectorized
-            if isinstance(returned, jnp.ndarray):
-                loss_vector = returned
-            else:
-                loss_vector = returned[0]
-            return jnp.mean(loss_vector * weights)
-
-        weighted_grad_fn = GradValues(weighted_loss_fn, vc)
-
-        def clipped_grad(*args):
-            grad_norms, values = grad_norm_fn_vectorized(*args)
-            idivisor = 1 / jnp.maximum(grad_norms / self.l2_norm_clip, 1.0)
-            clipped_grads, _ = weighted_grad_fn(idivisor, *args)
-            loss = jax.tree_map(functools.partial(jnp.sum, axis=0), values)
-            values = (loss, {})
-            return (
-                clipped_grads,
-                values,
-            )
-
-        return clipped_grad
-    
-    def make_clipped_grad_fn_bam(
-            self, f: Callable, gv: GradValues, vc: VarCollection
-        ) -> Callable:
-            @Function.with_vars(gv.vars())
-            def clipped_grad_single_example(*args):
-                grads, values = gv(*args)
-                grad_norm = jnp.linalg.norm(
-                    jnp.array([jnp.linalg.norm(g) for g in grads])
-                )
-                # pertub parameters by scaled gradient
-                for v, g in zip(vc, grads):
-                    v.assign(v.value + (self.r * g / grad_norm))
-                l_dash_grad_fn = GradValues(f, vc)
-                l_dash_grads, _ = l_dash_grad_fn(*args)
-                # BAM gradient
-                total_grad = [
-                    ((1 - self.alpha) * g) + (self.alpha * dash_grad)
-                    for g, dash_grad in zip(grads, l_dash_grads)
-                ]
-                # undo parameter perturbation
-                for v, g in zip(vc, grads):
-                    v.assign(v.value - (self.r * g / grad_norm))
-                del grads
-                del l_dash_grads
-                # clipping business as usual
-                total_grad_norm = jnp.linalg.norm(
-                    jnp.array([jnp.linalg.norm(g) for g in total_grad])
-                )
-                idivisor = 1 / jnp.maximum(total_grad_norm / self.l2_norm_clip, 1.0)
-                unclipped_grads = grads if self.log_grad_metrics else None
-                return [g * idivisor for g in total_grad], values, unclipped_grads
-
-            clipped_grad_vectorized = Vectorize(
-                clipped_grad_single_example, batch_axis=self.batch_axis
-            )
-
-            def clipped_grad(*args):
-                grads, loss, unclipped_grads = clipped_grad_vectorized(*args)
-                grads, loss = jax.tree_util.tree_map(
-                    functools.partial(jnp.sum, axis=0), (grads, loss)
-                )
-                if self.log_grad_metrics:
-                    unclipped_grads = jax.tree_util.tree_map(
-                        functools.partial(jnp.sum, axis=0), (unclipped_grads)
-                    )
-                    stoch_alignment = self.cos_sim(unclipped_grads, grads)
-                    bias = self.l2_bias(unclipped_grads, grads)
-                    metric_dict = {"stoch_aligment": stoch_alignment, "l2_bias": bias}
-                    values = (loss, metric_dict)
-                else:
-                    values = (loss, {})
-                return grads, values
-
-            return clipped_grad

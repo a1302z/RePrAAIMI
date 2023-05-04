@@ -1,0 +1,19 @@
+program: dptraining/train.py
+project: cifar10-DP
+method: bayes
+metric: 
+  name: val.accuracy
+  goal: maximize
+parameters: 
+  DP.r:
+      min: 0.001
+      max: 0.5
+command:
+  - ${env}
+  - python
+  - ${program}
+  - -cn 
+  - cifar10_dp.yaml
+  - general.log_wandb=True
+  - general.parallel=False
+  - ${args_no_hyphens}

@@ -5,7 +5,7 @@ project: cifar10-DP
 general:
   log_wandb: True
   parallel: False
-  eval_train: True
+  eval_train: False
   use_pretrained_model: 
   save_path: cifar10dp.npz
 # checkpoint:

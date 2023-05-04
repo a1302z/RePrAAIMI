@@ -5,7 +5,7 @@ project: cifar
 general:
   log_wandb: False
   parallel: False
-  eval_train: True
+  eval_train: False
 dataset: 
   task: classification
   name: CIFAR10

@@ -9,7 +9,7 @@ general:
 dataset: 
   task: classification
   name: tinyimagenet
-  root: ./data/ImageNet32
+  root: /home/moritz/data/imagenet32
   version: 32
   train_val_split: 0.95
   normalization: True
@@ -26,7 +26,7 @@ test_transforms:
   numpy_img_to_chw:
 loader:
   collate_fn: numpy
-  num_workers: 64
+  num_workers: 16
   prefetch_factor: 6
   pin_memory: True
 augmentations:
@@ -37,7 +37,6 @@ augmentations:
         max_shift: 4
       random_vertical_flips:
         flip_prob: 0.5
-test_augmentations:
 optim:
   name: nadam
 loss: 
@@ -45,15 +44,16 @@ loss:
   reduction: sum
 model:
   name: wide_resnet
-  depth: 40
-  width: 4
   in_channels: 3
   num_classes: 1000
   conv: conv
   activation: mish
   normalization: gn
   pooling: avgpool
-  scale_norm: True
+  extra_args:
+    scale_norm: True
+    depth: 10
+    width: 1
 ema:
   use_ema: False
   decay: 0.04

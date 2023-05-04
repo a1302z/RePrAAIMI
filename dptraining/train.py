@@ -29,7 +29,6 @@ load_config_store()
 def main(
     config: Config,
 ):  # pylint:disable=too-many-locals,too-many-branches,too-many-statements
-
     if config.general.cpu:
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
@@ -55,6 +54,7 @@ def main(
         create_train_op,
         test,
         train,
+        calculate_metrics
     )
 
     np.random.seed(config.general.seed)
@@ -175,9 +175,9 @@ def main(
     loss_class = make_loss_from_config(config)
     train_loss_fn = loss_class.create_train_loss_fn(model_vars, model)
     test_loss_fn = loss_class.create_test_loss_fn()
-    loss_gv = create_loss_gradient(config, model_vars, train_loss_fn)
-
     metric_fns = make_metrics(config)
+
+    loss_gv = create_loss_gradient(config, model_vars, train_loss_fn)
 
     augmenter = Transformation.from_dict_list(
         OmegaConf.to_container(config.augmentations)
@@ -242,17 +242,27 @@ def main(
     else:
         epoch_iter = range(config.hyperparams.epochs)
     for epoch, learning_rate in zip(epoch_iter, scheduler):
-        cur_epoch_time = train(
-            config,
-            train_loader,
-            train_op,
-            learning_rate,
-            train_vars,
-            config.general.parallel,
-            grad_acc,
+        cur_epoch_time, metric = train(
+            config=config,
+            train_loader=train_loader,
+            train_op=train_op,
+            learning_rate=learning_rate,
+            train_vars=train_vars,
+            parallel=config.general.parallel,
+            val_loader=val_loader,
+            predict_op=predict_op_jit,
+            test_aug=test_aug,
+            test_label_aug=test_label_aug,
+            metrics=metric_fns,
+            eval_loss_fn=test_loss_fn,
+            eval_every=10,
+            grad_acc=grad_acc,
         )
+
         if config.general.log_wandb:
-            wandb.log({"epoch": epoch, "lr": learning_rate})
+            wandb.log(
+                {"epoch": epoch, "lr": learning_rate, "epoch_time": cur_epoch_time}
+            )
         else:
             print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
         epoch_time.append(cur_epoch_time)
@@ -269,22 +279,6 @@ def main(
                 metrics=metric_fns,
                 loss_fn=test_loss_fn,
             )
-        if val_loader is not None:
-            metric = test(
-                config,
-                val_loader,
-                predict_op_parallel if config.general.parallel else predict_op_jit,
-                test_aug,
-                test_label_aug,
-                model_vars,
-                config.general.parallel,
-                "val",
-                metrics=metric_fns,
-                loss_fn=test_loss_fn,
-            )
-            scheduler.update_score(metric)
-        else:
-            metric = None
         if config.DP:
             epsilon = objax.privacy.dpsgd.analyze_dp(
                 q=sampling_rate,

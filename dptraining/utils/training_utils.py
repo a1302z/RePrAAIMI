@@ -58,8 +58,7 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
             grad_calc.accumulate_grad(clipped_grad)
             if parallel:
                 loss_value = objax.functional.parallel.psum(loss_value)
-            n_samples = image_batch.shape[0] + image_batch.shape[1]
-            loss_value = loss_value[0] / n_samples
+            loss_value = loss_value[0]
             values = (loss_value, metric_dict)
             return values
 
@@ -144,10 +143,11 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
                 grads = [gx / effective_batch_size for gx in grads]
             else:
                 loss = loss[0]
+                values = (loss, values[1])
             opt(learning_rate, grads)
             if ema is not None:
                 ema()
-            return loss, grads
+            return values, grads
 
         if parallel:
             train_op = objax.Parallel(train_op, reduce=np.mean, vc=train_vars)
@@ -197,6 +197,13 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
     learning_rate,
     train_vars,
     parallel,
+    val_loader,
+    predict_op,
+    test_aug,
+    test_label_aug,
+    metrics: tuple,
+    eval_loss_fn:Callable,
+    eval_every:int,
     grad_acc: int,
 ):
     start_time = time.time()
@@ -205,6 +212,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
         if config.hyperparams.overfit is not None
         else len(train_loader)
     )
+    val_iter = iter(val_loader)
     if config.DP and max_batches % grad_acc != 0:
         # here we ensure that if a train loader is not evenly divisible
         # by the number of gradient accumulation steps we stop after
@@ -221,6 +229,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
         desc="Training",
         leave=False,
     )
+    eval_main_metrics = []
     with (train_vars).replicate() if parallel else contextlib.suppress():
         for i, (img, label) in pbar:
             add_args = {}
@@ -229,7 +238,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
             train_result = train_op(img, label, np.array(learning_rate), **add_args)
             if train_result is not None:
                 if grad_acc > 1:
-                    (train_loss, metric_dict), grads = train_result
+                    (train_loss, grad_metric_dict), grads = train_result
                 else:
                     train_loss, grads = train_result
                 train_loss = train_loss.item()
@@ -242,12 +251,32 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                     ).item(),
                 }
                 if grad_acc > 1:
-                    log_dict = log_dict | metric_dict
+                    log_dict = log_dict | grad_metric_dict
                 wandb.log(log_dict)
-
-            if i + 1 >= max_batches:
-                break
-    return time.time() - start_time
+            if i % eval_every == 0:
+                # train_metrics
+                train_pred = predict_op(img)
+                main_metric_batch, logging_metric_batch = calculate_metrics(
+                    config.dataset.task, metrics, eval_loss_fn, label, train_pred
+                )
+                if config.general.log_wandb:
+                    wandb.log({"train": logging_metric_batch})
+                # validation metrics
+                eval_img, eval_label = next(val_iter)
+                eval_img = test_aug(eval_img)
+                eval_label = test_label_aug(eval_label)
+                y_pred = predict_op(eval_img)
+                main_metric_batch, logging_metric_batch = calculate_metrics(
+                    config.dataset.task, metrics, eval_loss_fn, eval_label, y_pred
+                )
+                eval_main_metrics.append(main_metric_batch)
+                if config.general.log_wandb:
+                    wandb.log({"val": logging_metric_batch})
+                else:
+                    print(f"validation_set:")
+                    for name, value in logging_metric_batch.items():
+                        print(f"\t{name}: {value}")    
+    return time.time() - start_time, eval_main_metrics[-1]
 
 
 def calculate_metrics(task, metrics, loss_fn, correct, predicted):
@@ -346,7 +375,7 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
         )
 
     if config.general.log_wandb:
-        wandb.log({dataset_split: logging_metrics})
+        wandb.log({f"full_eval {dataset_split}": logging_metrics})
     else:
         print(f"{dataset_split} evaluation:")
         for name, value in logging_metrics.items():
