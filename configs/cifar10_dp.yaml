@@ -7,7 +7,7 @@ general:
   parallel: False
   eval_train: False
   use_pretrained_model: 
-  save_path: cifar10dp.npz
+  #save_path: cifar10dp.npz
 # checkpoint:
 #   logdir: cifar10dpckpts
 #   keep_ckpts: 2
@@ -83,5 +83,5 @@ DP:
   rsqrt_noise_adapt: False
   glrt_assumption: False
   bam: True
-  r: 0.05
+  r: 0.00158
   alpha: 1.0

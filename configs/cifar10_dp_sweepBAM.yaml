@@ -2,12 +2,14 @@ program: dptraining/train.py
 project: cifar10-DP
 method: bayes
 metric: 
-  name: val.accuracy
+  name: val.accuracy_score
   goal: maximize
 parameters: 
-  DP.r:
-      min: 0.001
-      max: 0.5
+  DP.alpha:
+      min: 0.05
+      max: 1.0
+name:
+  "BAM-sweep: alpha-value"
 command:
   - ${env}
   - python
