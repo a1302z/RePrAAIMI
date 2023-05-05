@@ -237,11 +237,8 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                 add_args["is_update_step"] = (i + 1) % grad_acc == 0
             train_result = train_op(img, label, np.array(learning_rate), **add_args)
             if train_result is not None:
-                if grad_acc > 1:
-                    (train_loss, grad_metric_dict), grads = train_result
-                else:
-                    train_loss, grads = train_result
-                train_loss = train_loss.item()
+                (train_loss, grad_metric_dict), grads = train_result
+                train_loss = train_loss[0].item()
                 pbar.set_description(f"Train_loss: {train_loss:.2f}")
             if config.general.log_wandb and train_result is not None:
                 log_dict = {
