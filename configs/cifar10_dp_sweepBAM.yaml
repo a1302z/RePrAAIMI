@@ -8,8 +8,10 @@ parameters:
   DP.alpha:
       min: 0.05
       max: 1.0
+  DP.r:
+      values: [0.025, 0.05, 0.1, 0.15]
 name:
-  "BAM-sweep: alpha-value"
+  "BAM-sweep: alpha-and-r"
 command:
   - ${env}
   - python

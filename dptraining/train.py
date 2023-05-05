@@ -229,6 +229,9 @@ def main(
         parallel=config.general.parallel,
         ema=ema,
     )
+    if config.general.log_wandb and config.DP.bam:
+        lambda_reg = config.DP.alpha * config.DP.r
+        wandb.log({"lambda_reg": lambda_reg})
 
     epoch_time = []
     epoch_iter: Iterable

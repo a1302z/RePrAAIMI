@@ -32,7 +32,7 @@ loader:
   collate_fn: numpy
 augmentations:
   consecutive_augmentations:
-    multiplicity: 2
+    multiplicity: 1
     consecutive_augmentations:
       random_img_shift:
         max_shift: 4
@@ -58,7 +58,7 @@ ema:
   use_ema: True
   decay: 0.04
 hyperparams:
-  epochs: 75
+  epochs: 30
   batch_size: 512
   batch_size_test: 512
   lr: 2e-3
@@ -79,9 +79,9 @@ DP:
   max_per_sample_grad_norm: 1.0
   delta: 1e-5
   norm_acc: False
-  grad_acc_steps: 8
+  grad_acc_steps: 1
   rsqrt_noise_adapt: False
   glrt_assumption: False
   bam: True
-  r: 0.00158
-  alpha: 1.0
+  r: 0.05
+  alpha: 0.8
