@@ -85,4 +85,3 @@ DP:
   rsqrt_noise_adapt: False
   glrt_assumption: False
   mechanism: rdp
-    use: True
