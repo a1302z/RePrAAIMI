@@ -187,7 +187,7 @@ torch.backends.cudnn.benchmark = cfg.case.impl.benchmark
 setup = dict(device=device, dtype=getattr(torch, cfg.case.impl.dtype))
 
 
-eps_values = [8] + [10**i for i in range(9, 18, 1)] + ["Non-private"]
+eps_values = [10**i for i in range(3, 16, 3)] + ["Non-private"]
 # eps_values = [1, 1e6, 1e9, 1e12]
 # eps_values = [8] + ["Non-private"]
 

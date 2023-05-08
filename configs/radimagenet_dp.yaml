@@ -77,7 +77,7 @@ optim:
 #  use_ema: True
 #  decay: 0.995
 hyperparams:
-  epochs: 1
+  epochs: 50
   batch_size: 128
   batch_size_test: 128
   lr: 2e-3
