@@ -49,7 +49,7 @@ def find_classes(directory: str) -> tuple[Dict[str, Path], Dict[str, int]]:
             directory.rglob("*"), desc="Searching data folder", leave=False
         )
         if dirs.is_dir()
-        and next(dirs.iterdir()) is not None  # non empty
+        and len(list(dirs.iterdir())) > 0  # non empty
         and len([f for f in dirs.iterdir() if f.is_dir()]) == 0
     ]
     classes = dict(
@@ -379,13 +379,22 @@ class RadImageNetCreator(DataLoaderCreator):
         val_split = 1.0 - train_split - test_split
         assert val_split > 0, "Train and test split are combined larger than 1"
         seed = config.dataset.datasplit_seed
+
+        add_info = ""
+        if config.dataset.radimagenet.modality != "all":
+            add_info += f"_{config.dataset.radimagenet.modality}"
+        if config.dataset.radimagenet.allowed_body_regions != "all":
+            add_info += f"_{config.dataset.radimagenet.allowed_body_regions}"
+        if config.dataset.radimagenet.allowed_labels != "all":
+            add_info += f"_{config.dataset.radimagenet.allowed_labels}"
+
         copy_folder = Path(
             config.dataset.radimagenet.split_folder
             if config.dataset.radimagenet.split_folder
             else root_folder.parent
         ) / (
             f"{root_folder.name}_dataset_split_{train_split}_"
-            f"{val_split:.2f}_{test_split}_seed={seed}"
+            f"{val_split:.2f}_{test_split}_seed={seed}{add_info}"
         )
 
         if copy_folder.is_symlink():
