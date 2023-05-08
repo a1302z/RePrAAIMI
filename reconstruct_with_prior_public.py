@@ -45,6 +45,9 @@ from omegaconf import OmegaConf
 from dptraining.config import Config
 from dptraining.privacy import setup_privacy
 from dptraining.datasets import make_loader_from_config
+from datetime import datetime
+import pandas as pd
+from tqdm import trange
 
 from dptraining.config.config_store import load_config_store
 
@@ -120,10 +123,24 @@ def main(
     train_config: Config,
 ):
     upper_bounds = []
-    N_REPS = 10
-    N_SAMPLES = int(1e6)  # 200000
-    eps_values = [1, 8] + list(range(10, 201, 10))
+    if train_config.N_REPS:
+        N_REPS = train_config.N_REPS
+    else:
+        N_REPS = 100
+    if train_config.N_SAMPLES:
+        N_SAMPLES = int(train_config.N_SAMPLES)
+    else:
+        N_SAMPLES = int(1e3)  # 200000
+    if train_config.eps_values:
+        eps_values = train_config.eps_values
+    else:
+        eps_values = list(range(1000, 100001, 2000))
     train_loader, _, _ = make_loader_from_config(train_config)
+
+    save_folder = (
+        Path.cwd()
+        / f"rero/{str(train_config.dataset.name).split('.')[-1]}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}/"
+    )
 
     # %%
     for eps in eps_values:
@@ -223,7 +240,7 @@ def main(
         # %%
         p = total_num
         variance = []
-        for _ in range(N_REPS):
+        for _ in trange(N_REPS, leave=False, desc="repeating experiment"):
             rub = reconstruction_upper_bound(
                 1 / p, sampling_rate, total_noise, steps, mc_samples=N_SAMPLES
             )
@@ -250,7 +267,12 @@ def main(
     #     color="blue",
     # )
     # plt.errorbar(eps_values, means, yerr=stds, color="blue", label="success mean/StD")
-    plt.plot(eps_values, means, color="blue", label="reconstruction success")
+    plt.plot(
+        [int(e) for e in eps_values],
+        means,
+        color="blue",
+        label="reconstruction success",
+    )
     # plt.fill_between(
     #     eps_values,
     #     means + err[1],
@@ -265,18 +287,37 @@ def main(
     plt.xlabel("epsilon")
     plt.ylabel("Prior aware upper bound")
     plt.legend(loc="best")
+
+    if not save_folder.is_dir():
+        save_folder.mkdir(parents=True)
     plt.savefig(
-        f"priorawareupper_bounds_{str(config.dataset.name).split('.')[-1]}.svg",
+        str(save_folder / "priorawareupper_bounds.svg"),
         bbox_inches="tight",
     )
     plt.savefig(
-        f"priorawareupper_bounds_{str(config.dataset.name).split('.')[-1]}.png",
+        (save_folder / "priorawareupper_bounds.png"),
         bbox_inches="tight",
         dpi=600,
     )
-
-    for eps, mv in zip(eps_values, means):
+    result_dict = {}
+    for eps, mv, std, lower, upper, all in zip(
+        eps_values,
+        means,
+        stds,
+        upper_bounds.min(axis=1),
+        upper_bounds.max(axis=1),
+        upper_bounds,
+    ):
         print(f"{eps}: {mv:.2f}")
+        result_dict[eps] = {
+            "mean": mv,
+            "std": std,
+            "lower": lower,
+            "upper": upper,
+            **{i: res for i, res in enumerate(all)},
+        }
+    df = pd.DataFrame.from_dict(result_dict)
+    df.to_csv(str(save_folder / "results.csv"), index=False)
 
 
 if __name__ == "__main__":

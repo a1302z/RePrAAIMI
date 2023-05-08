@@ -6,6 +6,10 @@ from matplotlib.lines import Line2D
 from sklearn.metrics import auc
 import seaborn as sn
 from copy import deepcopy
+import numpy as np
+
+from datetime import datetime
+import pandas as pd
 
 sn.set_theme(
     context="notebook",
@@ -52,11 +56,23 @@ def main(
     # %%
 
     key_values = []
-    eps_vals = [1, 4, 8, 12, 16, 20]
-    N_SAMPLES = 10
+
+    if train_config.eps_values:
+        eps_values = train_config.eps_values
+    else:
+        eps_values = [0.5] + list(range(1, 21))
+    if train_config.N_SAMPLES:
+        N_SAMPLES = int(train_config.N_SAMPLES)
+    else:
+        N_SAMPLES = int(1e3)  # 200000
+
+    save_folder = (
+        Path.cwd()
+        / f"dp_auc/{str(train_config.dataset.name).split('.')[-1]}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}/"
+    )
 
     train_loader, _, _ = make_loader_from_config(train_config)
-    for eps in eps_vals:
+    for eps in eps_values:
         config = deepcopy(train_config)
         config.DP.epsilon = eps
         if config.DP:
@@ -115,37 +131,66 @@ def main(
             balanced_accuracy.argmax() / balanced_accuracy.shape[0],
         )
         print(f"Maximum accuracy@eps={eps:.1f}: {100.0*max_acc:.2f} @ {opt_cutoff:.2f}")
-        key_values.append((FPR, FNR, balanced_accuracy, max_acc, opt_cutoff))
+        key_values.append(
+            {
+                "FPR": FPR,
+                "FNR": FNR,
+                "balanced_acc": balanced_accuracy,
+                "max_acc": max_acc,
+                "opt_cutoff": opt_cutoff,
+            }
+        )
 
-    cmap = plt.cm.Dark2  # define the colormap
+    if not save_folder.is_dir():
+        save_folder.mkdir(parents=True)
+    key_value_dict = {eps: kv for eps, kv in zip(eps_values, key_values)}
+    key_value_df = pd.DataFrame.from_dict(key_value_dict)
+    key_value_df.to_csv(str(save_folder / "results.csv"))
+    cmap = plt.cm.viridis  # define the colormap
     # extract all colors from the .jet map
     cmaplist = [cmap(i) for i in range(cmap.N)]
     # force the first color entry to be grey
-    cmaplist[-1] = cmap(cmap.N - 2)
+    # cmaplist[-1] = cmap(cmap.N - 2)
 
     # create the new map
     cmap = mplcolors.LinearSegmentedColormap.from_list("Custom cmap", cmaplist, cmap.N)
 
     # define the bins and normalize
-    bounds = eps_vals
+    bounds = eps_values
     norm = mplcolors.BoundaryNorm(
         [b - 1e-12 if i > 0 else b for i, b in enumerate(bounds)]
         + [2 * bounds[-1] - bounds[-2]],
+        # np.linspace(eps_vals[0], eps_vals[-1], cmap.N),
         cmap.N,
     )
     FPR = FPR[1:]
     FNR = FNR[1:]
 
-    fig, ax = plt.subplots()
+    fig_auc, ax = plt.subplots()
+    fig_acc, ax4 = plt.subplots()
+    fig_tpr, ax5 = plt.subplots()
+    ax5.set_ylim(0, 1)
+    ax5.set_xlim(0, eps_values[-1])
+    ax5.plot(eps_values, [1.0 - kv["FNR"][1] for kv in key_values])
+    ax5.set_xlabel("epsilon")
+    ax5.set_ylabel(f"TPR@(FPR={FPR[1]:.1E})")
+
+    ax4.plot(eps_values, [kv["max_acc"] for kv in key_values])
+    ax4.set_xlabel("epsilon")
+    ax4.set_ylabel("maximal balanced accuracy")
+    ax4.set_ylim(0, 1)
+    ax4.set_xlim(0, eps_values[-1])
+    # ax.set_xscale("log")
+    # ax.set_yscale("log")
     ax.set_xlabel("P(FPR)")
     ax.set_ylabel("P(TPR)")
-    ax2 = ax.twinx()
-    ax.set_xscale("log")
-    ax.set_yscale("log")
+    # ax2 = ax.twinx()
     # ax2.set_yscale("log")
-    ax.set_xlim(FPR[0], 1)
-    ax.set_ylim(1 - FNR[0], 1)
-    ax3 = fig.add_axes([1.0, 0.1, 0.03, 0.8])
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    # ax.set_xlim(FPR[0], 1)
+    # ax.set_ylim(1 - key_values[0][1][0], 1)
+    ax3 = fig_auc.add_axes([1.0, 0.1, 0.03, 0.8])
     ax3.set_ylabel("epsilon")
 
     ax.plot(FPR, FPR, linestyle="dashed", color="gray")  # ,label="Reference",)
@@ -164,16 +209,15 @@ def main(
         Line2D([0], [0], color="black"),
         Line2D([0], [0], color="black", linestyle="dashed"),
     ]
-    for eps, (FPR, FNR, balanced_accuracy, max_acc, opt_cutoff) in zip(
-        eps_vals, key_values
-    ):
+    for eps, key_vals in zip(eps_values, key_values):
+        FPR, FNR, balanced_accuracy, max_acc, opt_cutoff = key_vals.values()
         col = cmap(norm(eps))
-        ax2.plot(FPR, balanced_accuracy, linestyle="dashed", color=col)
+        # ax2.plot(FPR, balanced_accuracy, linestyle="dashed", color=col)
         FPR = FPR[1:]
         FNR = FNR[1:]
         ax.plot(FPR, 1 - FNR, color=col)
-        ax2.set_ylabel("balanced accuracy")
-        ax2.set_ylim(FPR[0], 1)
+        # ax2.set_ylabel("balanced accuracy")
+        # ax2.set_ylim(FPR[0], 1)
         # markerline, stemlines, baseline = ax2.stem(
         #     [opt_cutoff],
         #     [max_acc],
@@ -184,31 +228,51 @@ def main(
         #     # color=col,
         # )
         # plt.setp(stemlines, "color", col)
-        markerline, stemlines, baseline = ax2.stem(
-            [max_acc],
-            [opt_cutoff],
-            orientation="horizontal",
-            linefmt=":",
-            markerfmt="",
-            bottom=1.0,
-            # color=col,
-        )
-        plt.setp(stemlines, "color", col)
-        ax2.scatter([opt_cutoff], [max_acc], marker="x", color=col)
+        # markerline, stemlines, baseline = ax2.stem(
+        #     [max_acc],
+        #     [opt_cutoff],
+        #     orientation="horizontal",
+        #     linefmt=":",
+        #     markerfmt="",
+        #     bottom=1.0,
+        #     # color=col,
+        # )
+        # plt.setp(stemlines, "color", col)
+        # ax2.scatter([opt_cutoff], [max_acc], marker="x", color=col)
         # legend_handles.append(Line2D([0], [0], color=col))
-    fig.legend(
-        legend_handles,
-        ["ROC Curve", "balanced acc"],  # + [f"ε={e}" for e in eps_vals],
-        loc="lower center",
-        bbox_to_anchor=(0.5, 0.02),
-    )
-    fig.savefig(
-        f"ROC_curve_DP_{str(config.dataset.name).split('.')[-1]}.svg",
+        # fig_auc.legend(
+        #     legend_handles,
+        #     ["ROC Curve", "balanced acc"],  # + [f"ε={e}" for e in eps_vals],
+        #     loc="lower center",
+        #     bbox_to_anchor=(0.5, 0.02),
+        # )
+    fig_auc.savefig(
+        str(save_folder / "ROC_curve_DP.svg"),
         bbox_inches="tight",
         dpi=600,
     )
-    fig.savefig(
-        f"ROC_curve_DP_{str(config.dataset.name).split('.')[-1]}.png",
+    fig_auc.savefig(
+        str(save_folder / "ROC_curve_DP.png"),
+        bbox_inches="tight",
+        dpi=600,
+    )
+    fig_acc.savefig(
+        str(save_folder / "eps_acc.svg"),
+        bbox_inches="tight",
+        dpi=600,
+    )
+    fig_acc.savefig(
+        str(save_folder / "eps_acc.png"),
+        bbox_inches="tight",
+        dpi=600,
+    )
+    fig_tpr.savefig(
+        str(save_folder / "tpr_fail.svg"),
+        bbox_inches="tight",
+        dpi=600,
+    )
+    fig_tpr.savefig(
+        str(save_folder / "tpr_fail.png"),
         bbox_inches="tight",
         dpi=600,
     )
