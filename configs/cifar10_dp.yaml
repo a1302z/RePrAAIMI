@@ -35,10 +35,11 @@ augmentations:
   consecutive_augmentations:
     multiplicity: 2
     consecutive_augmentations:
-      random_img_shift:
-        max_shift: 4
-      random_vertical_flips:
-        flip_prob: 0.5
+      augmentations:
+        random_img_shift:
+          max_shift: 4
+        random_vertical_flips:
+          flip_prob: 0.5
 model:
   name: resnet9
   in_channels: 3

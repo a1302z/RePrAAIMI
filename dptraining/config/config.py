@@ -284,8 +284,6 @@ class Config:
     loader: LoaderConfig = LoaderConfig()
     augmentations: dict[str, Any] = field(default_factory=dict)
     test_augmentations: dict[str, Any] = field(default_factory=dict)
-    label_augmentations: dict[str, Any] = field(default_factory=dict)
-    test_label_augmentations: dict[str, Any] = field(default_factory=dict)
     model: ModelConfig = ModelConfig()
     optim: OptimConfig = OptimConfig()
     loss: LossConfig = LossConfig()

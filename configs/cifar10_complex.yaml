@@ -30,40 +30,48 @@ augmentations:
   random_augmentations:
     - consecutive_augmentations:
         complex: True
-        random_horizontal_flips: # identity
-          flip_prob: 0
+        augmentations:
+          random_horizontal_flips: # identity
+            flip_prob: 0
     - consecutive_augmentations:
         complex: True
-        random_horizontal_flips: 
-          flip_prob: 1.0
+        augmentations:
+          random_horizontal_flips:
+            flip_prob: 1.0
     - consecutive_augmentations:
         complex: True
-        random_vertical_flips:
-          flip_prob: 1.0
+        augmentations:
+          random_vertical_flips:
+            flip_prob: 1.0
     - consecutive_augmentations:
         complex: True
-        random_horizontal_flips: 
-          flip_prob: 0.5
+        augmentations:
+          random_horizontal_flips:
+            flip_prob: 0.5
     - consecutive_augmentations:
         complex: True
-        random_vertical_flips:
-          flip_prob: 0.5
+        augmentations:
+          random_vertical_flips:
+            flip_prob: 0.5
     - consecutive_augmentations:
         complex: True
-        random_img_shift:
-          max_shift: 4
+        augmentations:
+          random_img_shift:
+            max_shift: 4
     - consecutive_augmentations:
         complex: True
-        random_img_shift:
-          max_shift: 8
+        augmentations:
+          random_img_shift:
+            max_shift: 8
     - consecutive_augmentations:
         complex: True
-        random_horizontal_flips: 
-          flip_prob: 0.1
-        random_vertical_flips:
-          flip_prob: 0.1
-        random_img_shift:
-          max_shift: 4
+        augmentations:
+          random_horizontal_flips:
+            flip_prob: 0.1
+          random_vertical_flips:
+            flip_prob: 0.1
+          random_img_shift:
+            max_shift: 4
 test_augmentations:
   make_complex_both:
 model:

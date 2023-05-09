@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import Callable, Iterable, Optional
+from typing import Iterable, Optional
 from functools import partial
 
 import hydra
@@ -52,7 +52,9 @@ def main(
         make_stopper_from_config,
         make_metrics,
     )
-    from dptraining.utils.augment import Transformation
+    from dptraining.transform.transform_pipeline import (
+        make_augment_transformation,
+    )
     from dptraining.utils.training_utils import (
         create_loss_gradient,
         create_train_op,
@@ -221,38 +223,15 @@ def main(
                 f"batches ({max_batches}) which is evenly divisble by "
                 f"the number of gradient accumulation steps ({grad_acc})"
             )
-
     metric_fns = make_metrics(config)
-
-    augmenter = Transformation.from_dict_list(
-        OmegaConf.to_container(config.augmentations)
-    )
+    augmenter = make_augment_transformation(config.augmentations)
     n_augmentations = augmenter.get_n_augmentations()
-    augment_op = augmenter.create_vectorized_transform()
+    augment_op = augmenter.create_vectorized_image_label_transform()
     if n_augmentations > 1:
         print(f"Augmentation multiplicity of {n_augmentations}")
-    if config.label_augmentations:
-        label_augmenter = Transformation.from_dict_list(
-            OmegaConf.to_container(config.label_augmentations)
-        )
-        label_augment_op = label_augmenter.create_vectorized_transform()
-    else:
-        label_augment_op = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
-    # augment_op = augment_op.create_vectorized_transform()
-    if config.test_augmentations:
-        test_augmenter = Transformation.from_dict_list(
-            OmegaConf.to_container(config.test_augmentations)
-        )
-        test_aug = test_augmenter.create_vectorized_transform()
-    else:
-        test_aug = lambda x: x  # pylint:disable=unnecessary-lambda-assignment
-    if config.test_label_augmentations:
-        test_label_augmenter = Transformation.from_dict_list(
-            OmegaConf.to_container(config.test_label_augmentations)
-        )
-        test_label_aug = test_label_augmenter.create_vectorized_transform()
-    else:
-        test_label_aug = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
+    test_augment_op = make_augment_transformation(
+        config.test_augmentations
+    ).create_vectorized_image_label_transform()
     scheduler = make_scheduler_from_config(config)
     stopper = make_stopper_from_config(config)
     loss_class = make_loss_from_config(config)
@@ -280,7 +259,6 @@ def main(
             loss_gv,
             opt,
             augment_op,
-            label_augment_op,
             grad_accumulation=grad_acc > 1,
             noise=total_noise,
             effective_batch_size=effective_batch_size,
@@ -310,8 +288,7 @@ def main(
                 config,
                 train_loader,
                 predict_op_parallel if config.general.parallel else predict_op_jit,
-                test_aug,
-                test_label_aug,
+                test_augment_op,
                 model.vars(),
                 config.general.parallel,
                 "train",
@@ -323,8 +300,7 @@ def main(
                 config,
                 val_loader,
                 predict_op_parallel if config.general.parallel else predict_op_jit,
-                test_aug,
-                test_label_aug,
+                test_augment_op,
                 model.vars(),
                 config.general.parallel,
                 "val",
@@ -351,8 +327,7 @@ def main(
                 config,
                 train_loader,
                 predict_op_parallel if config.general.parallel else predict_op_jit,
-                test_aug,
-                test_label_aug,
+                test_augment_op,
                 model.vars(),
                 config.general.parallel,
                 "train",
@@ -364,8 +339,7 @@ def main(
                 config,
                 val_loader,
                 predict_op_parallel if config.general.parallel else predict_op_jit,
-                test_aug,
-                test_label_aug,
+                test_augment_op,
                 model.vars(),
                 config.general.parallel,
                 "val",
@@ -403,8 +377,7 @@ def main(
         config,
         test_loader,
         predict_op_jit,
-        test_aug,
-        test_label_aug,
+        test_augment_op,
         model.vars(),
         False,
         "test",

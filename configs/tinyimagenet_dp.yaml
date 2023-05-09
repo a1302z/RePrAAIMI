@@ -33,11 +33,13 @@ loader:
 augmentations:
   consecutive_augmentations:
     multiplicity: 16
-    consecutive_augmentations:
-      random_img_shift:
-        max_shift: 4
-      random_vertical_flips:
-        flip_prob: 0.5
+    augmentations:
+      consecutive_augmentations:
+        augmentations:
+          random_img_shift:
+            max_shift: 4
+          random_vertical_flips:
+            flip_prob: 0.5
 optim:
   name: nadam
 loss: 

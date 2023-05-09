@@ -9,11 +9,11 @@ parameters:
     distribution: int_uniform
     min: 1
     max: 32
-  augmentations.consecutive_augmentations.consecutive_augmentations.random_img_shift.max_shift:
+  augmentations.consecutive_augmentations.augmentations.consecutive_augmentations.augmentations.random_img_shift.max_shift:
     distribution: int_uniform
     min: 0
     max: 10
-  augmentations.consecutive_augmentations.consecutive_augmentations.random_vertical_flips.flip_prob:
+  augmentations.consecutive_augmentations.augmentations.consecutive_augmentations.augmentations.random_vertical_flips.flip_prob:
     distribution: uniform
     min: 0
     max: 1

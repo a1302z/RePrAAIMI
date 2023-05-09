@@ -32,6 +32,7 @@ loader:
   pin_memory: True
 augmentations:
   normalize_jax:
+      apply_to: 'images_and_labels'
       mean:
         - 0.22039941
       std:
@@ -39,6 +40,7 @@ augmentations:
   gaussiannoise:
     std: 0.1
   randomphasejax:
+    apply_to: 'images_and_labels'
     control_points: 4
 test_augmentations:
   normalize_jax:
@@ -48,14 +50,6 @@ test_augmentations:
         - 0.24865805
   gaussiannoise:
     std: 0.1
-  randomphasejax:
-    control_points: 4
-label_augmentations:
-  normalize_jax:
-      mean:
-        - 0.22039941
-      std:
-        - 0.24865805
   randomphasejax:
     control_points: 4
 model:

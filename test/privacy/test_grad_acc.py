@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path.cwd()))
 
-from dptraining.utils.augment import Transformation
+from dptraining.transform.transform_pipeline import TransformPipeline
 from dptraining.privacy import ClipAndAccumulateGrads
 
 # from dptraining.utils.training_utils import create_train_op
@@ -91,13 +91,13 @@ def test_grad_acc_step():
 
 
 def test_grad_equality(utils):
-    tf1 = Transformation.from_dict_list(
+    tf1 = TransformPipeline.from_dict_list(
         {
             "make_complex_both": None,
         }
     )
-    tf1 = tf1.create_vectorized_transform()
-    tf2 = Transformation.from_dict_list(
+    tf1 = tf1.create_vectorized_image_transform()
+    tf2 = TransformPipeline.from_dict_list(
         {
             "make_complex_both": None,
             "consecutive_augmentations": {
@@ -107,7 +107,7 @@ def test_grad_equality(utils):
             },
         }
     )
-    tf2 = tf2.create_vectorized_transform()
+    tf2 = tf2.create_vectorized_image_transform()
     config_dict = {
         "model": {
             "complex": True,

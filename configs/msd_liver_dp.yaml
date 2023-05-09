@@ -34,16 +34,6 @@ dataset:
       low: -150
       high: 200
     assume_same_settings: False
-# augmentations:
-#   consecutive_augmentations:
-#     multiplicity: 16
-#     consecutive_augmentations:
-#       random_horizontal_flips:
-#         flip_prob: 0.2
-#       random_vertical_flips:
-#         flip_prob: 0.2
-#       random_z_flips:
-#         flip_prob: 0.2
 loader: 
   num_workers: 4
   prefetch_factor: 2

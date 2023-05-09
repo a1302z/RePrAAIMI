@@ -27,7 +27,6 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
     grad_calc,
     opt,
     augment_op,
-    label_op,
     grad_accumulation: bool,
     noise: float,
     effective_batch_size: int,
@@ -40,8 +39,7 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
 
         @objax.Function.with_vars(train_vars)
         def calc_grads(image_batch, label_batch):
-            image_batch = augment_op(image_batch)
-            label_batch = label_op(label_batch)
+            image_batch, label_batch = augment_op(image_batch, label_batch)
             if n_augmentations > 1:
                 if image_batch.shape[1] != n_augmentations:
                     raise RuntimeError(
@@ -115,8 +113,7 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
             learning_rate,
         ):
             # assert image_batch.shape[0] == effective_batch_size
-            image_batch = augment_op(image_batch)
-            label_batch = label_op(label_batch)
+            image_batch, label_batch = augment_op(image_batch, label_batch)
             if n_augmentations > 1:
                 label_batch = jn.repeat(
                     label_batch[:, jn.newaxis], n_augmentations, axis=1
@@ -288,8 +285,7 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
     config: Config,
     test_loader,
     predict_op,
-    test_aug,
-    test_label_aug,
+    test_augment_op,
     model_vars,
     parallel,
     dataset_split: str,
@@ -318,8 +314,7 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
             desc="Testing",
             leave=False,
         ):
-            image = test_aug(image)
-            label = test_label_aug(label)
+            image, label = test_augment_op(image, label)
             n_images = image.shape[0]
             if parallel and not (n_images % N_DEVICES) == 0:
                 max_samples = n_images - (n_images % N_DEVICES)
