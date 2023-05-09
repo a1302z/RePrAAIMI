@@ -230,13 +230,20 @@ def make_dataset(
     num_train = int(round(len(train_files) * train_split))
     val_files = train_files[num_train:]
     train_files = train_files[:num_train]
+    id_str = f"{config.dataset.nifti_seg_options.resolution}"
+    if config.dataset.nifti_seg_options.n_slices:
+        id_str +=  f"x{config.dataset.nifti_seg_options.n_slices}"
+    elif config.dataset.nifti_seg_options.slice_thickness:
+        id_str += f"x{config.dataset.nifti_seg_options.slice_thickness}mm"
+    else:
+        id_str+= '_x_nativeshape'
     subdirs = mk_subdirectories(
         Path(
             config.dataset.nifti_seg_options.new_data_root
             if config.dataset.nifti_seg_options.new_data_root is not None
             else config.dataset.root
         ),
-        ["train_split", "val_split", "test_split"],
+        [f"train_split_{id_str}", f"val_split_{id_str}", f"test_split_{id_str}"],
     )
     split_files = (train_files, val_files, test_files)
 
