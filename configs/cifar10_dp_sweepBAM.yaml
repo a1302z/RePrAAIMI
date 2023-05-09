@@ -6,12 +6,12 @@ metric:
   goal: maximize
 parameters: 
   DP.alpha:
-      min: 0.05
+      min: 0.1
       max: 1.0
   DP.r:
-      values: [0.025, 0.05, 0.1, 0.15]
+      values: [0.05, 0.1, 0.125, 0.15, 0.2]
 name:
-  "BAM-sweep: alpha-and-r"
+  "BAM-sweep: alpha-and-r (bigger trainings)"
 command:
   - ${env}
   - python

@@ -58,7 +58,6 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
             grad_calc.accumulate_grad(clipped_grad)
             if parallel:
                 loss_value = objax.functional.parallel.psum(loss_value)
-            loss_value = loss_value[0]
             values = (loss_value, metric_dict)
             return values
 
@@ -259,7 +258,11 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                 if config.general.log_wandb:
                     wandb.log({"train": logging_metric_batch})
                 # validation metrics
-                eval_img, eval_label = next(val_iter)
+                try:
+                    eval_img, eval_label = next(val_iter)
+                except StopIteration:
+                    val_iter = iter(val_loader)
+                    eval_img, eval_label = next(val_iter)
                 eval_img = test_aug(eval_img)
                 eval_label = test_label_aug(eval_label)
                 y_pred = predict_op(eval_img)
