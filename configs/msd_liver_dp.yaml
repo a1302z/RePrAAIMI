@@ -6,7 +6,7 @@ general:
   parallel: False
   eval_train: True
   make_save_str_unique: True
-  eval_init: True
+  eval_init: False
   # use_pretrained_model: msd_pancreas_unet_4-3-convwsnw_mp_gn_mish_resilient-flower-4_2023-01-04_11-51-58.npz
 wandb:
   project: msd_dp
@@ -33,21 +33,9 @@ dataset:
     ct_window: 
       low: -150
       high: 200
-    assume_same_settings: True
-augmentations:
-  consecutive_augmentations:
-    multiplicity: 16
-    augmentations:
-      consecutive_augmentations:
-        augmentations:
-          random_horizontal_flips:
-            flip_prob: 0.2
-          random_vertical_flips:
-            flip_prob: 0.2
-          random_z_flips:
-            flip_prob: 0.2
+    assume_same_settings: False
 loader: 
-  num_workers: 16
+  num_workers: 4
   prefetch_factor: 2
   collate_fn: numpy
 model:
@@ -72,9 +60,9 @@ loss:
     - 0.5
     - 0.5
     - 15
-ema:
-  use_ema: False
-  decay: 0.999
+# ema:
+#   use_ema: False
+#   decay: 0.999
 hyperparams:
   epochs: 50
   batch_size: 1
@@ -83,7 +71,7 @@ hyperparams:
   # momentum: 0.9
   # l2regularization: 1e-5
   # overfit: 2
-  grad_acc_steps: 8
+  grad_acc_steps: 1
 metrics:
   main:     
     fscore_avg:
@@ -94,12 +82,12 @@ metrics:
     mean_squared_error:
     # mean_absolute_error:
   per_batch_metrics: True
-scheduler:
-  type: reduceonplateau
-  normalize_lr: False
-  patience: 20
-  min_delta: 0.01
-  factor: 0.5
+# scheduler:
+#   type: reduceonplateau
+#   normalize_lr: False
+#   patience: 20
+#   min_delta: 0.01
+#   factor: 0.5
 DP:
   epsilon: 8.0
   max_per_sample_grad_norm: 1.0
