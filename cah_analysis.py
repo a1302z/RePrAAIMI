@@ -56,6 +56,34 @@ parser.add_argument(
     help="How many images to visualize in summary",
     type=int,
 )
+parser.add_argument(
+    "-l2",
+    "--use_l2_distance",
+    action="store_true",
+    help="Use l2 distance as comparison of reconstructions and original "
+    "images instead of perceptual distance",
+)
+parser.add_argument(
+    "-eb",
+    "--eps_range_begin",
+    type=int,
+    default=9,
+    help="Exponential factor for first epsilon",
+)
+parser.add_argument(
+    "-ee",
+    "--eps_range_end",
+    type=int,
+    default=18,
+    help="Exponential factor for last epsilon",
+)
+parser.add_argument(
+    "-es",
+    "--eps_range_steps",
+    type=int,
+    default=3,
+    help="Step size between eps exp factors",
+)
 args = parser.parse_args()
 
 
@@ -187,9 +215,12 @@ torch.backends.cudnn.benchmark = cfg.case.impl.benchmark
 setup = dict(device=device, dtype=getattr(torch, cfg.case.impl.dtype))
 
 
-eps_values = [10**i for i in range(3, 16, 3)] + ["Non-private"]
+eps_values = [
+    10**i
+    for i in range(args.eps_range_begin, args.eps_range_end + 1, args.eps_range_steps)
+] + ["Non-private"]
 # eps_values = [1, 1e6, 1e9, 1e12]
-# eps_values = [8] + ["Non-private"]
+# eps_values = ["Non-private"] + [1e15]
 
 recon_data_per_eps = []
 lpips_scorer = lpips.LPIPS(net="alex", verbose=False).to(**setup)
@@ -229,19 +260,39 @@ proxy_loader = torch.utils.data.DataLoader(
     proxy_dataset, batch_size=1, collate_fn=lambda _: _[0]
 )
 example_batch, example_label = proxy_dataset[0]
+data_dimensions = sum([s > 3 for s in example_batch.shape[1:]])
 
 
 aug_fn = None
-tf_stats = get_transform_normalization(config)
-if tf_stats is not None:
-    dm, ds = tf_stats
+stats = get_transform_normalization(config)
+if stats is not None:
+    dm, ds = stats
 else:
-    aug_stats = get_aug_normalization(config)
-    if aug_stats is None:
+    stats = get_aug_normalization(config)
+    if stats is not None:
+        dm, ds, aug_fn = stats
+    elif (
+        config.dataset.nifti_seg_options is not None
+        and config.dataset.nifti_seg_options.data_stats is not None
+    ):
+        dm, ds = (
+            np.array([config.dataset.nifti_seg_options.data_stats.mean]),
+            np.array([config.dataset.nifti_seg_options.data_stats.std]),
+        )
+    else:
         warn("Did not find stats. Will continue assuming unnormalized input.")
         dm, ds = np.array([0.0]), np.array([1.0])
-    else:
-        dm, ds, aug_fn = aug_stats
+if (
+    config.dataset.nifti_seg_options is not None
+    and config.dataset.nifti_seg_options.ct_window is not None
+):
+    recon_clip_threshold = (
+        config.dataset.nifti_seg_options.ct_window.low,
+        config.dataset.nifti_seg_options.ct_window.high,
+    )
+else:
+    recon_clip_threshold = (0.0, 1.0)
+
 
 new_shape = [1] * len(example_batch.shape)
 new_shape[1] = ds.shape[0]
@@ -263,13 +314,22 @@ def convert_to_cv2(recon_imgs):
     recon_imgs = recon_imgs - recon_imgs.min(
         axis=tuple(range(1, len(recon_imgs.shape))), keepdims=True
     )
-    recon_imgs /= recon_imgs.max(
+    normaliser = recon_imgs.max(
         axis=tuple(range(1, len(recon_imgs.shape))), keepdims=True
     )
+    normaliser = np.where(np.abs(normaliser) < 1e-9, 1.0, normaliser)
+    recon_imgs /= normaliser
     recon_imgs *= 255.0
     if recon_imgs.shape[-1] == 3:  # convert RBG to BRG
         recon_imgs = recon_imgs[..., [2, 1, 0]]
     return recon_imgs
+
+
+def normalise_array_to_zero_one(x, axis):
+    x = x - x.min(axis=axis, keepdims=True)
+    denom = x.max(axis=axis, keepdims=True)
+    denom = np.where(denom < 1e-9, 1.0, denom)
+    return x / denom
 
 
 # save_imgs_to_path(convert_to_cv2(np.array(example_batch)), Path("./test_path"))
@@ -388,34 +448,59 @@ for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=
         shared_data, true_user_data = user.compute_local_updates(server_payload)
 
         reconstructed_user_data, recon_stats = attacker.reconstruct(
-            [server_payload], [shared_data], server.secrets, dryrun=cfg.dryrun
+            [server_payload],
+            [shared_data],
+            server.secrets,
+            dryrun=cfg.dryrun,
+            rescale=config.dataset.nifti_seg_options is None,
         )
         true_user_data = {k: np.array(v) for k, v in true_user_data.items()}
         del shared_data
-        rec_denormalized = torch.clamp(
-            torch.from_numpy(np.array(reconstructed_user_data["data"])).to(**setup)
-            * torch.from_numpy(ds).to(**setup)
-            + torch.from_numpy(dm).to(**setup),
-            0,
-            1,
-        ).float()
-        denormalized_images = torch.clamp(
-            torch.from_numpy(np.array(true_user_data["data"])).to(**setup) * ds + dm,
-            0,
-            1,
-        ).float()
-
-        features_gt = breaching.analysis.calc_perceptual_features(
-            lpips_scorer,
-            denormalized_images,
+        reconstructed_user_data["data"] = np.minimum(
+            np.maximum(
+                np.array(reconstructed_user_data["data"]) * ds + dm,
+                recon_clip_threshold[0],
+            ),
+            recon_clip_threshold[1],
         )
-        features_rec = breaching.analysis.calc_perceptual_features(
-            lpips_scorer,
-            rec_denormalized,
+        true_user_data["data"] = np.minimum(
+            np.maximum(
+                np.array(true_user_data["data"]) * ds + dm, recon_clip_threshold[0]
+            ),
+            recon_clip_threshold[1],
         )
+        axis = tuple(range(1, len(true_user_data["data"].shape)))
+        reconstructed_user_data["data"] = normalise_array_to_zero_one(
+            reconstructed_user_data["data"], axis
+        )
+        true_user_data["data"] = normalise_array_to_zero_one(
+            true_user_data["data"], axis
+        )
+        if args.use_l2_distance:
+            features_gt = true_user_data["data"].reshape(
+                true_user_data["data"].shape[0], -1
+            )
+            features_rec = reconstructed_user_data["data"].reshape(
+                reconstructed_user_data["data"].shape[0], -1
+            )
+        else:
+            rec_denormalized = (
+                torch.from_numpy(reconstructed_user_data["data"]).to(**setup).float()
+            )
+            denormalized_images = (
+                torch.from_numpy(true_user_data["data"]).to(**setup).float()
+            )
 
-        features_gt = flatten_features(features_gt)
-        features_rec = flatten_features(features_rec)
+            features_gt = breaching.analysis.calc_perceptual_features(
+                lpips_scorer,
+                denormalized_images,
+            )
+            features_rec = breaching.analysis.calc_perceptual_features(
+                lpips_scorer,
+                rec_denormalized,
+            )
+            features_gt = flatten_features(features_gt)
+            features_rec = flatten_features(features_rec)
 
         N, M, X = features_gt.shape[0], features_rec.shape[0], features_gt.shape[1]
         if (
@@ -440,10 +525,18 @@ for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=
         )
         min_idx_rec = np.argsort(np.min(perc_dist, axis=0))
 
-        recon_imgs = convert_to_cv2(
-            np.array(reconstructed_user_data["data"])[min_idx_rec]
-        )
-        gt_imgs = convert_to_cv2(np.array(true_user_data["data"]))
+        if data_dimensions > 2:
+            recon_imgs = convert_to_cv2(
+                reconstructed_user_data["data"][
+                    min_idx_rec, ..., reconstructed_user_data["data"].shape[-1] // 2
+                ]
+            )
+            gt_imgs = convert_to_cv2(
+                true_user_data["data"][..., true_user_data["data"].shape[-1] // 2]
+            )
+        else:
+            recon_imgs = convert_to_cv2(reconstructed_user_data["data"][min_idx_rec])
+            gt_imgs = convert_to_cv2(true_user_data["data"])
         batch_p = eps_path / f"{batch}"
         batch_p_recon = batch_p / "recon"
         batch_p_gt = batch_p / "gt"
@@ -500,7 +593,7 @@ def turn_axis_off(ax):
     ax.set_yticks([])
 
 
-example_batch = example_batch.transpose(0, 2, 3, 1)
+example_batch = example_batch.swapaxes(1, -1)
 cmap = plt.cm.Dark2
 cmaplist = [cmap(i) for i in range(cmap.N)]
 # cmap = mplcolors.LinearSegmentedColormap.from_list("Custom cmap", cmaplist, cmap.N)
@@ -528,7 +621,7 @@ fig, axs = plt.subplots(
     sharey=True,
 )
 fig2, ax2 = plt.subplots(1, 1, figsize=(5, 5), sharey=True)
-ax2.set_xlabel("Perceptual distance")
+ax2.set_xlabel("MSE" if args.use_l2_distance else "Perceptual distance")
 # ax2[1].set_xlabel("Mean squared distance")
 ax2.set_ylabel("Images within distance")
 ax2.yaxis.set_major_formatter(mtick.PercentFormatter())

@@ -33,7 +33,7 @@ dataset:
     ct_window: 
       low: -150
       high: 200
-    assume_same_settings: True
+    assume_same_settings: False
 # augmentations:
 #   consecutive_augmentations:
 #     multiplicity: 16
@@ -70,17 +70,9 @@ loss:
     - 0.1
     - 0.4
     - 0.5
-<<<<<<< HEAD
-ema:
-  use_ema: False
-  decay: 0.999
-=======
-    - 0.5
-    - 15
 # ema:
 #   use_ema: False
 #   decay: 0.999
->>>>>>> 1ca76627bc4ddadb99e6b652a2ad2deec566f304
 hyperparams:
   epochs: 50
   batch_size: 1
