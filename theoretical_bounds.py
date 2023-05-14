@@ -11,6 +11,11 @@ import numpy as np
 from datetime import datetime
 import pandas as pd
 
+
+import os
+
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+
 sn.set_theme(
     context="notebook",
     style="white",
@@ -57,11 +62,11 @@ def main(
 
     key_values = []
 
-    if train_config.eps_values:
+    if "eps_values" in train_config.keys():
         eps_values = train_config.eps_values
     else:
         eps_values = [0.5] + list(range(1, 21))
-    if train_config.N_SAMPLES:
+    if "N_SAMPLES" in train_config.keys():
         N_SAMPLES = int(train_config.N_SAMPLES)
     else:
         N_SAMPLES = int(1e3)  # 200000

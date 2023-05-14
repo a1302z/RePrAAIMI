@@ -26,7 +26,6 @@ The adversary is given a group of model parameters $\{\theta_1, \theta_2, \ldots
 # import functools
 # import haiku as hk
 # import jax
-import jax.numpy as jnp
 
 # import optax
 # from ml_collections import config_dict
@@ -38,6 +37,9 @@ import numpy as np
 
 # %%
 
+import os
+
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 import hydra
 from copy import deepcopy
 from pathlib import Path
@@ -49,7 +51,9 @@ from datetime import datetime
 import pandas as pd
 from tqdm import trange
 
+
 from dptraining.config.config_store import load_config_store
+import jax.numpy as jnp
 
 from matplotlib import pyplot as plt, ticker as mtick
 import seaborn as sn
@@ -123,15 +127,15 @@ def main(
     train_config: Config,
 ):
     upper_bounds = []
-    if train_config.N_REPS:
+    if "N_REPS" in train_config.keys():
         N_REPS = train_config.N_REPS
     else:
         N_REPS = 100
-    if train_config.N_SAMPLES:
+    if "N_SAMPLES" in train_config.keys():
         N_SAMPLES = int(train_config.N_SAMPLES)
     else:
         N_SAMPLES = int(1e3)  # 200000
-    if train_config.eps_values:
+    if "eps_values" in train_config.keys():
         eps_values = train_config.eps_values
     else:
         eps_values = list(range(1000, 100001, 2000))

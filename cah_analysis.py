@@ -334,7 +334,7 @@ def normalise_array_to_zero_one(x, axis):
 
 # save_imgs_to_path(convert_to_cv2(np.array(example_batch)), Path("./test_path"))
 for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=False):
-    eps_path = p / (eps if isinstance(eps, str) else f"eps={eps:.0f}")
+    eps_path = p / (eps if isinstance(eps, str) else f"eps={eps:.0E}")
     # if eps == "Random noise":
     #     true_user_data = dict(data=example_batch, label=example_label)
     #     reconstructed_user_data = dict(
@@ -388,7 +388,7 @@ for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=
         with open_dict(cfg):
             cfg.case.user.total_noise = total_noise
         print(
-            f"actual epsilon: {analyse_epsilon(accountant,steps,sigma,sampling_rate,delta, config.DP.alphas):.2f} with noise multiplier {sigma}"
+            f"actual epsilon: {analyse_epsilon(accountant,steps,sigma,sampling_rate,delta, config.DP.alphas):.2E} with noise multiplier {sigma}"
         )
 
     # %%
@@ -631,7 +631,7 @@ for ax, eps, stats_df, col in tqdm(
     desc="building figures",
     leave=False,
 ):
-    eps_formatted = f"ε={eps:.0f}" if isinstance(eps, (float, int)) else eps
+    eps_formatted = f"ε={eps:.0E}" if isinstance(eps, (float, int)) else eps
     stats_df = pd.merge(left=total_df, right=stats_df, on="gt_id")
     stats_df = stats_df.sort_values(by="global_min_distance")
 
@@ -652,7 +652,7 @@ for ax, eps, stats_df, col in tqdm(
         ax[2 * i + 1].imshow(mpimg.imread(recon_p), **plt_kwargs)
         turn_axis_off(ax[2 * i])
         turn_axis_off(ax[2 * i + 1])
-        ax[2 * i + 1].set_xlabel(f"d={dist:.3f}", fontsize=16)
+        ax[2 * i + 1].set_xlabel(f"d={dist:.0E}", fontsize=16)
         ax[2 * i].set_title("Original", fontsize=20)
         ax[2 * i + 1].set_title("Closest Reconstruction", fontsize=20)
 
