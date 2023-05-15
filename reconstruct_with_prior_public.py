@@ -321,7 +321,7 @@ def main(
             **{i: res for i, res in enumerate(all)},
         }
     df = pd.DataFrame.from_dict(result_dict)
-    df.to_csv(str(save_folder / "results.csv"), index=False)
+    df.to_csv(str(save_folder / "results.csv"))
 
 
 if __name__ == "__main__":

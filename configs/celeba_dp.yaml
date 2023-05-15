@@ -1,0 +1,98 @@
+defaults:
+  - base_config
+  - _self_
+general:
+  log_wandb: False
+  parallel: False
+  eval_train: False
+wandb:
+  project: celeba
+dataset: 
+  task: classification
+  name: celeba
+  root: ./data/CelebA/
+  celeba:
+    target_type: identity
+metrics:
+  main: 
+    accuracy_score: 
+  logging:
+    classification_report:
+      output_dict: True
+      zero_division: 0
+train_transforms:
+  Resize: 
+      size: 224
+  RandomCrop:
+      size: 224
+  pil_to_numpy:
+  numpy_img_to_chw:
+test_transforms:
+  Resize: 
+      size: 224
+  CenterCrop:
+      size: 224
+  pil_to_numpy:
+  numpy_img_to_chw:
+loader:
+  collate_fn: numpy
+  num_workers: 64
+  prefetch_factor: 6
+  pin_memory: True
+augmentations:
+  pil_to_jax:
+  normalize_jax:
+      mean:
+        - 0.5
+        - 0.5
+        - 0.5
+      std:
+        - 0.5
+        - 0.5
+        - 0.5 
+  # random_vertical_flips:
+  #     flip_prob: 0.5
+  # random_horizontal_flips:
+  #     flip_prob: 0.5
+test_augmentations:
+  pil_to_jax:
+  normalize_jax:
+      mean:
+        - 0.5
+        - 0.5
+        - 0.5
+      std:
+        - 0.5
+        - 0.5
+        - 0.5 
+optim:
+  name: nadam
+loss: 
+  type: cse
+  reduction: sum
+  binary_loss: False
+model:
+  name: resnet9
+  in_channels: 3
+  num_classes: 10177
+  conv: conv
+  activation: mish
+  normalization: gn
+  pooling: avgpool
+  extra_args:
+    scale_norm: True
+ema:
+  use_ema: False
+  decay: 0.04
+hyperparams:
+  epochs: 1
+  batch_size: 1
+  batch_size_test: 256
+  lr: 1e-3
+  grad_acc_steps: 1
+DP:
+  epsilon: 8.0
+  max_per_sample_grad_norm: 1.0
+  delta: 8e-7
+  norm_acc: False
+  mechanism: rdp

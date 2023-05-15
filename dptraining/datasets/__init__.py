@@ -23,6 +23,7 @@ from dptraining.datasets.ham10000 import HAM10000Creator
 from dptraining.datasets.attack_datasets import AttackCreator
 from dptraining.datasets.mnist import MNISTCreator
 from dptraining.datasets.imagefolder import ImageFolderCreator
+from dptraining.datasets.celeba import CelebACreator
 from dptraining.datasets.subset import (
     FixedAndShadowDatasetFromOneSet,
     DataSubset,
@@ -69,6 +70,8 @@ def select_creator(config):
             creator = MNISTCreator
         case DatasetName.imagefolder:
             creator = ImageFolderCreator
+        case DatasetName.celeba:
+            creator = CelebACreator
         case _ as unsupported:
             raise ValueError(f"Unsupported dataset '{unsupported}'.")
     return creator
