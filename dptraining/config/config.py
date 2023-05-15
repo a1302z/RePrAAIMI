@@ -122,6 +122,7 @@ class RadimagenetConfig:
     allowed_labels: str = "all"
     split_folder: Optional[str] = None
     move: Move = Move.symlink
+    ignore_provided_splits: bool = False
 
 
 @dataclass
