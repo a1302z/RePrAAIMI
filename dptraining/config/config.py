@@ -1,6 +1,6 @@
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from psutil import cpu_count
 from pathlib import Path
 
@@ -55,6 +55,7 @@ class DatasetName(Enum):
     ham10000 = 8
     mnist = 9
     imagefolder = 10
+    celeba = 11
 
 
 class MSDSubtask(Enum):
@@ -158,6 +159,11 @@ class HAM10000:
     merge_labels: bool = True  # only for HAM10000
 
 
+@dataclass
+class CelebA:
+    target_type: Any = MISSING  # can be str or list[str]
+
+
 class AttackInput(Enum):
     weights_and_images = 0
     outputs = 1
@@ -191,6 +197,7 @@ class DatasetConfig:
     nifti_seg_options: Optional[NiftiSegmentationConfig] = None
     ham: Optional[HAM10000] = None
     attack: Optional[AttackData] = None
+    celeba: Optional[CelebA] = None
     datasplit_seed: int = 0
 
 
@@ -291,11 +298,6 @@ class EarlyStoppingConfig:
 @dataclass
 class UnfreezingSchedule:
     trigger_points: list[int] = MISSING
-
-
-@dataclass
-class BAMConfig:
-    use: bool = True
 
 
 @dataclass
