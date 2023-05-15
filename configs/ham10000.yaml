@@ -7,7 +7,7 @@ general:
   eval_train: True
   # save_path: 
   # make_save_str_unique: True
-  use_pretrained_model: radimagenet_resnet9_gn_maxpool.npz
+  # use_pretrained_model: imagenet_resnet9_convws_nw_gn_mp_sn.npz
 wandb:
   project: ham10000
 # ckpt:
@@ -18,7 +18,7 @@ dataset:
   name: ham10000
   task: classification
   root: ./data/dataverse_files
-  train_val_split: 0.8
+  train_val_split: 0.9
   test_split: 0.1
   ham:
     merge_labels: True
@@ -42,15 +42,18 @@ test_transforms:
   pil_to_numpy:
   numpy_img_to_chw:
 augmentations:
-  normalize_jax:
-      mean:
-        - 0.7639
-        - 0.5383
-        - 0.5617
-      std:
-        - 0.1374
-        - 0.1584
-        - 0.1766
+  consecutive_augmentations:
+    normalize_jax:
+        mean:
+          - 0.7639
+          - 0.5383
+          - 0.5617
+        std:
+          - 0.1374
+          - 0.1584
+          - 0.1766
+    random_vertical_flips:
+      flip_prob: 0.5
 test_augmentations:
   normalize_jax:
       mean:
@@ -63,30 +66,36 @@ test_augmentations:
         - 0.1766
 model:
   name: resnet9
-  in_channels: 1
-  num_classes: 165
-  conv: conv
+  conv: convws_nw
+  in_channels: 3
+  num_classes: 1
   activation: mish
   normalization: gn
   pooling: maxpool
-  pretrained_model_changes:
-    in_channels: 3
-    num_classes: 1
-    # only_finetune: True
-  # extra_args: 
-  #   scale_norm: True
+  # pretrained_model_changes:
+  #   in_channels: 3
+  #   num_classes: 1
+  #   only_finetune: False
+  extra_args: 
+    scale_norm: True
+# unfreeze_schedule:
+#   trigger_points:
+#     - 5
+#     - 10
+#     - 15
 optim:
   name: nadam
-ema:
-  use_ema: True
-  decay: 0.995
+# ema:
+#   use_ema: True
+#   decay: 0.995
 hyperparams:
-  epochs: 50
-  batch_size: 64
+  epochs: 500
+  batch_size: 32
   batch_size_test: 128
   lr: 2e-3
   # overfit: 10
   # momentum: 0.9
+  grad_acc_steps: 1
 metrics:
   main: 
     matthews_corrcoef:
@@ -99,16 +108,17 @@ loss:
   type: cse
   reduction: sum
   binary_loss: True
-  class_weights:
-    - 0.1
-    - 0.9
-scheduler:
-  type: reduceonplateau
-  normalize_lr: False
-  patience: 5
-  min_delta: 0.01
-  factor: 0.9
+  calculate_class_weights: False
+  # class_weights: 
+  #   - 0.1
+  #   - 0.9
+# scheduler:
+#   type: reduceonplateau
+#   normalize_lr: False
+#   patience: 5
+#   min_delta: 0.01
+#   factor: 0.9
 earlystopping:
   mode: maximize
-  patience: 100
-  min_delta: 0.01
+  patience: 30
+  min_delta: 0.001

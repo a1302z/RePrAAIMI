@@ -7,7 +7,7 @@ general:
   eval_train: True
   # save_path: 
   # make_save_str_unique: True
-  use_pretrained_model: imagenet_resnet9_convws_nw_gn_mp_sn.npz
+  # use_pretrained_model: imagenet_resnet9_convws_nw_gn_mp_sn.npz
 wandb:
   project: ham10000
 # ckpt:
@@ -18,13 +18,13 @@ dataset:
   name: ham10000
   task: classification
   root: ./data/dataverse_files
-  train_val_split: 0.8
+  train_val_split: 0.9
   test_split: 0.1
   ham:
     merge_labels: True
 loader: 
   num_workers: 8
-  prefetch_factor: 16
+  prefetch_factor: 64
   collate_fn: numpy
   pin_memory: True
 train_transforms:
@@ -42,15 +42,25 @@ test_transforms:
   pil_to_numpy:
   numpy_img_to_chw:
 augmentations:
-  normalize_jax:
-      mean:
-        - 0.7639
-        - 0.5383
-        - 0.5617
-      std:
-        - 0.1374
-        - 0.1584
-        - 0.1766
+  consecutive_augmentations:
+    normalize_jax:
+        mean:
+          - 0.7639
+          - 0.5383
+          - 0.5617
+        std:
+          - 0.1374
+          - 0.1584
+          - 0.1766
+    # random_vertical_flips:
+    #   flip_prob: 0.0
+    # consecutive_augmentations:
+    #   multiplicity: 4
+    #   consecutive_augmentations:
+    #     random_img_shift:
+    #       max_shift: 4
+    #     random_vertical_flips:
+    #       flip_prob: 0.5
 test_augmentations:
   normalize_jax:
       mean:
@@ -65,34 +75,34 @@ model:
   name: resnet9
   conv: convws_nw
   in_channels: 3
-  num_classes: 1000
+  num_classes: 1
   activation: mish
   normalization: gn
   pooling: maxpool
-  pretrained_model_changes:
-    in_channels: 3
-    num_classes: 1
-    only_finetune: False
+  # pretrained_model_changes:
+  #   in_channels: 3
+  #   num_classes: 1
+  #   only_finetune: False
   extra_args: 
     scale_norm: True
-unfreeze_schedule:
-  trigger_points:
-    - 5
-    - 10
-    - 15
+# unfreeze_schedule:
+#   trigger_points:
+#     - 5
+#     - 10
+#     - 15
 optim:
   name: nadam
-ema:
-  use_ema: True
-  decay: 0.995
+# ema:
+#   use_ema: True
+#   decay: 0.995
 hyperparams:
-  epochs: 50
-  batch_size: 64
+  epochs: 100
+  batch_size: 32
   batch_size_test: 128
   lr: 2e-3
   # overfit: 10
   # momentum: 0.9
-  grad_acc_steps: 1
+  grad_acc_steps: 64
 metrics:
   main: 
     matthews_corrcoef:
@@ -105,17 +115,18 @@ loss:
   type: cse
   reduction: sum
   binary_loss: True
+  calculate_class_weights: False
   # class_weights: 
   #   - 0.1
   #   - 0.9
-scheduler:
-  type: reduceonplateau
-  normalize_lr: False
-  patience: 5
-  min_delta: 0.01
-  factor: 0.9
+# scheduler:
+#   type: reduceonplateau
+#   normalize_lr: False
+#   patience: 5
+#   min_delta: 0.01
+#   factor: 0.9
 DP:
   epsilon: 8.0
-  max_per_sample_grad_norm: 1.0
+  max_per_sample_grad_norm: 9.0
   delta: 8e-7
   norm_acc: False
