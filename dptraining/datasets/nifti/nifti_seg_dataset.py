@@ -15,6 +15,7 @@ from dptraining.datasets.nifti.nifti_utils import (
     preprocess_and_convert_to_numpy,
     resize_scan,
 )
+from dptraining.transform.transform_pipeline import TransformPipeline
 
 # We are assuming that all tasks are structured as Task03_Liver
 
@@ -26,8 +27,7 @@ class NiftiSegmentationDataset(Dataset):
     def __init__(
         self,
         matched_labeled_scans: list[tuple[str, Path, Path]],
-        transform: Optional[Callable] = None,
-        label_transform: Optional[Callable] = None,
+        transform: Optional[TransformPipeline] = None,
         resolution: Optional[int] = None,
         slice_thickness: Optional[float] = None,
         n_slices: Optional[int] = None,
@@ -45,7 +45,6 @@ class NiftiSegmentationDataset(Dataset):
         ), "You can only set either slice_thickness or n_slices"
         self.matched_labeled_scans: list[tuple[str, Path, Path]] = matched_labeled_scans
         self.transform = transform
-        self.label_transform = label_transform
         self.resolution: Optional[int] = resolution
         self.slice_thickness: Optional[float] = slice_thickness
         self.n_slices: Optional[int] = n_slices
@@ -57,7 +56,7 @@ class NiftiSegmentationDataset(Dataset):
         self.assume_same_settings: bool = assume_same_settings
         self.database: Optional[h5file] = database_file
         self.database_needs_correction: bool = not (
-            self.resolution is None and self.n_slices is None and data_stats is None
+            self.resolution is None and self.n_slices is None
         )
         self.corrected_database_entry: bool = False
         assert not (
@@ -97,9 +96,8 @@ class NiftiSegmentationDataset(Dataset):
     def __len__(self) -> int:
         return len(self.matched_labeled_scans)
 
-    def __getitem__(self, index: int) -> Tuple[np.array, np.array]:
+    def __getitem__(self, index: int) -> tuple[np.array, np.array]:
         file_key, img_file, label_file = self.matched_labeled_scans[index]
-        # print(f"{index} cached: {self.cached_files[index]}")
         # t0 = time()
         new_scan_path, new_label_path = self.create_new_filenames(img_file, label_file)
         if (self.cache and self.cached_files[index]) or (
@@ -117,7 +115,6 @@ class NiftiSegmentationDataset(Dataset):
             else:
                 scan = self.database[file_key]["image"]
                 label = self.database[file_key]["label"]
-
         else:
             scan, label = self.load_nifti_files(index, img_file, label_file)
             if self.database:
@@ -128,10 +125,8 @@ class NiftiSegmentationDataset(Dataset):
                     "label_corrected", shape=label.shape, dtype=label.dtype, data=label
                 )
                 self.corrected_database_entry = True
-        scan = self.transform(scan) if self.transform is not None else scan
-        label = (
-            self.label_transform(label) if self.label_transform is not None else label
-        )
+        if self.transform is not None:
+            scan, label = self.transform.transform_image_label(scan, label)
         if self.normalize_per_ct:
             scan = (scan - scan.mean()) / scan.std()
         # t1 = time()

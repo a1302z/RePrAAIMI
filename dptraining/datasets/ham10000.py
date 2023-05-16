@@ -19,7 +19,6 @@ IDENTITY = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
 
 
 class HAM10000(Dataset):
-
     FULL_RES_STATS = (
         np.array([0.7635, 0.5461, 0.5705]),
         np.array([0.3276, 0.3547, 0.3951]),
@@ -139,7 +138,7 @@ class HAM10000Creator(DataLoaderCreator):
 
 #     # print(calc_mean_std(dl))
 
-#     norm = NormalizeNumpyImg(*HAM10000.STATS_224)
+#     norm = NormalizeNumpyImg(*HAM10000.STATS_224).unary_transform
 #     # ds = HAM10000(
 #     #     Path("./data/dataverse_files/"),
 #     #     transform=lambda x: norm(
