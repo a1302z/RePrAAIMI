@@ -15,7 +15,7 @@ from dptraining.transform.transforms.complex import (
     MakeComplexRealAndImaginary,
 )
 from dptraining.transform.transforms.convert import PILToNumpy, PILToJAXNumpy
-from dptraining.transform.transforms.crop import CenterCrop
+from dptraining.transform.transforms.crop import CenterCrop, RandomCropJAX, RandomCrop
 from dptraining.transform.transforms.fft import FFT, JaxFFT, IFFT, JaxIFFT
 from dptraining.transform.transforms.flip import (
     RandomVerticalFlipsJax,
