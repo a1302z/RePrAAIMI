@@ -1,6 +1,6 @@
 from pathlib import Path
 from random import seed, shuffle
-from typing import Tuple, Optional, Callable
+from typing import Optional
 from itertools import compress
 from tqdm import tqdm
 import nibabel as nib
@@ -13,7 +13,10 @@ import nibabel as nib
 
 from dptraining.config import Config, DatasetName
 from dptraining.datasets.base_creator import DataLoaderCreator, mk_subdirectories
-from dptraining.datasets.nifti.nifti_seg_dataset import NiftiSegmentationDataset
+from dptraining.datasets.nifti.nifti_seg_dataset import (
+    NiftiSegmentationDataset,
+    preprocess_and_convert_to_numpy,
+)
 
 
 def find_niftis_file_id(
@@ -158,53 +161,60 @@ def filter_niftis(
     return scan_files, label_files
 
 
-def create_database(config, scan_files, label_files):
+def create_database(config: Config, scan_files, label_files):
     database_file = None
-    if config.dataset.nifti_seg_options.database:
-        if config.dataset.nifti_seg_options.database is not None:
-            if config.dataset.nifti_seg_options.database.is_file():
-                print(
-                    f"Reusing {config.dataset.nifti_seg_options.database}. If this is not intended "
-                    "please change the filename"
-                )
-            else:
-                with h5py.File(
-                    config.dataset.nifti_seg_options.database, "w"
-                ) as database_file:
-                    for file_name in tqdm(
-                        scan_files.keys(),
-                        total=len(scan_files),
-                        leave=False,
-                        desc="Create database",
-                    ):
-                        img_path, label_path = (
-                            scan_files[file_name],
-                            label_files[file_name],
-                        )
-                        image = nib.load(img_path).get_fdata()
-                        label = nib.load(label_path).get_fdata()
-                        grp = database_file.create_group(file_name)
-                        grp.create_dataset(
-                            "image",
-                            shape=image.shape,
-                            dtype=image.dtype,
-                            data=image,
-                        )
-                        grp.create_dataset(
-                            "label",
-                            shape=label.shape,
-                            dtype=label.dtype,
-                            data=label,
-                        )
+    normalization = config.dataset.nifti_seg_options.normalization_type
+    data_stats = config.dataset.nifti_seg_options.data_stats
+    mean = data_stats.mean
+    std = data_stats.std
+    ct_window = config.dataset.nifti_seg_options.ct_window
+    if config.dataset.nifti_seg_options.database is not None:
+        if config.dataset.nifti_seg_options.database.is_file():
+            print(
+                f"Reusing {config.dataset.nifti_seg_options.database}. If this is not intended "
+                "please change the filename"
+            )
+        else:
+            with h5py.File(
+                config.dataset.nifti_seg_options.database, "w"
+            ) as database_file:
+                for file_name in tqdm(
+                    scan_files.keys(),
+                    total=len(scan_files),
+                    leave=False,
+                    desc="Create database",
+                ):
+                    img_path, label_path = (
+                        scan_files[file_name],
+                        label_files[file_name],
+                    )
+                    image = nib.load(img_path)
+                    label = nib.load(label_path)
+                    image, label = preprocess_and_convert_to_numpy(
+                        image, label, ct_window, normalization, (mean, std)
+                    )
+                    grp = database_file.create_group(file_name)
+                    grp.create_dataset(
+                        "image",
+                        shape=image.shape,
+                        dtype=image.dtype,
+                        data=image,
+                    )
+                    grp.create_dataset(
+                        "label",
+                        shape=label.shape,
+                        dtype=label.dtype,
+                        data=label,
+                    )
 
-            database_file = h5py.File(config.dataset.nifti_seg_options.database, "a")
+        database_file = h5py.File(config.dataset.nifti_seg_options.database, "a")
 
     return database_file
 
 
 def make_dataset(
     config: Config,
-    transforms: Optional[Callable],
+    transforms: Optional[callable],
     scan_files: dict[str, Path],
     label_files: dict[str, Path],
     database_file: Optional[h5py.File] = None,
@@ -295,8 +305,8 @@ class NiftiSegCreator(DataLoaderCreator):
 
     @staticmethod
     def make_datasets(
-        config: Config, transforms: Tuple
-    ) -> Tuple[Dataset, Dataset, Dataset]:
+        config: Config, transforms: tuple
+    ) -> tuple[Dataset, Dataset, Dataset]:
         if config.dataset.name == DatasetName.msd:
             if config.dataset.nifti_seg_options.msd_subtask:
                 root = (
