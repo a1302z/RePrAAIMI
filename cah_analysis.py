@@ -84,6 +84,17 @@ parser.add_argument(
     default=3,
     help="Step size between eps exp factors",
 )
+parser.add_argument(
+    "--jax_threshold",
+    type=float,
+    default=1e10,
+    help="Use iterative jax implementation to calculate L2 distance between vectors above this threshold",
+)
+parser.add_argument(
+    "--allow_torch_cuda",
+    action="store_true",
+    help="Allow torch to access gpu (for perc dist)",
+)
 args = parser.parse_args()
 
 
@@ -209,8 +220,12 @@ def mean_diff_np_alongNX(a1, a2, patchsize=1000):
 #     return out
 
 
-# device = torch.device(f"cuda") if torch.cuda.is_available() else torch.device("cpu")
-device = torch.device("cpu")
+device = (
+    torch.device(f"cuda")
+    if args.allow_torch_cuda and torch.cuda.is_available()
+    else torch.device("cpu")
+)
+# device = torch.device("cpu")
 torch.backends.cudnn.benchmark = cfg.case.impl.benchmark
 setup = dict(device=device, dtype=getattr(torch, cfg.case.impl.dtype))
 
@@ -501,10 +516,13 @@ for eps in tqdm(eps_values, total=len(eps_values), desc="Privacy levels", leave=
             )
             features_gt = flatten_features(features_gt)
             features_rec = flatten_features(features_rec)
+            assert (
+                np.isnan(features_gt).sum() == 0 and np.isnan(features_rec).sum() == 0
+            )
 
         N, M, X = features_gt.shape[0], features_rec.shape[0], features_gt.shape[1]
         if (
-            N * M * X < 1e10
+            N * M * X < args.jax_threshold
         ):  # this is just an empirical threshold and strongly depends on the hardware
             perc_dist = np.power(features_gt[:, None, ...] - features_rec, 2).mean(
                 axis=2
