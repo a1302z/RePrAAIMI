@@ -3,7 +3,7 @@ defaults:
   - _self_
 project: cifar10-DP
 general:
-  log_wandb: False
+  log_wandb: True
   parallel: False
   eval_train: False
   use_pretrained_model: 
@@ -23,16 +23,15 @@ metrics:
   main: 
     accuracy_score: 
   logging:
-    classification_report:
-      output_dict: True
-      zero_division: 0
+    f1_score:
+      average: macro
 loader: 
   num_workers: 16
   prefetch_factor: 32
   collate_fn: numpy
 augmentations:
   consecutive_augmentations:
-    multiplicity: 8
+    multiplicity: 2
     consecutive_augmentations:
       random_img_shift:
         max_shift: 4
@@ -55,10 +54,10 @@ loss:
   type: cse
   reduction: mean
 ema:
-  use_ema: True
-  decay: 0.04
+  use_ema: False
+  decay: 0.001
 hyperparams:
-  epochs: 100
+  epochs: 50
   batch_size: 256
   batch_size_test: 512
   lr: 2e-3
@@ -82,6 +81,6 @@ DP:
   grad_acc_steps: 8
   rsqrt_noise_adapt: False
   glrt_assumption: False
-  bam: True
+  bam: False
   r: 0.1
   alpha: 0.31

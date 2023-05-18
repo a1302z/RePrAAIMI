@@ -44,8 +44,8 @@ class ClipAndAccumulateGrads(Module):
                 )
         else:
             print("... creating clip function for BAM")
+            self.lambda_reg = alpha * r
             if double_backprop:
-                self.lambda_reg = alpha * r
                 self.clipped_grad = self.make_clipped_grad_fn_bam_db(
                     loss_fn, gv, variables
                 )
@@ -77,21 +77,25 @@ class ClipAndAccumulateGrads(Module):
             self.accumulated_grads[i].value = jnp.zeros_like(accumulated_grad)
         self.counter.value = jnp.array(0).astype(jnp.int32)
 
-    def cos_sim(self, g1, g2):
+    def cos_sim(self, g1, g2, batch_size:int):
         """Computes cosine similarity between g1 and g2"""
         flatten = lambda grad_list: jnp.concatenate(
             [g.flatten() for g in grad_list], axis=0
         )
+        g1 = [g/batch_size for g in g1]
+        g2 = [g/batch_size for g in g2]
         dot_product = jnp.dot(flatten(g1), flatten(g2))
         norm_g1 = jnp.linalg.norm(jnp.array([jnp.linalg.norm(g) for g in g1]))
         norm_g2 = jnp.linalg.norm(jnp.array([jnp.linalg.norm(g) for g in g2]))
         return dot_product / (norm_g1 * norm_g2)
 
-    def l2_bias(self, g, g_clip):
+    def l2_bias(self, g, g_clip, batch_size:int):
         """Computes L2-norm of bias vector ||Bias(\hat{g}, \hat{g}_priv)||_2"""
         flatten = lambda grad_list: jnp.concatenate(
             [g.flatten() for g in grad_list], axis=0
         )
+        g = [pg/batch_size for pg in g]
+        g_clip = [pg/batch_size for pg in g_clip]
         return jnp.linalg.norm(flatten(g_clip) - flatten(g))
 
     def __call__(self, *args):
@@ -128,6 +132,7 @@ class ClipAndAccumulateGrads(Module):
 
         def clipped_grad(*args):
             grads, values, unclipped_grads = clipped_grad_vectorized(*args)
+            batch_size = grads[0].shape[0]
             grads = jax.tree_util.tree_map(
                 functools.partial(jnp.sum, axis=0), (grads)
             )  # sum for grads
@@ -138,8 +143,8 @@ class ClipAndAccumulateGrads(Module):
                 unclipped_grads = jax.tree_util.tree_map(
                     functools.partial(jnp.sum, axis=0), (unclipped_grads)
                 )
-                stoch_alignment = self.cos_sim(unclipped_grads, grads)
-                bias = self.l2_bias(unclipped_grads, grads)
+                stoch_alignment = self.cos_sim(unclipped_grads, grads, batch_size=batch_size)
+                bias = self.l2_bias(unclipped_grads, grads, batch_size=batch_size)
                 values[1]["stoch_aligment"] = stoch_alignment
                 values[1]["l2_bias"] = bias
             return grads, values
@@ -183,6 +188,7 @@ class ClipAndAccumulateGrads(Module):
 
         def clipped_grad(*args):
             grads, values, unclipped_grads = clipped_grad_vectorized(*args)
+            batch_size = grads[0].shape[0]
             grads = jax.tree_util.tree_map(
                 functools.partial(jnp.sum, axis=0), (grads)
             )  # sum for grads
@@ -193,8 +199,8 @@ class ClipAndAccumulateGrads(Module):
                 unclipped_grads = jax.tree_util.tree_map(
                     functools.partial(jnp.sum, axis=0), (unclipped_grads)
                 )
-                stoch_alignment = self.cos_sim(unclipped_grads, grads)
-                bias = self.l2_bias(unclipped_grads, grads)
+                stoch_alignment = self.cos_sim(unclipped_grads, grads, batch_size=batch_size)
+                bias = self.l2_bias(unclipped_grads, grads, batch_size=batch_size)
                 values[1]["stoch_aligment"] = stoch_alignment
                 values[1]["l2_bias"] = bias
             return grads, values
@@ -240,6 +246,7 @@ class ClipAndAccumulateGrads(Module):
 
         def clipped_grad(*args):
             grads, values, unclipped_grads = clipped_grad_vectorized(*args)
+            batch_size = grads[0].shape[0]
             grads = jax.tree_util.tree_map(
                 functools.partial(jnp.sum, axis=0), (grads)
             )  # sum for grads
@@ -250,8 +257,8 @@ class ClipAndAccumulateGrads(Module):
                 unclipped_grads = jax.tree_util.tree_map(
                     functools.partial(jnp.sum, axis=0), (unclipped_grads)
                 )
-                stoch_alignment = self.cos_sim(unclipped_grads, grads)
-                bias = self.l2_bias(unclipped_grads, grads)
+                stoch_alignment = self.cos_sim(unclipped_grads, grads, batch_size=batch_size)
+                bias = self.l2_bias(unclipped_grads, grads, batch_size=batch_size)
                 values[1]["stoch_aligment"] = stoch_alignment
                 values[1]["l2_bias"] = bias
             return grads, values

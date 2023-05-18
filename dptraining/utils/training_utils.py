@@ -33,125 +33,68 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
     parallel=False,
     ema=None,
 ):
-    if grad_accumulation:
-        assert isinstance(grad_calc, ClipAndAccumulateGrads)
+    assert isinstance(grad_calc, ClipAndAccumulateGrads)
 
-        @objax.Function.with_vars(train_vars)
-        def calc_grads(image_batch, label_batch):
-            image_batch = augment_op(image_batch)
-            label_batch = label_op(label_batch)
-            if n_augmentations > 1:
-                if image_batch.shape[1] != n_augmentations:
-                    raise RuntimeError(
-                        "number of augmentations different than augmentation axis"
-                    )
-                label_batch = jn.repeat(
-                    label_batch[:, jn.newaxis], n_augmentations, axis=1
+    @objax.Function.with_vars(train_vars)
+    def calc_grads(image_batch, label_batch):
+        image_batch = augment_op(image_batch)
+        label_batch = label_op(label_batch)
+        if n_augmentations > 1:
+            if image_batch.shape[1] != n_augmentations:
+                raise RuntimeError(
+                    "number of augmentations different than augmentation axis"
                 )
-            else:
-                image_batch = image_batch[:, jn.newaxis, ...]
-                label_batch = label_batch[:, jn.newaxis, ...]
-            clipped_grad, values = grad_calc.calc_per_sample_grads(
-                image_batch, label_batch
-            )
-            loss_value, metric_dict = values
-            grad_calc.accumulate_grad(clipped_grad)
-            if parallel:
-                loss_value = objax.functional.parallel.psum(loss_value)
-            values = (loss_value, metric_dict)
-            return values
-
-        @objax.Function.with_vars(train_vars)
-        def apply_grads(learning_rate):
-            grads = grad_calc.get_accumulated_grads()
-            grad_calc.reset_accumulated_grads()
-            if parallel:
-                grads = objax.functional.parallel.psum(grads)
-            grads = grad_calc.add_noise(grads, noise, objax.random.DEFAULT_GENERATOR)
-            grads = [gx / effective_batch_size for gx in grads]
-            opt(learning_rate, grads)
-            if ema is not None:
-                ema()
-            return grads
-
-        # TODO check how this behaves with the new signature of calc_grads()
-        if parallel:
-            calc_grads = objax.Parallel(
-                calc_grads,
-                reduce=lambda x: x[0],
-                vc=train_vars,
-            )
-            apply_grads = objax.Parallel(
-                apply_grads,
-                reduce=np.sum,
-                vc=train_vars,
-            )
+            label_batch = jn.repeat(label_batch[:, jn.newaxis], n_augmentations, axis=1)
         else:
-            #pass
-            calc_grads = objax.Jit(calc_grads)
-            apply_grads = objax.Jit(apply_grads)
+            image_batch = image_batch[:, jn.newaxis, ...]
+            label_batch = label_batch[:, jn.newaxis, ...]
+        clipped_grad, values = grad_calc.calc_per_sample_grads(image_batch, label_batch)
+        loss_value, metric_dict = values
+        grad_calc.accumulate_grad(clipped_grad)
+        if parallel:
+            loss_value = objax.functional.parallel.psum(loss_value)
+        values = (loss_value, metric_dict)
+        return values
 
-        # @objax.Function.with_vars(train_vars)
-        def train_op(  # pylint:disable=inconsistent-return-statements
-            image_batch, label_batch, learning_rate: float, is_update_step: bool
-        ):
-            values = calc_grads(image_batch, label_batch)
-            if is_update_step:
-                return (
-                    values,
-                    apply_grads(learning_rate),
-                )
+    @objax.Function.with_vars(train_vars)
+    def apply_grads(learning_rate):
+        grads = grad_calc.get_accumulated_grads()
+        grad_calc.reset_accumulated_grads()
+        if parallel:
+            grads = objax.functional.parallel.psum(grads)
+        grads = grad_calc.add_noise(grads, noise, objax.random.DEFAULT_GENERATOR)
+        grads = [gx / effective_batch_size for gx in grads]
+        opt(learning_rate, grads)
+        if ema is not None:
+            ema()
+        return grads
 
+    # TODO check how this behaves with the new signature of calc_grads()
+    if parallel:
+        calc_grads = objax.Parallel(
+            calc_grads,
+            reduce=lambda x: x[0],
+            vc=train_vars,
+        )
+        apply_grads = objax.Parallel(
+            apply_grads,
+            reduce=np.sum,
+            vc=train_vars,
+        )
     else:
+        # pass
+        calc_grads = objax.Jit(calc_grads)
+        apply_grads = objax.Jit(apply_grads)
 
-        @objax.Function.with_vars(train_vars)
-        def train_op(
-            image_batch,
-            label_batch,
-            learning_rate,
-        ):
-            # assert image_batch.shape[0] == effective_batch_size
-            image_batch = augment_op(image_batch)
-            label_batch = label_op(label_batch)
-            if n_augmentations > 1:
-                label_batch = jn.repeat(
-                    label_batch[:, jn.newaxis], n_augmentations, axis=1
-                )
-                if not isinstance(grad_calc, ClipAndAccumulateGrads):
-                    ibs = image_batch.shape
-                    image_batch = image_batch.reshape(ibs[0] * ibs[1], *ibs[2:])
-                    label_batch = label_batch.flatten()
-            elif isinstance(grad_calc, ClipAndAccumulateGrads):
-                image_batch = image_batch[:, jn.newaxis, ...]
-                label_batch = label_batch[:, jn.newaxis, ...]
-
-            grads, values = grad_calc(image_batch, label_batch)
-            loss, metric_dict = values
-            if parallel:
-                if isinstance(grad_calc, ClipAndAccumulateGrads):
-                    grads = objax.functional.parallel.psum(grads)
-                    loss = objax.functional.parallel.psum(loss)
-                else:
-                    grads = objax.functional.parallel.pmean(grads)
-                    loss = objax.functional.parallel.pmean(loss)
-            if isinstance(grad_calc, ClipAndAccumulateGrads):
-                loss = loss[0]
-                grads = grad_calc.add_noise(
-                    grads, noise, objax.random.DEFAULT_GENERATOR
-                )
-                grads = [gx / effective_batch_size for gx in grads]
-            else:
-                loss = loss[0]
-                values = (loss, values[1])
-            opt(learning_rate, grads)
-            if ema is not None:
-                ema()
-            return values, grads
-
-        if parallel:
-            train_op = objax.Parallel(train_op, reduce=np.mean, vc=train_vars)
-        else:
-            train_op = objax.Jit(train_op, static_argnums=(3,))
+    def train_op(  # pylint:disable=inconsistent-return-statements
+        image_batch, label_batch, learning_rate: float, is_update_step: bool
+    ):
+        values = calc_grads(image_batch, label_batch)
+        if is_update_step:
+            return (
+                values,
+                apply_grads(learning_rate),
+            )
 
     return train_op
 
@@ -201,9 +144,11 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
     test_aug,
     test_label_aug,
     metrics: tuple,
-    eval_loss_fn:Callable,
-    eval_every:int,
+    eval_loss_fn: Callable,
+    eval_every: int,
     grad_acc: int,
+    cur_step:int,
+    scheduler,
 ):
     start_time = time.time()
     max_batches = (
@@ -231,10 +176,12 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
     eval_main_metrics = []
     with (train_vars).replicate() if parallel else contextlib.suppress():
         for i, (img, label) in pbar:
-            add_args = {}
             if grad_acc > 1:
-                add_args["is_update_step"] = (i + 1) % grad_acc == 0
-            train_result = train_op(img, label, np.array(learning_rate), **add_args)
+                is_update_step = (i + 1) % grad_acc == 0
+                if config.general.log_wandb and is_update_step:
+                    cur_step += 1
+                    wandb.log({"steps": cur_step, "lr":learning_rate})
+            train_result = train_op(img, label, np.array(learning_rate), is_update_step=is_update_step)
             if train_result is not None:
                 (train_loss, grad_metric_dict), grads = train_result
                 train_loss = train_loss[0].item()
@@ -269,14 +216,15 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                 main_metric_batch, logging_metric_batch = calculate_metrics(
                     config.dataset.task, metrics, eval_loss_fn, eval_label, y_pred
                 )
+                scheduler.update_score(main_metric_batch[1])
                 eval_main_metrics.append(main_metric_batch)
                 if config.general.log_wandb:
                     wandb.log({"val": logging_metric_batch})
                 else:
                     print(f"validation_set:")
                     for name, value in logging_metric_batch.items():
-                        print(f"\t{name}: {value}")    
-    return time.time() - start_time, eval_main_metrics[-1]
+                        print(f"\t{name}: {value}")
+    return time.time() - start_time, eval_main_metrics[-1], cur_step
 
 
 def calculate_metrics(task, metrics, loss_fn, correct, predicted):

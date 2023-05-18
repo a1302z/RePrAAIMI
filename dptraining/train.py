@@ -233,7 +233,7 @@ def main(
         lambda_reg = config.DP.alpha * config.DP.r
         wandb.log({"lambda_reg": lambda_reg})
 
-    epoch_time = []
+    epoch_time, cur_step = [], 0
     epoch_iter: Iterable
     if config.general.log_wandb:
         epoch_iter = tqdm(
@@ -245,7 +245,7 @@ def main(
     else:
         epoch_iter = range(config.hyperparams.epochs)
     for epoch, learning_rate in zip(epoch_iter, scheduler):
-        cur_epoch_time, metric = train(
+        cur_epoch_time, metric, cur_step = train(
             config=config,
             train_loader=train_loader,
             train_op=train_op,
@@ -260,6 +260,8 @@ def main(
             eval_loss_fn=test_loss_fn,
             eval_every=10,
             grad_acc=grad_acc,
+            cur_step=cur_step,
+            scheduler=scheduler
         )
 
         if config.general.log_wandb:
