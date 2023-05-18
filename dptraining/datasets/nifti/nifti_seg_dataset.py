@@ -115,6 +115,7 @@ class NiftiSegmentationDataset(Dataset):
             else:
                 scan = self.database[file_key]["image"]
                 label = self.database[file_key]["label"]
+            scan, label = np.array(scan), np.array(label)
         else:
             scan, label = self.load_nifti_files(index, img_file, label_file)
             if self.database:

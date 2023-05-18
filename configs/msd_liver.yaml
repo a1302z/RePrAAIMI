@@ -20,11 +20,9 @@ dataset:
   root: ./data/MSD/
   train_val_split: 0.9
   nifti_seg_options:
+    database: ./data/MSD/Task03_Liver/db.hdf5
     test_split: 0.1
-    resolution: 128
     msd_subtask: liver
-    cache: True
-    # slice_thickness: 1.0
     normalization_type: gaussian
     n_slices: 50
     data_stats:

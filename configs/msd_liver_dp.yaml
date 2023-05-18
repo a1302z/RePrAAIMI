@@ -20,13 +20,10 @@ dataset:
   root: ./data/MSD/
   train_val_split: 0.9
   nifti_seg_options:
+    database: ./data/MSD/Task03_Liver/db.hdf5
     test_split: 0.1
-    resolution: 128
     msd_subtask: liver
-    cache: True
-    # slice_thickness: 1.0
     normalization_type: gaussian
-    n_slices: 50
     data_stats:
       mean: -81.91
       std: 8.736
@@ -38,6 +35,23 @@ loader:
   num_workers: 4
   prefetch_factor: 2
   collate_fn: numpy
+train_transforms:
+  random_crop:
+    apply_to: 'images_and_labels'
+    size:
+      - 128
+      - 128
+      - 50
+# augmentations:
+#   consecutive_augmentations:
+#     multiplicity: 2
+#     apply_to: 'images_and_labels'
+#     augmentations:
+#       random_crop:
+#         size:
+#           - 128
+#           - 128
+#           - 50
 model:
   dim3: True
   name: unet
