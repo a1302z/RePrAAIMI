@@ -31,7 +31,7 @@ loader:
   collate_fn: numpy
 augmentations:
   consecutive_augmentations:
-    multiplicity: 8
+    multiplicity: 6
     consecutive_augmentations:
       random_img_shift:
         max_shift: 4
@@ -48,7 +48,7 @@ model:
   ensemble: 1
   extra_args:
     depth: 16
-    width: 2
+    width: 4
     scale_norm: True
 optim:
   name: nadam
@@ -60,7 +60,7 @@ ema:
   decay: 0.001
 hyperparams:
   epochs: 75
-  batch_size: 512
+  batch_size: 256
   batch_size_test: 512
   lr: 2e-3
   # momentum: 0.9
@@ -80,7 +80,7 @@ DP:
   max_per_sample_grad_norm: 1.0
   delta: 1e-5
   norm_acc: False
-  grad_acc_steps: 8
+  grad_acc_steps: 16
   rsqrt_noise_adapt: False
   glrt_assumption: False
   bam: False

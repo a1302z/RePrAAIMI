@@ -2,7 +2,7 @@ program: dptraining/train.py
 project: cifar10-DP
 method: bayes
 metric: 
-  name: val.accuracy
+  name: val.accuracy_score
   goal: maximize
 parameters:
   augmentations.consecutive_augmentations.consecutive_augmentations.random_img_shift.max_shift:
@@ -26,6 +26,8 @@ parameters:
     distribution: uniform
     min: 4e-4
     max: 6e-3
+name:
+  "WRN16-4 sweep"
 
 command:
   - ${env}
