@@ -14,7 +14,7 @@ import pandas as pd
 
 import os
 
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 sn.set_theme(
     context="notebook",

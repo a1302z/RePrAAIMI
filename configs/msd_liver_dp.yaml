@@ -6,7 +6,7 @@ general:
   parallel: False
   eval_train: True
   make_save_str_unique: True
-  eval_init: False
+  eval_init: True
   # use_pretrained_model: msd_pancreas_unet_4-3-convwsnw_mp_gn_mish_resilient-flower-4_2023-01-04_11-51-58.npz
 wandb:
   project: msd_dp
@@ -33,7 +33,7 @@ dataset:
     ct_window: 
       low: -150
       high: 200
-    assume_same_settings: False
+    assume_same_settings: True
 # augmentations:
 #   consecutive_augmentations:
 #     multiplicity: 16
@@ -59,22 +59,22 @@ model:
   normalization: gn
   extra_args:
     out_channels: 3
-    channels: 4
+    channels: 16
 optim:
   name: nadam
 loss: 
   type: dice
   reduction: mean
   binary_loss: False
-  class_weights: 
-    - 0.1
-    - 0.4
-    - 0.5
+  # class_weights: 
+  #   - 0.1
+  #   - 0.4
+  #   - 0.5
 # ema:
 #   use_ema: False
 #   decay: 0.999
 hyperparams:
-  epochs: 50
+  epochs: 500
   batch_size: 1
   batch_size_test: 1
   lr: 2e-3
@@ -100,6 +100,6 @@ metrics:
 #   factor: 0.5
 DP:
   epsilon: 8.0
-  max_per_sample_grad_norm: 1.0
+  max_per_sample_grad_norm: 0.046
   delta: 8e-7
   norm_acc: False

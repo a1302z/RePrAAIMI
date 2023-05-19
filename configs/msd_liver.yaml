@@ -33,8 +33,17 @@ dataset:
     ct_window: 
       low: -150
       high: 200
+    assume_same_settings: True
+# augmentations:
+#   consecutive_augmentations:
+#     random_horizontal_flips:
+#       flip_prob: 0.2
+    # random_vertical_flips:
+    #   flip_prob: 0.2
+    # random_z_flips:
+    #   flip_prob: 0.2
 loader: 
-  num_workers: 16
+  num_workers: 4
   prefetch_factor: 2
   collate_fn: numpy
 model:
@@ -55,21 +64,22 @@ loss:
   type: dice
   reduction: mean
   binary_loss: False
-  # class_weights: 
-  #   - 1e-2
-  #   - 0.5
-  #   - 1.0
-ema:
-  use_ema: False
-  decay: 0.999
+  class_weights: 
+    - 0.1
+    - 0.4
+    - 0.5
+# ema:
+#   use_ema: False
+#   decay: 0.999
 hyperparams:
-  epochs: 10
+  epochs: 500
   batch_size: 1
   batch_size_test: 1
   lr: 2e-3
   # momentum: 0.9
   # l2regularization: 1e-5
   # overfit: 2
+  grad_acc_steps: 2
 metrics:
   main:     
     fscore_avg:
@@ -86,7 +96,7 @@ metrics:
 #   patience: 20
 #   min_delta: 0.01
 #   factor: 0.5
-# earlystopping:
-#   mode: maximize
-#   patience: 100
-#   min_delta: 0.01
+earlystopping:
+  mode: maximize
+  patience: 50
+  min_delta: 0.001
