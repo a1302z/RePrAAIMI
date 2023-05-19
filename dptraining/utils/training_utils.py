@@ -273,6 +273,10 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
             add_args = {}
             if grad_acc > 1:
                 add_args["apply_norm_acc"] = (i + 1) % grad_acc == 0
+            if parallel and img.shape[0] % N_DEVICES != 0:
+                new_bs = img.shape[0] - img.shape[0] % N_DEVICES
+                img = img[:new_bs]
+                label = label[:new_bs]
             train_result = train_op(img, label, np.float32(learning_rate), **add_args)
             if train_result is not None:
                 train_loss, grads = train_result
