@@ -115,7 +115,6 @@ class NiftiSegmentationDataset(Dataset):
             else:
                 scan = self.database[file_key]["image"]
                 label = self.database[file_key]["label"]
-            scan, label = np.array(scan), np.array(label)
         else:
             scan, label = self.load_nifti_files(index, img_file, label_file)
             if self.database:
@@ -128,6 +127,9 @@ class NiftiSegmentationDataset(Dataset):
                 self.corrected_database_entry = True
         if self.transform is not None:
             scan, label = self.transform.transform_image_label(scan, label)
+        # ensure scan and label are numpy arrays
+        # (might be h5py datasets, which need to be converted)
+        scan, label = np.asarray(scan), np.asarray(label)
         if self.normalize_per_ct:
             scan = (scan - scan.mean()) / scan.std()
         # t1 = time()
