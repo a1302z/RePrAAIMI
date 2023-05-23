@@ -31,6 +31,7 @@ class DatasetName(Enum):
     tinyimagenet = 3
     fastmri = 4
     radimagenet = 5
+    MNIST = 6
 
 
 class DatasetTask(Enum):
@@ -131,6 +132,7 @@ class HyperparamsConfig:
     lr: float = MISSING
     l2regularization: Optional[float] = None
     overfit: Optional[int] = None
+    eval_every_n: Optional[int] = -1
 
 
 class SchedulerType(Enum):
@@ -171,6 +173,7 @@ class DPConfig:
     bam:Optional[bool] = False
     r:Optional[float] = None
     alpha:Optional[float] = None
+    clip_only:Optional[bool] = False
 
 
 @dataclass

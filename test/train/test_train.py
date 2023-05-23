@@ -18,6 +18,7 @@ def test_train_cifar_one_batch(utils):
         "model": {
             "name": "cifar10model",
             "num_classes": 10,
+            "in_channels":3,
         },
         "augmentations": {
             "random_vertical_flips": None,

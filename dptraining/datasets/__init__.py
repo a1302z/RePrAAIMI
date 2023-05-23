@@ -10,6 +10,7 @@ from dptraining.datasets.imagenet import ImageNetCreator
 from dptraining.datasets.radimagenet import RadImageNetCreator
 from dptraining.datasets.fmri import FMRICreator
 from dptraining.datasets.tinyimagenet import TinyImageNetCreator
+from dptraining.datasets.mnist import MNISTCreator
 from dptraining.datasets.utils import (
     collate_np_classification,
     collate_np_reconstruction,
@@ -18,7 +19,7 @@ from dptraining.utils.augment import Transformation
 
 
 SUPPORTED_FFT = (DatasetName.CIFAR10,)
-SUPPORTED_NORMALIZATION = (DatasetName.CIFAR10, DatasetName.tinyimagenet)
+SUPPORTED_NORMALIZATION = (DatasetName.CIFAR10, DatasetName.tinyimagenet, DatasetName.MNIST)
 
 
 def select_creator(config):
@@ -33,6 +34,8 @@ def select_creator(config):
             creator = FMRICreator
         case DatasetName.radimagenet:
             creator = RadImageNetCreator
+        case DatasetName.MNIST:
+            creator = MNISTCreator
         case _ as unsupported:
             raise ValueError(f"Unsupported dataset '{unsupported}'.")
     return creator
@@ -86,6 +89,8 @@ def make_dataset(config: Config):
     add_kwargs = {}
     match config.dataset.name:
         case DatasetName.CIFAR10:
+            add_kwargs["normalize_by_default"] = config.dataset.normalization
+        case DatasetName.MNIST:
             add_kwargs["normalize_by_default"] = config.dataset.normalization
     creator = select_creator(config)
     train_ds, val_ds, test_ds = creator.make_datasets(

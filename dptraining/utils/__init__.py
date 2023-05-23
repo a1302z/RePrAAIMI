@@ -38,7 +38,7 @@ def make_scheduler_from_config(config: Config):
         case SchedulerType.reduceonplateau:
             scheduler = ReduceOnPlateau(
                 base_lr=config.hyperparams.lr,
-                patience=config.scheduler.patience*config.DP.grad_acc_steps,
+                patience=config.scheduler.patience,
                 factor=config.scheduler.factor,
                 min_delta=config.scheduler.min_delta,
                 cumulative_delta=config.scheduler.cumulative_delta,

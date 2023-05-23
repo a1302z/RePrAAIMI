@@ -14,8 +14,8 @@ sys.path.insert(0, str(Path.cwd()))
 
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 # os.environ["CUDA_VISIBLE_DEVICES"] = ""
-os.environ["XLA_FLAGS"] = "--xla_gpu_force_compilation_parallelism=1"
 # os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count=8"
+os.environ["XLA_FLAGS"] = "--xla_gpu_force_compilation_parallelism=1"
 
 from dptraining.config import Config, DatasetTask
 from dptraining.config.config_store import load_config_store
@@ -54,7 +54,6 @@ def main(
         create_train_op,
         test,
         train,
-        calculate_metrics
     )
 
     np.random.seed(config.general.seed)
@@ -76,6 +75,7 @@ def main(
             settings=wandb.Settings(start_method="thread"),
             reinit=True,
         )
+    checkpoint = None
     train_loader, val_loader, test_loader = make_loader_from_config(config)
     if config.hyperparams.overfit is not None:
         val_loader = train_loader
@@ -98,7 +98,6 @@ def main(
     if config.checkpoint:
         config.checkpoint.logdir += identifying_model_str
         checkpoint = objax.io.Checkpoint(**OmegaConf.to_container(config.checkpoint))
-    else:
         checkpoint = None
 
     ema: Optional[ExponentialMovingAverage] = None
@@ -123,10 +122,11 @@ def main(
         predict_lambda, model_vars  # pylint:disable=not-callable
     )
 
-    if not config.DP:
+    if not config.DP or config.DP.clip_only:
         sampling_rate, delta, sigma, final_epsilon, total_noise = 0, 0, 0, 0, 0
         batch_expansion_factor, grad_acc = 1, 1
         effective_batch_size = config.hyperparams.batch_size
+        print("Careful! Not training with DP")
     else:
         delta = config.DP.delta
         eps_calc = EpsCalculator(config, train_loader)
@@ -175,9 +175,9 @@ def main(
     loss_class = make_loss_from_config(config)
     train_loss_fn = loss_class.create_train_loss_fn(model_vars, model)
     test_loss_fn = loss_class.create_test_loss_fn()
-    metric_fns = make_metrics(config)
-
     loss_gv = create_loss_gradient(config, model_vars, train_loss_fn)
+
+    metric_fns = make_metrics(config)
 
     augmenter = Transformation.from_dict_list(
         OmegaConf.to_container(config.augmentations)
@@ -229,11 +229,8 @@ def main(
         parallel=config.general.parallel,
         ema=ema,
     )
-    if config.general.log_wandb and config.DP.bam:
-        lambda_reg = config.DP.alpha * config.DP.r
-        wandb.log({"lambda_reg": lambda_reg})
 
-    epoch_time, cur_step = [], 0
+    epoch_time = []
     epoch_iter: Iterable
     if config.general.log_wandb:
         epoch_iter = tqdm(
@@ -245,29 +242,24 @@ def main(
     else:
         epoch_iter = range(config.hyperparams.epochs)
     for epoch, learning_rate in zip(epoch_iter, scheduler):
-        cur_epoch_time, metric, cur_step = train(
+        cur_epoch_time = train(
             config=config,
             train_loader=train_loader,
             train_op=train_op,
             learning_rate=learning_rate,
             train_vars=train_vars,
-            parallel=config.general.parallel,
             val_loader=val_loader,
-            predict_op=predict_op_jit,
-            test_aug=test_aug,
-            test_label_aug=test_label_aug,
+            predict_op=predict_op_parallel if config.general.parallel else predict_op_jit,
             metrics=metric_fns,
             eval_loss_fn=test_loss_fn,
-            eval_every=10,
+            test_aug=test_aug,
+            test_label_aug=test_label_aug,
+            parallel=config.general.parallel,
             grad_acc=grad_acc,
-            cur_step=cur_step,
-            scheduler=scheduler
+            eval_every_n=config.hyperparams.eval_every_n,
         )
-
         if config.general.log_wandb:
-            wandb.log(
-                {"epoch": epoch, "lr": learning_rate, "epoch_time": cur_epoch_time}
-            )
+            wandb.log({"epoch": epoch, "lr": learning_rate})
         else:
             print(f"Train Epoch: {epoch+1} \t took {cur_epoch_time} seconds")
         epoch_time.append(cur_epoch_time)
@@ -284,6 +276,22 @@ def main(
                 metrics=metric_fns,
                 loss_fn=test_loss_fn,
             )
+        if val_loader is not None:
+            metric = test(
+                config,
+                val_loader,
+                predict_op_parallel if config.general.parallel else predict_op_jit,
+                test_aug,
+                test_label_aug,
+                model_vars,
+                config.general.parallel,
+                "val",
+                metrics=metric_fns,
+                loss_fn=test_loss_fn,
+            )
+            scheduler.update_score(metric)
+        else:
+            metric = None
         if config.DP:
             epsilon = objax.privacy.dpsgd.analyze_dp(
                 q=sampling_rate,

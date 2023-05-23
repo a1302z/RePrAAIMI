@@ -1,0 +1,77 @@
+defaults:
+  - base_config
+  - _self_
+project: cifar-DP
+general:
+  log_wandb: False
+  parallel: False
+  eval_train: True
+# checkpoint:
+#   logdir: cifar10dpckpts
+#   keep_ckpts: 2
+#   makedir: True
+dataset: 
+  task: classification
+  name: CIFAR10
+  root: ./data
+  train_val_split: 0.9
+  normalization: True
+  fft: False
+metrics:  
+  main: 
+    accuracy_score: 
+  logging:
+    f1_score:
+      average: macro
+loader: 
+  num_workers: 2
+  prefetch_factor: 1
+  collate_fn: numpy
+model:
+  name: cifar10model
+  in_channels: 3
+  num_classes: 10
+  # conv: convws_nw
+  # activation: mish
+  # normalization: gn
+  # pooling: avgpool
+  # ensemble: 1
+  # extra_args:
+  #   scale_norm: True
+  #   depth: 16
+  #   width: 4
+optim:
+  name: momentum
+  args: {"momentum": 0.8}
+loss: 
+  type: cse
+  reduction: mean
+hyperparams:
+  epochs: 100
+  batch_size: 16
+  batch_size_test: 1
+  lr: 0.01
+  overfit: 1
+scheduler:
+  type: reduceonplateau
+  normalize_lr: False
+  patience: 20
+  min_delta: 0.005
+  factor: 0.5
+# earlystopping:
+#   mode: maximize
+#   patience: 100
+#   min_delta: 0.01
+DP:
+  epsilon: 1_000_000_000
+  #sigma: 0.00001
+  max_per_sample_grad_norm: 100_000
+  delta: 1e-5
+  norm_acc: False
+  grad_acc_steps: 1
+  rsqrt_noise_adapt: False
+  glrt_assumption: False
+  bam: False
+  r: 0.05
+  alpha: 0.8
+  clip_only: True

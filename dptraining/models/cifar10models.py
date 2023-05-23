@@ -4,9 +4,9 @@ from functools import partial
 
 
 class Cifar10ConvNet(objax.nn.Sequential):
-    def __init__(self, nclass=10):
+    def __init__(self, nclass=10, in_channels=3):
         ops = (
-            objax.nn.Conv2D(3, 32, k=3, strides=1, padding=1),
+            objax.nn.Conv2D(in_channels, 32, k=3, strides=1, padding=1),
             objax.functional.relu,
             partial(objax.functional.average_pool_2d, size=2, strides=2),
             objax.nn.Conv2D(32, 64, k=3, strides=1, padding=1),

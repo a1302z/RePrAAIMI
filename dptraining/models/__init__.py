@@ -52,6 +52,7 @@ from dptraining.models.layers import ConvCentering2D, ConvWS2D
 from dptraining.models.unet import Unet
 from dptraining.models.resnet9 import ResNet9
 from dptraining.models.smoothnet import get_smoothnet
+from dptraining.models.tiny_cnn import SimpleNet
 
 
 def get_kwargs(func: Callable, already_defined: list[str], model_config: ModelConfig):
@@ -255,7 +256,13 @@ def make_normal_model_from_config(config: Config) -> Callable:
                 warnings.warn("No choice of activations supported for cifar 10 model")
             if config.model.normalization is not None:
                 warnings.warn("No choice of normalization supported for cifar 10 model")
-            return Cifar10ConvNet(nclass=config.model.num_classes)
+            return Cifar10ConvNet(nclass=config.model.num_classes, in_channels=config.model.in_channels)
+        case RealModelName.tiny_cnn.value:
+            if config.model.activation is not None:
+                warnings.warn("No choice of activations supported for tiny cnn model")
+            if config.model.normalization is not None:
+                warnings.warn("No choice of normalization supported for tiny cnn model")
+            return SimpleNet(num_classes=config.model.num_classes, in_channels=config.model.in_channels)
         case RealModelName.resnet18.value:
             kwargs = get_kwargs(
                 resnet_v2.ResNet18,
