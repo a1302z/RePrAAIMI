@@ -1,0 +1,59 @@
+defaults:
+  - base_config
+  - _self_
+project: MNIST-DP
+general:
+  log_wandb: False
+  parallel: False
+  eval_train: False
+  use_pretrained_model: 
+dataset: 
+  task: classification
+  name: MNIST
+  root: ./data
+  train_val_split: 0.9
+  normalization: True
+  fft: False
+metrics:
+  main: 
+    accuracy_score: 
+  logging:
+    accuracy_score:
+scheduler:
+  type: reduceonplateau
+  normalize_lr: False
+  patience: 5
+  min_delta: 0.01
+  factor: 0.9
+loader: 
+  num_workers: 16
+  prefetch_factor: 32
+  collate_fn: numpy
+model:
+  name: cifar10model
+  in_channels: 1
+  num_classes: 10
+optim:
+  name: nadam
+loss: 
+  type: cse
+  reduction: mean
+hyperparams:
+  epochs: 50
+  batch_size: 2048
+  batch_size_test: 512
+  lr: 1e-3
+
+DP:
+  epsilon: 2
+  # sigma: 3
+  max_per_sample_grad_norm: 0.25
+  delta: 1e-5
+  norm_acc: False
+  grad_acc_steps: 2
+  rsqrt_noise_adapt: False
+  glrt_assumption: False
+  bam: False
+  r: 0.1
+  alpha: 0.31
+  clip_only: False

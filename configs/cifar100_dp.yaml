@@ -1,9 +1,9 @@
 defaults:
   - base_config
   - _self_
-project: cifar10-DP
+project: cifar100-DP
 general:
-  log_wandb: True
+  log_wandb: False
   parallel: False
   eval_train: True
   #use_pretrained_model: 
@@ -14,19 +14,17 @@ general:
 #   makedir: True
 dataset: 
   task: classification
-  name: CIFAR10
+  name: CIFAR100
   root: ./data
   train_val_split: 0.9
   normalization: True
   fft: False
-  undersample_class: True
-  undersample_factor: 0.2
 metrics:
   main: 
     accuracy_score: 
   logging:
     classification_report:
-      output_dict: True
+      output_dict: False
       zero_division: 0
 loader: 
   num_workers: 16
@@ -43,7 +41,7 @@ augmentations:
 model:
   name: resnet9
   in_channels: 3
-  num_classes: 10
+  num_classes: 100
   conv: convws_nw
   activation: mish
   normalization: gn
@@ -60,7 +58,7 @@ ema:
   use_ema: False
   decay: 0.001
 hyperparams:
-  epochs: 50
+  epochs: 30
   batch_size: 512
   batch_size_test: 512
   lr: 2e-3

@@ -6,6 +6,7 @@ from deepee.dataloader import UniformWORSubsampler
 
 from dptraining.config import Config, DatasetName, LoaderCollateFn, DatasetTask
 from dptraining.datasets.cifar10 import CIFAR10Creator
+from dptraining.datasets.cifar100 import CIFAR100Creator
 from dptraining.datasets.imagenet import ImageNetCreator
 from dptraining.datasets.radimagenet import RadImageNetCreator
 from dptraining.datasets.fmri import FMRICreator
@@ -19,7 +20,7 @@ from dptraining.utils.augment import Transformation
 
 
 SUPPORTED_FFT = (DatasetName.CIFAR10,)
-SUPPORTED_NORMALIZATION = (DatasetName.CIFAR10, DatasetName.tinyimagenet, DatasetName.MNIST)
+SUPPORTED_NORMALIZATION = (DatasetName.CIFAR10, DatasetName.tinyimagenet, DatasetName.MNIST, DatasetName.CIFAR100)
 
 
 def select_creator(config):
@@ -36,6 +37,8 @@ def select_creator(config):
             creator = RadImageNetCreator
         case DatasetName.MNIST:
             creator = MNISTCreator
+        case DatasetName.CIFAR100:
+            creator = CIFAR100Creator
         case _ as unsupported:
             raise ValueError(f"Unsupported dataset '{unsupported}'.")
     return creator
@@ -90,8 +93,17 @@ def make_dataset(config: Config):
     match config.dataset.name:
         case DatasetName.CIFAR10:
             add_kwargs["normalize_by_default"] = config.dataset.normalization
+            if config.dataset.undersample_class:
+                add_kwargs['undersample_class'] = True
+                add_kwargs['undersample_factor'] = config.dataset.undersample_factor
         case DatasetName.MNIST:
             add_kwargs["normalize_by_default"] = config.dataset.normalization
+        case DatasetName.CIFAR100:
+            add_kwargs["normalize_by_default"] = config.dataset.normalization
+            if config.dataset.undersample_class:
+                add_kwargs['undersample_class'] = True
+                add_kwargs['undersample_factor'] = config.dataset.undersample_factor
+
     creator = select_creator(config)
     train_ds, val_ds, test_ds = creator.make_datasets(
         config, (train_tf, val_tf, test_tf), **add_kwargs

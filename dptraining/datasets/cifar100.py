@@ -3,7 +3,7 @@ from typing import Any, Tuple
 import numpy as np
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, Dataset
-from torchvision.datasets import CIFAR10
+from torchvision.datasets import CIFAR100
 
 from dptraining.config import Config
 from dptraining.datasets.base_creator import DataLoaderCreator
@@ -11,6 +11,7 @@ from dptraining.datasets.base_creator import DataLoaderCreator
 
 def fft_conversion(img, axes=None):
     return np.fft.fftshift(np.fft.fft2(img, axes=axes), axes=axes)
+
 
 
 def undersample(image_arr:np.ndarray, label_arr:np.ndarray, class_index:int=8, factor:float=0.25, plot_hist:bool=False):
@@ -25,7 +26,7 @@ def undersample(image_arr:np.ndarray, label_arr:np.ndarray, class_index:int=8, f
     return image_arr[out_idcs], label_arr[out_idcs]
 
 
-class NumpyCIFAR10(CIFAR10):
+class NumpyCIFAR100(CIFAR100):
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         img, target = self.data[index], self.targets[index]
 
@@ -38,9 +39,9 @@ class NumpyCIFAR10(CIFAR10):
         return img, target
 
 
-class CIFAR10Creator(DataLoaderCreator):
-    CIFAR_MEAN = (0.4914, 0.4822, 0.4465)
-    CIFAR_STDDEV = (0.24703279, 0.24348423, 0.26158753)
+class CIFAR100Creator(DataLoaderCreator):
+    CIFAR_MEAN = (0.5074, 0.4867, 0.4411)
+    CIFAR_STDDEV = (0.2011, 0.1987, 0.2025)
 
     @staticmethod
     def reshape_images(image: np.array):
@@ -52,8 +53,8 @@ class CIFAR10Creator(DataLoaderCreator):
     @staticmethod
     def normalize_images(image: np.array):
         image = (
-            image - np.reshape(CIFAR10Creator.CIFAR_MEAN, [1, 3, 1, 1])
-        ) / np.reshape(CIFAR10Creator.CIFAR_STDDEV, [1, 3, 1, 1])
+            image - np.reshape(CIFAR100Creator.CIFAR_MEAN, [1, 3, 1, 1])
+        ) / np.reshape(CIFAR100Creator.CIFAR_STDDEV, [1, 3, 1, 1])
         return image
 
     @staticmethod
@@ -67,7 +68,6 @@ class CIFAR10Creator(DataLoaderCreator):
         numpy_optimisation=True,
         normalize_by_default=True,
         undersample_class:bool=False,
-        undersample_factor:float=0.0,
     ) -> Tuple[Dataset, Dataset, Dataset]:
         train_tf, val_tf, test_tf = transforms
         train_kwargs = {
@@ -90,23 +90,23 @@ class CIFAR10Creator(DataLoaderCreator):
         }
         if normalize_by_default and not numpy_optimisation:
             raise ValueError(
-                "CIFAR10 Creator can only normalize by default if numpy optimisation is activated"
+                "CIFAR100 Creator can only normalize by default if numpy optimisation is activated"
             )
         if numpy_optimisation:
-            train_ds = NumpyCIFAR10(**train_kwargs)
-            val_ds = NumpyCIFAR10(**val_kwargs)
-            test_ds = NumpyCIFAR10(**test_kwargs)
-            train_ds.data = CIFAR10Creator.reshape_images(train_ds.data)
-            val_ds.data = CIFAR10Creator.reshape_images(val_ds.data)
-            test_ds.data = CIFAR10Creator.reshape_images(test_ds.data)
+            train_ds = NumpyCIFAR100(**train_kwargs)
+            val_ds = NumpyCIFAR100(**val_kwargs)
+            test_ds = NumpyCIFAR100(**test_kwargs)
+            train_ds.data = CIFAR100Creator.reshape_images(train_ds.data)
+            val_ds.data = CIFAR100Creator.reshape_images(val_ds.data)
+            test_ds.data = CIFAR100Creator.reshape_images(test_ds.data)
         else:
-            train_ds = CIFAR10(**train_kwargs)
-            val_ds = CIFAR10(**val_kwargs)
-            test_ds = CIFAR10(**test_kwargs)
+            train_ds = CIFAR100(**train_kwargs)
+            val_ds = CIFAR100(**val_kwargs)
+            test_ds = CIFAR100(**test_kwargs)
         if normalize_by_default:
-            train_ds.data = CIFAR10Creator.normalize_images(train_ds.data)
-            val_ds.data = CIFAR10Creator.normalize_images(val_ds.data)
-            test_ds.data = CIFAR10Creator.normalize_images(test_ds.data)
+            train_ds.data = CIFAR100Creator.normalize_images(train_ds.data)
+            val_ds.data = CIFAR100Creator.normalize_images(val_ds.data)
+            test_ds.data = CIFAR100Creator.normalize_images(test_ds.data)
         if config.dataset.fft:
             if not numpy_optimisation:
                 raise ValueError("FFT only works with numpy optimisation")
@@ -126,7 +126,7 @@ class CIFAR10Creator(DataLoaderCreator):
             val_ds.data = val_data
             val_ds.targets = val_targets
         if undersample_class:
-            train_ds.data, train_ds.targets = undersample(train_ds.data, train_ds.targets, factor=undersample_factor)
+            train_ds.data, train_ds.targets = undersample(train_ds.data, train_ds.targets)
 
         return train_ds, val_ds, test_ds
 

@@ -18,7 +18,7 @@ class GeneralConfig:
     log_wandb: bool = False
     parallel: bool = True
     cpu: bool = False
-    seed: int = 0
+    seed: Optional[int] = 0
     use_pretrained_model: Optional[str] = None
     save_path: Optional[str] = None
     eval_train: bool = MISSING
@@ -32,6 +32,7 @@ class DatasetName(Enum):
     fastmri = 4
     radimagenet = 5
     MNIST = 6
+    CIFAR100 = 7
 
 
 class DatasetTask(Enum):
@@ -73,6 +74,8 @@ class DatasetConfig:
     test_split: float = 0.1
     radimagenet: Optional[RadimagenetConfig] = None
     fmri: Optional[FmriConfig] = None
+    undersample_class:Optional[bool] = False 
+    undersample_factor:Optional[float] = 0.0
 
 
 class LoaderCollateFn(Enum):
@@ -166,6 +169,7 @@ class DPConfig:
     max_per_sample_grad_norm: float = MISSING
     delta: float = MISSING
     sigma: Optional[float] = None
+    clip_only:Optional[bool] = False
     norm_acc: bool = MISSING
     grad_acc_steps: int = 1
     rsqrt_noise_adapt: bool = False
@@ -173,7 +177,7 @@ class DPConfig:
     bam:Optional[bool] = False
     r:Optional[float] = None
     alpha:Optional[float] = None
-    clip_only:Optional[bool] = False
+    
 
 
 @dataclass
