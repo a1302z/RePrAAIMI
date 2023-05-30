@@ -12,15 +12,17 @@ from dptraining.datasets.radimagenet import RadImageNetCreator
 from dptraining.datasets.fmri import FMRICreator
 from dptraining.datasets.tinyimagenet import TinyImageNetCreator
 from dptraining.datasets.mnist import MNISTCreator
+from dptraining.datasets.celeba import CelebACreator
 from dptraining.datasets.utils import (
     collate_np_classification,
     collate_np_reconstruction,
+    collate_np_classification_attributes,
 )
 from dptraining.utils.augment import Transformation
 
 
 SUPPORTED_FFT = (DatasetName.CIFAR10,)
-SUPPORTED_NORMALIZATION = (DatasetName.CIFAR10, DatasetName.tinyimagenet, DatasetName.MNIST, DatasetName.CIFAR100)
+SUPPORTED_NORMALIZATION = (DatasetName.CIFAR10, DatasetName.tinyimagenet, DatasetName.MNIST, DatasetName.CIFAR100, DatasetName.CelebA)
 
 
 def select_creator(config):
@@ -39,27 +41,33 @@ def select_creator(config):
             creator = MNISTCreator
         case DatasetName.CIFAR100:
             creator = CIFAR100Creator
+        case DatasetName.CelebA:
+            creator = CelebACreator
+            assert config.dataset.has_group_attributes, "CelebA has group attributes, so pls enable in the config"
         case _ as unsupported:
             raise ValueError(f"Unsupported dataset '{unsupported}'.")
     return creator
 
 
-def modify_collate_fn_config(loader_config, task):
+def modify_collate_fn_config(loader_config, config: Config):
 
     if "collate_fn" in loader_config:
         if (
             loader_config["collate_fn"] == LoaderCollateFn.numpy
-            and task == DatasetTask.classification
+            and config.dataset.task == DatasetTask.classification
         ):
-            loader_config["collate_fn"] = collate_np_classification
+            if config.dataset.has_group_attributes:
+                loader_config["collate_fn"] = collate_np_classification_attributes
+            else:
+                loader_config["collate_fn"] = collate_np_classification
         elif (
             loader_config["collate_fn"] == LoaderCollateFn.numpy
-            and task == DatasetTask.reconstruction
+            and config.dataset.task == DatasetTask.reconstruction
         ):
             loader_config["collate_fn"] = collate_np_reconstruction
         else:
             raise ValueError(
-                f"collate_fn {loader_config['collate_fn']} for {task} not supported."
+                f"collate_fn {loader_config['collate_fn']} for {config.dataset.task} not supported."
             )
 
 
@@ -121,7 +129,7 @@ def make_loader_from_config(config):
     if loader_kwargs["num_workers"] is None:
         del loader_kwargs["num_workers"]
 
-    modify_collate_fn_config(loader_kwargs, config.dataset.task)
+    modify_collate_fn_config(loader_kwargs, config)
     if "train_loader" in loader_kwargs and "test_loader" in loader_kwargs:
         train_loader_kwargs = loader_kwargs["train_loader"]
         test_loader_kwargs = loader_kwargs["test_loader"]

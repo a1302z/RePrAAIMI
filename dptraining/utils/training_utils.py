@@ -86,7 +86,7 @@ def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
                 vc=train_vars,
             )
         else:
-            # pass
+            #pass
             calc_grads = objax.Jit(calc_grads)
             apply_grads = objax.Jit(apply_grads)
 
@@ -208,13 +208,20 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
         )
         max_batches = max_batches - (max_batches % grad_acc)
     pbar = tqdm(
-        enumerate(train_loader),
         total=max_batches,
         desc="Training",
         leave=False,
     )
+    train_iter = enumerate(iter(train_loader))
     with (train_vars).replicate() if parallel else contextlib.suppress():
-        for i, (img, label) in pbar:
+        while True:
+            try:
+                if not config.dataset.has_group_attributes:
+                    i, (img, label) = next(train_iter)
+                else:
+                    i, (img, attrs, label) = next(train_iter)
+            except StopIteration:
+                break
             add_args = {}
             if grad_acc > 1:
                 add_args["is_update_step"] = (i + 1) % grad_acc == 0
@@ -245,7 +252,13 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                 if config.general.log_wandb:
                     wandb.log({"train": logging_metric_batch})
                 # validation metrics
-                eval_img, eval_label = next(val_iter)
+                try:
+                    if config.dataset.has_group_attributes:
+                        eval_img, eval_attrs, eval_label = next(val_iter)
+                    else:
+                        eval_img, eval_label = next(val_iter)
+                except StopIteration:
+                    break
                 eval_img = test_aug(eval_img)
                 eval_label = test_label_aug(eval_label)
                 y_pred = predict_op(eval_img)
@@ -256,6 +269,8 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                     wandb.log({"val": logging_metric_batch})
             if i + 1 >= max_batches:
                 break
+            pbar.update(1)
+    pbar.close()
     return time.time() - start_time
 
 
@@ -313,12 +328,20 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
             if config.hyperparams.overfit is not None
             else len(test_loader)
         )
-        for i, (image, label) in tqdm(
-            enumerate(test_loader),
+        val_iter = enumerate(iter(test_loader))
+        pbar = tqdm(
             total=max_batches,
             desc="Testing",
             leave=False,
-        ):
+        )
+        while True:
+            try:
+                if not config.dataset.has_group_attributes:
+                    i, (image, label) = next(val_iter)
+                else:
+                    i, (image, attrs, label) = next(val_iter)
+            except StopIteration:
+                break
             image = test_aug(image)
             label = test_label_aug(label)
             n_images = image.shape[0]
@@ -337,6 +360,7 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
             else:
                 correct.append(label)
                 scores.append(y_pred)
+            pbar.update(1)
             if i + 1 >= max_batches:
                 break
     if per_batch_metrics:

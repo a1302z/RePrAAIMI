@@ -33,6 +33,8 @@ class DatasetName(Enum):
     radimagenet = 5
     MNIST = 6
     CIFAR100 = 7
+    CelebA = 8
+    mimic = 9
 
 
 class DatasetTask(Enum):
@@ -76,6 +78,7 @@ class DatasetConfig:
     fmri: Optional[FmriConfig] = None
     undersample_class:Optional[bool] = False 
     undersample_factor:Optional[float] = 0.0
+    has_group_attributes:Optional[bool] = False
 
 
 class LoaderCollateFn(Enum):
@@ -106,6 +109,7 @@ class OptimConfig:
 class LossType(Enum):
     cse = 1
     l1 = 2
+    bcse = 3
 
 
 class LossReduction(Enum):

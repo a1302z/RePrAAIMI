@@ -68,6 +68,37 @@ class CSELogitsSparse(LossFunctionCreator):
             return loss.mean()
         return loss_fn
 
+class BCSELogitsSparse(LossFunctionCreator):
+    def create_train_loss_fn(self, model_vars, model):
+        @objax.Function.with_vars(model_vars)
+        def loss_fn(inpt, label):
+            logit = model(inpt, training=True).squeeze()
+            assert logit.shape == label.shape , f"Found mismatching shapes for logits ({logit.shape}) and labels ({label.shape})"
+            loss = objax.functional.loss.sigmoid_cross_entropy_logits(logit, label)
+            match self._config.reduction:
+                case LossReduction.sum:
+                    return loss.sum()
+                case LossReduction.mean:
+                    return loss.mean()
+                case _ as reduction:
+                    raise RuntimeError(f"Not supported loss reduction: {reduction}")
+
+        return loss_fn
+
+    def create_test_loss_fn(self):
+        def loss_fn(predicted, correct):
+            predicted = predicted.squeeze()
+            assert predicted.shape == correct.shape , f"Found mismatching shapes for logits ({predicted.shape}) and labels ({correct.shape})"
+            loss = objax.functional.loss.sigmoid_cross_entropy_logits(predicted, correct)
+            match self._config.reduction:
+                case LossReduction.sum:
+                    return loss.sum()
+                case LossReduction.mean:
+                    return loss.mean()
+                case _ as reduction:
+                    raise RuntimeError(f"Not supported loss reduction: {reduction}")
+
+        return loss_fn
 
 class L1Loss(LossFunctionCreator):
     def create_train_loss_fn(self, model_vars, model):
