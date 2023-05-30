@@ -3,7 +3,7 @@ defaults:
   - _self_
 project: cifar100-DP
 general:
-  log_wandb: False
+  log_wandb: True
   parallel: False
   eval_train: True
   #use_pretrained_model: 
@@ -59,7 +59,7 @@ ema:
   decay: 0.001
 hyperparams:
   epochs: 30
-  batch_size: 512
+  batch_size: 256
   batch_size_test: 512
   lr: 2e-3
   eval_every_n: 20
@@ -79,7 +79,7 @@ DP:
   grad_acc_steps: 1
   rsqrt_noise_adapt: False
   glrt_assumption: False
-  bam: False
+  bam: True
   r: 0.1
   alpha: 0.31
  

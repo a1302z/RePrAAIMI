@@ -84,10 +84,7 @@ class ClipAndAccumulateGrads(Module):
         )
         g1 = [g/batch_size for g in g1]
         g2 = [g/batch_size for g in g2]
-        dot_product = jnp.dot(flatten(g1), flatten(g2))
-        norm_g1 = jnp.linalg.norm(jnp.array([jnp.linalg.norm(g) for g in g1]))
-        norm_g2 = jnp.linalg.norm(jnp.array([jnp.linalg.norm(g) for g in g2]))
-        return dot_product / (norm_g1 * norm_g2)
+        return jnp.dot(flatten(g1), flatten(g2)) / (jnp.linalg.norm(flatten(g1)) * jnp.linalg.norm(flatten(g2)))
 
     def l2_bias(self, g, g_clip, batch_size:int):
         """Computes L2-norm of bias vector ||Bias(\hat{g}, \hat{g}_priv)||_2"""

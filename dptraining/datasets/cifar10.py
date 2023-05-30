@@ -45,12 +45,13 @@ class CIFAR10Creator(DataLoaderCreator):
     @staticmethod
     def reshape_images(image: np.array):
         image = image.astype(np.float32)
-        image = image / 255.0
-        image = image.transpose(0, 3, 1, 2)
+        #image = image / 255.0
+        image = image.transpose(0, 3, 1, 2) #convert to CHW
         return image
 
     @staticmethod
     def normalize_images(image: np.array):
+        image /= 255.0
         image = (
             image - np.reshape(CIFAR10Creator.CIFAR_MEAN, [1, 3, 1, 1])
         ) / np.reshape(CIFAR10Creator.CIFAR_STDDEV, [1, 3, 1, 1])

@@ -52,6 +52,7 @@ class CIFAR100Creator(DataLoaderCreator):
 
     @staticmethod
     def normalize_images(image: np.array):
+        image /= 255.0
         image = (
             image - np.reshape(CIFAR100Creator.CIFAR_MEAN, [1, 3, 1, 1])
         ) / np.reshape(CIFAR100Creator.CIFAR_STDDEV, [1, 3, 1, 1])
