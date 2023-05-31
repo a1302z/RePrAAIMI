@@ -25,7 +25,7 @@ metrics:
     accuracy_score: 
   logging:
     classification_report:
-      output_dict: True
+      output_dict: False
       zero_division: 0
 loader: 
   num_workers: 16
@@ -71,16 +71,16 @@ scheduler:
   patience: 5
   min_delta: 0.01
   factor: 0.5
-# DP:
-#   epsilon: 8
-#   # sigma: 3
-#   max_per_sample_grad_norm: 1.0
-#   delta: 1e-5
-#   norm_acc: False
-#   grad_acc_steps: 8
-#   rsqrt_noise_adapt: False
-#   glrt_assumption: False
-#   bam: False
-#   r: 0.1
-#   alpha: 0.31
+DP:
+  epsilon: 8
+  # sigma: 3
+  max_per_sample_grad_norm: 1.0
+  delta: 1e-5
+  norm_acc: False
+  grad_acc_steps: 8
+  rsqrt_noise_adapt: False
+  glrt_assumption: False
+  bam: False
+  r: 0.1
+  alpha: 0.31
  

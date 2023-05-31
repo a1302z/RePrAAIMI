@@ -24,7 +24,7 @@ metrics:
     accuracy_score: 
   logging:
     classification_report:
-      output_dict: False
+      output_dict: True
       zero_division: 0
 loader: 
   num_workers: 16
@@ -32,7 +32,7 @@ loader:
   collate_fn: numpy
 augmentations:
   consecutive_augmentations:
-    multiplicity: 2
+    multiplicity: 8
     consecutive_augmentations:
       random_img_shift:
         max_shift: 4
@@ -67,7 +67,7 @@ hyperparams:
 scheduler:
   type: reduceonplateau
   normalize_lr: False
-  patience: 5
+  patience: 10
   min_delta: 0.01
   factor: 0.5
 DP:

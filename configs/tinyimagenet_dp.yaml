@@ -31,7 +31,7 @@ loader:
   pin_memory: True
 augmentations:
   consecutive_augmentations:
-    multiplicity: 16
+    multiplicity: 2
     consecutive_augmentations:
       random_img_shift:
         max_shift: 4
@@ -41,7 +41,7 @@ optim:
   name: nadam
 loss: 
   type: cse
-  reduction: sum
+  reduction: mean
 model:
   name: wide_resnet
   in_channels: 3
@@ -52,14 +52,14 @@ model:
   pooling: avgpool
   extra_args:
     scale_norm: True
-    depth: 10
-    width: 1
+    depth: 16
+    width: 4
 ema:
   use_ema: False
   decay: 0.04
 hyperparams:
-  epochs: 200
-  batch_size: 32
+  epochs: 75
+  batch_size: 512
   batch_size_test: 256
   lr: 1e-3
 scheduler:
@@ -73,4 +73,4 @@ DP:
   max_per_sample_grad_norm: 1.0
   delta: 8e-7
   norm_acc: False
-  grad_acc_steps: 64
+  grad_acc_steps: 8

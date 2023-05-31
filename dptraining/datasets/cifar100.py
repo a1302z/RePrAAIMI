@@ -46,7 +46,6 @@ class CIFAR100Creator(DataLoaderCreator):
     @staticmethod
     def reshape_images(image: np.array):
         image = image.astype(np.float32)
-        image = image / 255.0
         image = image.transpose(0, 3, 1, 2)
         return image
 
@@ -69,6 +68,7 @@ class CIFAR100Creator(DataLoaderCreator):
         numpy_optimisation=True,
         normalize_by_default=True,
         undersample_class:bool=False,
+        undersample_factor:float=0.0,
     ) -> Tuple[Dataset, Dataset, Dataset]:
         train_tf, val_tf, test_tf = transforms
         train_kwargs = {
@@ -127,7 +127,7 @@ class CIFAR100Creator(DataLoaderCreator):
             val_ds.data = val_data
             val_ds.targets = val_targets
         if undersample_class:
-            train_ds.data, train_ds.targets = undersample(train_ds.data, train_ds.targets)
+            train_ds.data, train_ds.targets = undersample(train_ds.data, train_ds.targets, factor=undersample_factor)
 
         return train_ds, val_ds, test_ds
 
