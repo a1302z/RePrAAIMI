@@ -82,7 +82,13 @@ class ConsecutiveAugmentations(ImageTransform, ImageLabelTransform):
                 TransformPipeline.from_dict_list(config) for config in transform_configs
             ]
         elif isinstance(transform_configs, dict):
-            self._transformations = TransformPipeline.from_dict_list(transform_configs)
+            self._transformations = [
+                TransformPipeline.from_dict_list(
+                    {transform_name: transform_config},
+                    apply_to_override_deep=self._apply_to,
+                )
+                for transform_name, transform_config in transform_configs.items()
+            ]
         else:
             raise ValueError(
                 "augmentations need to be specified as a dict or list of dicts"
