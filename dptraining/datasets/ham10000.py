@@ -7,6 +7,7 @@ import pandas as pd
 from torch.utils.data import Dataset
 from torchvision.datasets.folder import default_loader
 from sklearn.model_selection import train_test_split
+from tqdm import tqdm
 
 # import sys
 
@@ -87,7 +88,16 @@ class HAM10000Creator(DataLoaderCreator):
         metadata = pd.read_csv(root / "HAM10000_metadata.csv")
         label_assignment = {val: i for i, val in enumerate(metadata.dx.unique())}
         metadata["label"] = metadata.dx.map(label_assignment).astype(int)
-        idcs, lbls = np.arange(len(metadata)), metadata.label.to_numpy()
+        lesion_ids = metadata.lesion_id.unique()
+        labels = []
+        for lesion_id in tqdm(
+            lesion_ids, total=lesion_ids.shape[0], leave=False, desc="build dataset"
+        ):
+            instance_df = metadata[metadata.lesion_id == lesion_id]
+            label = instance_df.label.unique()
+            assert label.shape[0] == 1
+            labels.append(label[0])
+        idcs, lbls = lesion_ids, np.array(labels)
         idcs_train, idcs_test, lbls_train, _ = train_test_split(
             idcs,
             lbls,
@@ -102,9 +112,9 @@ class HAM10000Creator(DataLoaderCreator):
             train_size=train_split,
             random_state=config.dataset.datasplit_seed,
         )
-        train_df = metadata.iloc[idcs_train]
-        val_df = metadata.iloc[idcs_val]
-        test_df = metadata.iloc[idcs_test]
+        train_df = metadata[metadata.lesion_id.isin(idcs_train)]
+        val_df = metadata[metadata.lesion_id.isin(idcs_val)]
+        test_df = metadata[metadata.lesion_id.isin(idcs_test)]
 
         return (
             HAM10000(root, metadata=split_df, merge_labels=merge_labels, transform=tf)
