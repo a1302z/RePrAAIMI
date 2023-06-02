@@ -73,6 +73,7 @@ class BCSELogitsSparse(LossFunctionCreator):
         @objax.Function.with_vars(model_vars)
         def loss_fn(inpt, label):
             logit = model(inpt, training=True).squeeze()
+            label = label.squeeze()
             assert logit.shape == label.shape , f"Found mismatching shapes for logits ({logit.shape}) and labels ({label.shape})"
             loss = objax.functional.loss.sigmoid_cross_entropy_logits(logit, label)
             match self._config.reduction:

@@ -20,7 +20,7 @@ class NumpyCelebA(CelebA):
         self,
         img_size: int = 64,
         load_into_mem: bool = False,
-        use_pickled: bool = True,
+        use_pickled: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -91,12 +91,13 @@ class NumpyCelebA(CelebA):
 
         attr = target[20]  # gender attribute (our auxiliary attribute)
         label = target[9]  # blond attribute (our target label)
+        attr_dict = {self.attr_names[20]: attr}
 
         if self.target_transform is not None:
             label = self.target_transform(label)
             attr = self.target_transform(attr)
 
-        return img, attr, label
+        return img, attr_dict, label
 
 
 class CelebACreator(DataLoaderCreator):

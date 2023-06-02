@@ -11,11 +11,11 @@ def collate_np_classification(
     )
 
 def collate_np_classification_attributes(
-    list_of_data_tuples: list[tuple[np.array, list[Union[int, float]], list[Union[int, float]]]] 
+    list_of_data_tuples: list[tuple[np.array, list[dict], list[Union[int, float]]]] 
 )-> tuple[np.array, np.array, np.array]:
     return(
         np.stack([b[0] for b in list_of_data_tuples]), # inputs
-        np.array([b[1] for b in list_of_data_tuples], dtype=int), # attributes
+        [b[1] for b in list_of_data_tuples], # attributes
         np.array([b[2] for b in list_of_data_tuples], dtype=int) # targets
     )
 

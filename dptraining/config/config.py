@@ -41,6 +41,7 @@ class DatasetTask(Enum):
     classification = 1
     reconstruction = 2
     segmentation = 3
+    binary_classification = 4
 
 
 @dataclass
@@ -174,7 +175,7 @@ class DPConfig:
     delta: float = MISSING
     sigma: Optional[float] = None
     clip_only:Optional[bool] = False
-    norm_acc: bool = MISSING
+    norm_acc: Optional[bool] = False
     grad_acc_steps: int = 1
     rsqrt_noise_adapt: bool = False
     glrt_assumption: bool = False

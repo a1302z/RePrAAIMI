@@ -106,14 +106,21 @@ def main(
             model_vars, config.ema.decay, update_every=config.ema.update_every
         )
     opt = make_optim_from_config(config, model_vars)
-
-    predict_lambda = (
+    
+    if config.dataset.task == DatasetTask.classification:
+         predict_lambda = (
         lambda x: objax.functional.softmax(  # pylint:disable=unnecessary-lambda-assignment
             model(x, training=False)
+        ))
+    elif config.dataset.task == DatasetTask.binary_classification:
+        predict_lambda = (
+        lambda x: objax.functional.sigmoid(  # pylint:disable=unnecessary-lambda-assignment
+            model(x, training=False)
+        ))
+    else:
+        predict_lambda = (
+        lambda x: model(x, training=False)
         )
-        if config.dataset.task == DatasetTask.classification
-        else model(x, training=False)
-    )
 
     predict_op_parallel = objax.Parallel(
         predict_lambda, model_vars, reduce=np.concatenate

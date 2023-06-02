@@ -13,6 +13,7 @@ from dptraining.datasets.fmri import FMRICreator
 from dptraining.datasets.tinyimagenet import TinyImageNetCreator
 from dptraining.datasets.mnist import MNISTCreator
 from dptraining.datasets.celeba import CelebACreator
+from dptraining.datasets.mimic import MIMICCreator
 from dptraining.datasets.utils import (
     collate_np_classification,
     collate_np_reconstruction,
@@ -44,6 +45,8 @@ def select_creator(config):
         case DatasetName.CelebA:
             creator = CelebACreator
             assert config.dataset.has_group_attributes, "CelebA has group attributes, so pls enable in the config"
+        case DatasetName.mimic:
+            creator = MIMICCreator
         case _ as unsupported:
             raise ValueError(f"Unsupported dataset '{unsupported}'.")
     return creator
@@ -54,7 +57,7 @@ def modify_collate_fn_config(loader_config, config: Config):
     if "collate_fn" in loader_config:
         if (
             loader_config["collate_fn"] == LoaderCollateFn.numpy
-            and config.dataset.task == DatasetTask.classification
+            and config.dataset.task in [DatasetTask.classification, DatasetTask.binary_classification]
         ):
             if config.dataset.has_group_attributes:
                 loader_config["collate_fn"] = collate_np_classification_attributes

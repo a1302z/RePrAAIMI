@@ -219,7 +219,8 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                 if not config.dataset.has_group_attributes:
                     i, (img, label) = next(train_iter)
                 else:
-                    i, (img, attrs, label) = next(train_iter)
+                    i, (img, attr, label) = next(train_iter)
+                    assert isinstance(attr[0], dict), "attributes should be a dict"
             except StopIteration:
                 break
             add_args = {}
@@ -255,6 +256,7 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                 try:
                     if config.dataset.has_group_attributes:
                         eval_img, eval_attrs, eval_label = next(val_iter)
+                        assert isinstance(eval_attrs[0], dict), "attributes should be a dict"
                     else:
                         eval_img, eval_label = next(val_iter)
                 except StopIteration:
@@ -278,6 +280,8 @@ def calculate_metrics(task, metrics, loss_fn, correct, logits):
     loss = loss_fn(logits, correct)
     if task == DatasetTask.classification:
         predicted = logits.argmax(axis=1)
+    elif task == DatasetTask.binary_classification:
+        predicted = np.array(logits > 0.5)
     correct, predicted = correct.squeeze(), predicted.squeeze()
     if np.iscomplexobj(correct):
         correct = np.abs(correct)
@@ -340,6 +344,7 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
                     i, (image, label) = next(val_iter)
                 else:
                     i, (image, attrs, label) = next(val_iter)
+                    assert isinstance(attrs[0], dict), "attributes should be a dict"
             except StopIteration:
                 break
             image = test_aug(image)
