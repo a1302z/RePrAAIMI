@@ -219,8 +219,8 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                 if not config.dataset.has_group_attributes:
                     i, (img, label) = next(train_iter)
                 else:
-                    i, (img, attr, label) = next(train_iter)
-                    assert isinstance(attr[0], dict), "attributes should be a dict"
+                    i, (img, attr_dict, label) = next(train_iter)
+                    assert isinstance(attr_dict, dict), "attributes should be a dict"
             except StopIteration:
                 break
             add_args = {}
@@ -255,8 +255,8 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                 # validation metrics
                 try:
                     if config.dataset.has_group_attributes:
-                        eval_img, eval_attrs, eval_label = next(val_iter)
-                        assert isinstance(eval_attrs[0], dict), "attributes should be a dict"
+                        eval_img, eval_attr_dict, eval_label = next(val_iter)
+                        assert isinstance(eval_attr_dict, dict), "attributes should be a dict"
                     else:
                         eval_img, eval_label = next(val_iter)
                 except StopIteration:
@@ -338,13 +338,17 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
             desc="Testing",
             leave=False,
         )
+        num_samples = 0
+        attr_dict_aggregated = {}
         while True:
             try:
                 if not config.dataset.has_group_attributes:
                     i, (image, label) = next(val_iter)
                 else:
-                    i, (image, attrs, label) = next(val_iter)
-                    assert isinstance(attrs[0], dict), "attributes should be a dict"
+                    i, (image, attr_dict, label) = next(val_iter)
+                    if attr_dict_aggregated == {}:
+                        attr_dict_aggregated = attr_dict
+                    assert isinstance(attr_dict, dict), "attributes should be a dict"
             except StopIteration:
                 break
             image = test_aug(image)
@@ -357,6 +361,8 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
             y_pred = predict_op(image)
             y_pred, label = np.array(y_pred), np.array(label)
             if per_batch_metrics:
+                if config.dataset.has_group_attributes:
+                    raise NotImplementedError("per-batch metrics are not currently supported with group attributes")
                 main_metric_batch, logging_metric_batch = calculate_metrics(
                     config.dataset.task, metrics, loss_fn, label, y_pred
                 )
@@ -365,10 +371,21 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
             else:
                 correct.append(label)
                 scores.append(y_pred)
+                if i != 0:
+                    # aggregate attribute indices
+                    for attr_name, agg_attr_idcs in attr_dict_aggregated.items():
+                        to_aggregate_idcs = attr_dict[attr_name]
+                        to_aggregate_idcs += num_samples
+                        attr_dict_aggregated[attr_name] = np.concatenate(
+                            (agg_attr_idcs, to_aggregate_idcs)
+                        )
+                num_samples += image.shape[0]
             pbar.update(1)
             if i + 1 >= max_batches:
                 break
     if per_batch_metrics:
+        if config.dataset.has_group_attributes:
+                raise NotImplementedError("per-batch metrics are not currently supported with group attributes")
         main_metric = (
             metrics[0][0],
             np.mean([batch_metric[1] for batch_metric in main_metric_list]),
@@ -377,19 +394,63 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
             metrics[1].keys(), logging_metric_list
         )
     else:
+        logging_metrics = {}
         correct = np.concatenate(correct)
         predicted = np.concatenate(scores)
-        main_metric, logging_metrics = calculate_metrics(
-            config.dataset.task, metrics, loss_fn, correct, predicted
-        )
+        if config.dataset.has_group_attributes:
+            # calculate metrics for sub-groups
+            for attr_name, idcs in attr_dict_aggregated.items():
+                attr_correct = correct[idcs]
+                attr_predicted = predicted[idcs]
+                attr_main_metric, attr_log_metric = calculate_metrics(
+                    config.dataset.task, metrics, loss_fn, attr_correct, attr_predicted
+                )
+                logging_metrics[attr_name] = attr_log_metric 
+            # calculate metrics for the everyone
+            main_metric, log_metrics = calculate_metrics(
+                    config.dataset.task, metrics, loss_fn, correct, predicted
+                )
+            logging_metrics["all"] = log_metrics
+        else:
+            # only calculate general metrics
+            main_metric, logging_metrics = calculate_metrics(
+                config.dataset.task, metrics, loss_fn, correct, predicted
+            )
 
     if config.general.log_wandb:
-        if config.general.log_wandb:
-            wandb.log({f"{dataset_split}_full_eval": logging_metrics})
+        if config.dataset.has_group_attributes:
+            for attr_name, attr_log_metrics in logging_metrics.items():
+                wandb.log({f"{dataset_split}_{attr_name}": logging_metrics[attr_name]})
+                for name, value in logging_metrics.items():
+                    print(name)
+                    if name == "classification_report":
+                        df = pd.DataFrame(value)
+                        table = wandb.Table(dataframe=df)
+                        wandb.log({f"cr{dataset_split}_{attr_name}": table})
+        else:
+            wandb.log({f"{dataset_split}_": logging_metrics})
+            for name, value in logging_metrics.items():
+                if name == "classification_report":
+                    df = pd.DataFrame(value)
+                    table = wandb.Table(dataframe=df)
+                    wandb.log({f"cr{dataset_split}": table})
     else:
-        print(f"{dataset_split} evaluation:")
-        for name, value in logging_metrics.items():
-            print(f"\t{name}: {value}")
+        print(f"-----------------------------------------\n{dataset_split}_:")
+        if config.dataset.has_group_attributes:
+            for attr_name, attr_log_metrics in logging_metrics.items():
+                print(f"{attr_name}:")
+                for name, value in attr_log_metrics.items():
+                    if name == "classification_report":
+                        print(f"\t{name}: \n{value}")
+                    else:
+                        print(f"\t{name}: {value}")
+        else:
+            for name, value in logging_metrics.items():
+                if name == "classification_report":
+                        print(f"\t{name}: \n{value}")
+                else:
+                    print(f"\t{name}: {value}")
+        print("-----------------------------------------")
     return main_metric[1]
 
 

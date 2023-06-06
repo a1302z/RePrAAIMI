@@ -14,6 +14,7 @@ from dptraining.utils.loss import (
     L2Regularization,
     BCSELogitsSparse
 )
+from dptraining.utils.metrics import class_accuracy_score
 from dptraining.config import Config, SchedulerType, LossType
 from dptraining.utils.scheduler import (
     CosineSchedule,
@@ -104,6 +105,7 @@ def make_metrics(config):
     all_funcs = {
         **retrieve_func_dict(sklearnmetrics),
         **retrieve_func_dict(skimagemetrics),
+        "class_accuracy_score": class_accuracy_score,
     }  # torchmetrics of course leads to problems -.-
     if isinstance(config.metrics.main, str):
         if config.metrics.main == "loss":

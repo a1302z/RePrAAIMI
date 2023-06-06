@@ -18,7 +18,7 @@ def fft_conversion(img, axes=None):
 class NumpyCelebA(CelebA):
     def __init__(
         self,
-        img_size: int = 64,
+        img_size: int = 32,
         load_into_mem: bool = False,
         use_pickled: bool = False,
         **kwargs,
@@ -88,10 +88,13 @@ class NumpyCelebA(CelebA):
 
         if self.transform is not None:
             img = self.transform(img)
+        
+        #print([(i, a) for i, a in enumerate(self.attr_names)])
 
-        attr = target[20]  # gender attribute (our auxiliary attribute)
-        label = target[9]  # blond attribute (our target label)
-        attr_dict = {self.attr_names[20]: attr}
+        attr1 = target[20]  # gender attribute (first auxiliary attribute)
+        attr2 = target[26] # race attribute/ Pale-skin (second auxiliary attribute)
+        label = target[2]  # attractive attribute (our target label)
+        attr_dict = {self.attr_names[20]: (attr1, [0, 1]), self.attr_names[26]: (attr2, [0, 1])}
 
         if self.target_transform is not None:
             label = self.target_transform(label)

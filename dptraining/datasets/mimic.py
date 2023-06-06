@@ -44,7 +44,7 @@ class MIMICDataset(VisionDataset):
         img = np.expand_dims(img, axis=0)  # add channel axis
         # group attributes
         sex, race = row["sex_label"], row["race_label"]
-        attrs = {"sex": sex, "race": race}
+        attrs = {"sex": (sex, [0, 1]), "race": (race, [0, 1, 2])}
         # target
         target = row[
             "disease_label"
