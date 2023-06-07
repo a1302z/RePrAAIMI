@@ -106,6 +106,18 @@ parser.add_argument(
     default=None,
     help="Use previous reconstructions to reevaluate results (e.g. if figures changed)",
 )
+parser.add_argument(
+    "--distance_name",
+    type=str,
+    default=None,
+    help="Name of distance metric for figure (only for reevaluate)",
+)
+parser.add_argument(
+    "--font_scale",
+    type=float,
+    default=2.8,
+    help="font scale for figures",
+)
 args = parser.parse_args()
 
 
@@ -113,11 +125,11 @@ sn.set_theme(
     context="notebook",
     style="white",
     font="Times New Roman",
-    font_scale=1,
+    font_scale=args.font_scale,
     palette="viridis",
 )
 sn.despine()
-sn.set(rc={"figure.figsize": (12, 12)})
+sn.set(rc={"figure.figsize": (12, 12)}, font_scale=args.font_scale)
 colors = {
     "red": "firebrick",
     "blue": "steelblue",
@@ -259,13 +271,25 @@ if args.reevaluate_folder:
         read_directory.parent
         / f"{read_directory.stem}_reevaluated_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
     )
+    total_csv_file = read_directory / "all_reconstructions_by_recon_loss.csv"
     save_directory.mkdir()
-    privacy_level_dirs = [d for d in read_directory.iterdir() if d.is_dir()]
-    privacy_level_dirs.sort(key=lambda p: p.stem.replace("eps=", ""))
-    recon_data_per_eps = [
-        pd.read_csv(d / "recon_assignment.csv") for d in privacy_level_dirs
-    ]
-    eps_values = [d.stem.replace("eps=", "") for d in privacy_level_dirs]
+    if total_csv_file.is_file():
+        total_df = pd.read_csv(total_csv_file)
+        eps_values = total_df.eps.unique().tolist()
+        eps_values.sort()
+    else:
+        warn("No complete reconstruction csv file exists. Falling back to directories.")
+        privacy_level_dirs = [d for d in read_directory.iterdir() if d.is_dir()]
+        privacy_level_dirs.sort(key=lambda p: p.stem.replace("eps=", ""))
+        recon_data_per_eps = [
+            pd.read_csv(d / "recon_assignment.csv") for d in privacy_level_dirs
+        ]
+        eps_values = [d.stem.replace("eps=", "") for d in privacy_level_dirs]
+        for stats_df, eps in zip(recon_data_per_eps, eps_values):
+            stats_df["eps"] = eps
+        total_df = pd.concat(recon_data_per_eps, ignore_index=True)
+        total_df = total_df.sort_values(by="min_distance")
+        total_df.to_csv(str(save_directory / "all_reconstructions_by_recon_loss.csv"))
 else:
     device = (
         torch.device(f"cuda")
@@ -588,7 +612,7 @@ else:
                     ],
                 }
             )
-            batch_df.to_csv(str(batch_p / "recon_assignment.csv"), index=False)
+            batch_df.to_csv(str(batch_p / "recon_assignment.csv"))
             # l2min_dist, l2min_idx = np.min(l2_dists, axis=1), np.argmin(l2_dists, axis=1)
             # reconstructed = reconstructed_user_data["data"][min_idx]
 
@@ -602,9 +626,13 @@ else:
                 stats_df = batch_df
             else:
                 stats_df = pd.concat([stats_df, batch_df], ignore_index=True)
-        stats_df.to_csv(eps_path / "recon_assignment.csv", index=True)
+        stats_df.to_csv(eps_path / "recon_assignment.csv")
         stats_df["eps"] = eps
         recon_data_per_eps.append(stats_df)
+
+    total_df = pd.concat(recon_data_per_eps, ignore_index=True)
+    total_df = total_df.sort_values(by="min_distance")
+    total_df.to_csv(str(save_directory / "all_reconstructions_by_recon_loss.csv"))
 
 
 def turn_axis_off(ax):
@@ -622,15 +650,12 @@ cmaplist = [cmap(i) for i in range(cmap.N)]
 #     + [2 * eps_values[-1] - eps_values[-2] for i in range(2)],
 #     cmap.N,
 # )
-total_df = pd.concat(recon_data_per_eps, ignore_index=True)
-total_df = total_df.sort_values(by="min_distance")
-total_df.to_csv(str(save_directory / "all_reconstructions_by_recon_loss.csv"))
-total_df = total_df.drop_duplicates(subset="gt_id")
-total_df = total_df.rename(
+best_recons_df = total_df.drop_duplicates(subset="gt_id")
+best_recons_df = best_recons_df.rename(
     columns={"min_distance": "global_min_distance", "eps": "eps_best_recon"}
 )
-total_df.to_csv(str(save_directory / "best_recon_for_each_gt_img.csv"))
-total_df = total_df.drop(columns=["recon_path", "gt_path"])
+best_recons_df.to_csv(str(save_directory / "best_recon_for_each_gt_img.csv"))
+best_recons_df = best_recons_df.drop(columns=["recon_path", "gt_path"])
 
 
 fig, axs = plt.subplots(
@@ -639,9 +664,12 @@ fig, axs = plt.subplots(
     figsize=(10 * args.N_images, 5 * len(eps_values)),
     sharey=True,
 )
+fig.subplots_adjust(hspace=0.35, wspace=0.35)
 fig2, ax2 = plt.subplots(1, 1, figsize=(5, 5), sharey=True)
 dist_metric_name: str
-if args.reevaluate_folder:
+if args.distance_name is not None:
+    dist_metric_name = args.distance_name
+elif args.reevaluate_folder:
     dist_metric_name = "Distance"
 elif args.use_l2_distance:
     dist_metric_name = "MSE"
@@ -651,22 +679,24 @@ ax2.set_xlabel(dist_metric_name)
 # ax2[1].set_xlabel("Mean squared distance")
 ax2.set_ylabel("Images within distance")
 ax2.yaxis.set_major_formatter(mtick.PercentFormatter())
-for ax, eps, stats_df, col in tqdm(
-    zip(axs, eps_values, recon_data_per_eps, cmaplist),
+for ax, eps, col in tqdm(
+    zip(axs, eps_values, cmaplist),
     total=len(eps_values),
     desc="building figures",
     leave=False,
 ):
-    eps_formatted = f"ε={eps:.0E}" if isinstance(eps, (float, int)) else eps
-    stats_df = pd.merge(left=total_df, right=stats_df, on="gt_id")
-    stats_df = stats_df.sort_values(by="global_min_distance")
+    try:
+        eps_formatted = f"ε={int(eps):.0E}"
+    except:
+        eps_formatted = eps
+    stats_df = total_df[total_df.eps == eps]
 
     # stats_df = stats_df.iloc[stats_df.min_distance.argsort()]
     # reduced_stats_df = stats_df.drop_duplicates(subset="gt_path")
     # recon_data = recon_data.transpose(0, 2, 3, 1)
     # idcs_pcpt = np.argsort(perc_dist)
     # idcs_l2 = np.argsort(l2_dist)
-    ax[0].set_ylabel(eps_formatted, fontsize=20)
+    ax[0].set_ylabel(eps_formatted)
     for i in range(args.N_images):
         row = stats_df.iloc[i]
         dist, gt_p, recon_p = (
@@ -683,9 +713,9 @@ for ax, eps, stats_df, col in tqdm(
         ax[2 * i + 1].imshow(recon_img, **plt_kwargs)
         turn_axis_off(ax[2 * i])
         turn_axis_off(ax[2 * i + 1])
-        ax[2 * i + 1].set_xlabel(f"d={dist:.0E}", fontsize=16)
-        ax[2 * i].set_title("Original", fontsize=20)
-        ax[2 * i + 1].set_title("Closest Reconstruction", fontsize=20)
+        ax[2 * i + 1].set_xlabel(f"d={dist:.2E}")
+        ax[2 * i].set_title("Original")
+        ax[2 * i + 1].set_title("Closest Reconstruction")
 
     # col = cmap(norm(eps))
     x1 = stats_df.min_distance.to_numpy().copy()
