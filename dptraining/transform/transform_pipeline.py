@@ -61,11 +61,14 @@ class ScopedTransformation(TypedDict):
 
 
 class ConsecutiveAugmentations(ImageTransform, ImageLabelTransform):
-    def __init__(self, apply_to: Literal["images"], **kwargs) -> None:
-        if apply_to not in ("images"):
+    def __init__(
+        self, apply_to: Literal["images", "images_and_labels"], **kwargs
+    ) -> None:
+        if apply_to == "labels":
             raise ValueError(
-                "Consecutive augmentations are only supported for images at the moment"
+                "Consecutive augmentations are not supported for labels only"
             )
+        self._apply_to: Literal["images", "images_and_labels"] = apply_to
         self._multiplicity: int = (
             kwargs["multiplicity"] if "multiplicity" in kwargs else 1
         )
@@ -79,7 +82,10 @@ class ConsecutiveAugmentations(ImageTransform, ImageLabelTransform):
             if not all(isinstance(config, dict) for config in transform_configs):
                 raise ValueError("Augmentation list must contain only dicts")
             self._transformations = [
-                TransformPipeline.from_dict_list(config) for config in transform_configs
+                TransformPipeline.from_dict_list(
+                    config, apply_to_override_deep=self._apply_to
+                )
+                for config in transform_configs
             ]
         elif isinstance(transform_configs, dict):
             self._transformations = [
@@ -331,14 +337,15 @@ class RandomTransform(ImageTransform, ImageLabelTransform):
         self._apply_to: Literal["images", "labels", "images_and_labels"] = apply_to
         self._transformation_choices: list[TransformPipeline] = []
         for transform_name, transform_kwargs in augmentations.items():
-            transform_kwargs["apply_to"] = apply_to
             transformation = TransformPipeline.from_dict_list(
-                {transform_name: transform_kwargs}
+                {transform_name: transform_kwargs},
+                apply_to_override_deep=self._apply_to,
             )
             self._transformation_choices.append(transformation)
         self._transformation_choices: list[TransformPipeline] = [
             TransformPipeline.from_dict_list(
                 {transform_name: init_kwargs},
+                apply_to_override_deep=self._apply_to,
             )
             for transform_name, init_kwargs in augmentations.items()
         ]
@@ -430,7 +437,11 @@ class TransformPipeline:
 
     @classmethod
     def from_dict_list(  # pylint:disable=too-many-branches
-        cls, transform_configs: Optional[dict[str, Any]]
+        cls,
+        transform_configs: Optional[dict[str, Any]],
+        apply_to_override_deep: Optional[
+            Literal["images", "labels", "images_and_labels"]
+        ] = None,
     ):
         if transform_configs is None:
             return cls([])
@@ -460,6 +471,8 @@ class TransformPipeline:
                 if isinstance(transform_kwargs, dict)
                 else "images"
             )
+            if apply_to_override_deep is not None:
+                apply_to = apply_to_override_deep
             transform_object = TransformPipeline._instantiate_transform_class(
                 transform_class, transform_kwargs, apply_to
             )
