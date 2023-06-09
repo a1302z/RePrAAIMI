@@ -37,13 +37,13 @@ augmentations:
           - 0.22039941
         std:
           - 0.24865805
-    # consecutive_augmentations:
-    #   multiplicity: 4
-    #   consecutive_augmentations:
-    #     random_horizontal_flips:
-    #       flip_prob: 0.2
-    #     random_vertical_flips:
-    #       flip_prob: 0.2
+    consecutive_augmentations:
+      multiplicity: 4
+      consecutive_augmentations:
+        random_horizontal_flips:
+          flip_prob: 0.2
+        random_vertical_flips:
+          flip_prob: 0.2
 test_augmentations:
   normalize_jax:
       mean:
