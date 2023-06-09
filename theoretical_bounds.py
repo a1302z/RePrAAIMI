@@ -1,30 +1,30 @@
 # %%
-from autodp.transformer_zoo import Composition, AmplificationBySampling
-from autodp.mechanism_zoo import GaussianMechanism
+import os
+import seaborn as sn
+import pandas as pd
+import hydra
+import numpy as np
+from pathlib import Path
+from tqdm import tqdm
 from matplotlib import pyplot as plt, colors as mplcolors, colorbar
 from matplotlib.lines import Line2D
-from sklearn.metrics import auc
-import seaborn as sn
-from copy import deepcopy
-import numpy as np
+from sklearn.metrics import auc as calc_auc_score
+from warnings import warn
+from opacus.accountants.utils import get_noise_multiplier
 
-from datetime import datetime
-import pandas as pd
-
-
-import os
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
 
 sn.set_theme(
     context="notebook",
     style="white",
     font="Times New Roman",
-    font_scale=1.25,
+    # font_scale=1,
     palette="viridis",
 )
 sn.despine()
-sn.set(rc={"figure.figsize": (12, 12)})
+sn.set(rc={"figure.figsize": (12, 12)}, font_scale=2)
 colors = {
     "red": "firebrick",
     "blue": "steelblue",
@@ -35,22 +35,17 @@ colors = {
     "black": "black",
 }
 
-from omegaconf import OmegaConf
 
-from dptraining.privacy import setup_privacy
-from dptraining.datasets import make_loader_from_config
-from dptraining.config import Config
-
-import hydra
-from pathlib import Path
+from dptraining.config.config import Config
 from dptraining.config.config_store import load_config_store
+from dptraining.vulnerability.compute_rero_bound import rero_bound_sgm
 
 load_config_store()
 
 
 @hydra.main(version_base=None, config_path=Path.cwd() / "configs")
 def main(
-    train_config: Config,
+    config: Config,
 ):
     # %%
     # base_config = OmegaConf.structured(Config)
@@ -62,89 +57,84 @@ def main(
 
     key_values = []
 
-    if "eps_values" in train_config.keys():
-        eps_values = train_config.eps_values
+    if "eps_values" in config.keys():
+        eps_values = config.eps_values
+    elif all([kwd in config.keys() for kwd in ["eps_min", "eps_max", "N_eps"]]):
+        eps_values = np.linspace(
+            config.eps_min,
+            config.eps_max,
+            config.N_eps,
+            endpoint=True,
+        ).tolist()
     else:
         eps_values = [0.5] + list(range(1, 21))
-    if "N_SAMPLES" in train_config.keys():
-        N_SAMPLES = int(train_config.N_SAMPLES)
+    if "DP" in config.keys() and "delta" in config.DP.keys():
+        delta = config.DP.delta
+    elif "delta" in config.keys():
+        delta = config.delta
     else:
-        N_SAMPLES = int(1e3)  # 200000
+        warn("Delta should be set explicitly. Assuming delta of 1e-5")
+        delta = 1e-5
+    if "sampling_step" in config.keys():
+        sampling_step = config.sampling_step
+    else:
+        sampling_step = 1e-3
 
     save_folder = (
-        Path.cwd()
-        / f"dp_auc/{str(train_config.dataset.name).split('.')[-1]}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}/"
+        Path.cwd() / f"dp_auc/delta={delta}/eps=[{eps_values[0]}-{eps_values[-1]}]/"
     )
 
-    train_loader, _, _ = make_loader_from_config(train_config)
-    for eps in eps_values:
-        config = deepcopy(train_config)
-        config.DP.epsilon = eps
-        if config.DP:
-            (
-                grad_acc,
-                accountant,
-                sampling_rate,
-                delta,
-                sigma,
-                total_noise,
-                batch_expansion_factor,
-                effective_batch_size,
-            ) = setup_privacy(config, train_loader)
-        else:
-            raise ValueError(
-                "This script is only designed for DP trainings. All other are critically non-private."
-            )
+    # independent of exact values
+    steps = 1e5
+    sampling_rate = 0.1
+    FPR = np.linspace(
+        sampling_step,
+        1 - sampling_step,
+        int((1.0 - 2 * sampling_step) / sampling_step + 1),
+    )
+    sigmas = [
+        get_noise_multiplier(
+            target_epsilon=eps,
+            target_delta=delta,
+            sample_rate=sampling_rate,
+            steps=steps,
+        )
+        for eps in tqdm(
+            eps_values,
+            total=len(eps_values),
+            desc="Calculating sigmas",
+            leave=False,
+        )
+    ]
+
+    for sigma in tqdm(
+        sigmas,
+        total=len(sigmas),
+        desc="Calculating ROC",
+        leave=False,
+    ):
         # %%
-        # CLIP = config.DP.max_per_sample_grad_norm
-        # # NOISE_MULTI = 0.6
-        # sigma = total_noise
-
-        # BS = config.hyperparams.batch_size
-        # N = len(train_loader.dataset)
-        # p = BS / N
-        # p = sampling_rate
-
-        STEPS = (
-            len(train_loader) // batch_expansion_factor
-        ) * config.hyperparams.epochs
-
-        DELTA = config.DP.delta
-
-        # %%
-        subsample = AmplificationBySampling(PoissonSampling=True)
-        mechanism = GaussianMechanism(sigma=sigma)
-        sgm = subsample(mechanism, sampling_rate, improved_bound_flag=True)
-
-        compose = Composition()
-
-        comp_mech = compose((sgm,), (STEPS,))
-
-        # %%
-        eps = comp_mech.get_eps(DELTA)
-        print(f"ε={eps:.2f} (Calculated RDP eps = {config.DP.epsilon:.2f})")
-        # %%
-        FPR, FNR = comp_mech.plot_fDP(length=N_SAMPLES)
-
-        # %%
-        # %%
-        print(f"AUC: {auc(FPR, 1 - FNR):.2f}")
-        # %%
-        balanced_accuracy = 1 - (FNR + FPR) / 2
+        TPR = rero_bound_sgm(FPR, 1.0 / sigma, sampling_rate, steps)
+        balanced_accuracy = 1 - ((1.0 - TPR) + FPR) / 2
         max_acc, opt_cutoff = (
             balanced_accuracy.max(),
             balanced_accuracy.argmax() / balanced_accuracy.shape[0],
         )
-        print(f"Maximum accuracy@eps={eps:.1f}: {100.0*max_acc:.2f} @ {opt_cutoff:.2f}")
         key_values.append(
             {
                 "FPR": FPR,
-                "FNR": FNR,
+                "TPR": TPR,
                 "balanced_acc": balanced_accuracy,
                 "max_acc": max_acc,
                 "opt_cutoff": opt_cutoff,
+                "auc": calc_auc_score(FPR, TPR),
             }
         )
+    for eps, kv in zip(eps_values, key_values):
+        print(f"Epsilon: {eps}")
+        print(f"\tAUC: {kv['auc']*100.0:.2f}%")
+        print(f"\tTPR@[FPR={kv['FPR'][1]:.1E}]={kv['TPR'][1]}")
+        print(f"\tMaximum accuracy: {100.0*kv['max_acc']:.2f} @ {kv['opt_cutoff']:.2f}")
 
     if not save_folder.is_dir():
         save_folder.mkdir(parents=True)
@@ -168,15 +158,13 @@ def main(
         # np.linspace(eps_vals[0], eps_vals[-1], cmap.N),
         cmap.N,
     )
-    FPR = FPR[1:]
-    FNR = FNR[1:]
 
     fig_auc, ax = plt.subplots()
     fig_acc, ax4 = plt.subplots()
     fig_tpr, ax5 = plt.subplots()
     ax5.set_ylim(0, 1)
     ax5.set_xlim(0, eps_values[-1])
-    ax5.plot(eps_values, [1.0 - kv["FNR"][1] for kv in key_values])
+    ax5.plot(eps_values, [kv["TPR"][1] for kv in key_values])
     ax5.set_xlabel("epsilon")
     ax5.set_ylabel(f"TPR@(FPR={FPR[1]:.1E})")
 
@@ -196,7 +184,7 @@ def main(
     # ax.set_xlim(FPR[0], 1)
     # ax.set_ylim(1 - key_values[0][1][0], 1)
     ax3 = fig_auc.add_axes([1.0, 0.1, 0.03, 0.8])
-    ax3.set_ylabel("epsilon")
+    ax3.set_ylabel(f"epsilon@[delta={delta}]")
 
     ax.plot(FPR, FPR, linestyle="dashed", color="gray")  # ,label="Reference",)
     ax.plot(FPR, 1 - FPR, linestyle="dashed", color="gray")  # ,label="Reference",)
@@ -215,12 +203,12 @@ def main(
         Line2D([0], [0], color="black", linestyle="dashed"),
     ]
     for eps, key_vals in zip(eps_values, key_values):
-        FPR, FNR, balanced_accuracy, max_acc, opt_cutoff = key_vals.values()
+        FPR, TPR, balanced_accuracy, max_acc, opt_cutoff, _ = key_vals.values()
         col = cmap(norm(eps))
         # ax2.plot(FPR, balanced_accuracy, linestyle="dashed", color=col)
         FPR = FPR[1:]
-        FNR = FNR[1:]
-        ax.plot(FPR, 1 - FNR, color=col)
+        TPR = TPR[1:]
+        ax.plot(FPR, TPR, color=col)
         # ax2.set_ylabel("balanced accuracy")
         # ax2.set_ylim(FPR[0], 1)
         # markerline, stemlines, baseline = ax2.stem(
