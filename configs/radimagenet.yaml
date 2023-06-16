@@ -18,17 +18,14 @@ dataset:
   name: radimagenet
   task: classification
   root: ./data/radiology_ai
-  train_val_split: 0.8
-  test_split: 0.1
-  datasplit_seed: 0
   radimagenet:
     normalize_by_modality: True
     modality: all
     allowed_body_regions: all
     allowed_labels: all
 loader: 
-  num_workers: 16
-  prefetch_factor: 16
+  num_workers: 32
+  prefetch_factor: 24
   collate_fn: numpy
   pin_memory: True
 augmentations:
@@ -38,9 +35,9 @@ augmentations:
       std:
         - 0.24865805
   random_vertical_flips:
-    flip_prob: 0.2
+    flip_prob: 0.5
   random_horizontal_flips:
-    flip_prob: 0.1
+    flip_prob: 0.5
   # gaussiannoise:
   #   std: 0.01
 test_augmentations:
@@ -88,11 +85,11 @@ optim:
 hyperparams:
   epochs: 200
   batch_size: 16
-  batch_size_test: 128
+  batch_size_test: 256
   lr: 2e-3
   # overfit: 10
   # momentum: 0.9
-  grad_acc_steps: 8
+  grad_acc_steps: 32
 metrics:
   main: 
     matthews_corrcoef:
@@ -114,5 +111,5 @@ loss:
 #   factor: 0.9
 earlystopping:
   mode: maximize
-  patience: 5
+  patience: 10
   min_delta: 0.001
