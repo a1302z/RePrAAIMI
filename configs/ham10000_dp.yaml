@@ -23,7 +23,7 @@ dataset:
   ham:
     merge_labels: True
 loader: 
-  num_workers: 8
+  num_workers: 32
   prefetch_factor: 64
   collate_fn: numpy
   pin_memory: True
@@ -52,15 +52,15 @@ augmentations:
           - 0.1374
           - 0.1584
           - 0.1766
-    # random_vertical_flips:
-    #   flip_prob: 0.0
-    # consecutive_augmentations:
-    #   multiplicity: 4
-    #   consecutive_augmentations:
-    #     random_img_shift:
-    #       max_shift: 4
-    #     random_vertical_flips:
-    #       flip_prob: 0.5
+    consecutive_augmentations:
+      multiplicity: 4
+      consecutive_augmentations:
+        random_horizontal_flips:
+          flip_prob: 0.2
+        random_vertical_flips:
+          flip_prob: 0.2
+        random_img_shift:
+          max_shift: 4
 test_augmentations:
   normalize_jax:
       mean:
@@ -97,12 +97,12 @@ optim:
 #   decay: 0.995
 hyperparams:
   epochs: 100
-  batch_size: 32
+  batch_size: 16
   batch_size_test: 128
   lr: 2e-3
   # overfit: 10
   # momentum: 0.9
-  grad_acc_steps: 64
+  grad_acc_steps: 128
 metrics:
   main: 
     matthews_corrcoef:

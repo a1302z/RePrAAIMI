@@ -85,7 +85,7 @@ optim:
 hyperparams:
   epochs: 200
   batch_size: 16
-  batch_size_test: 256
+  batch_size_test: 64
   lr: 2e-3
   # overfit: 10
   # momentum: 0.9
