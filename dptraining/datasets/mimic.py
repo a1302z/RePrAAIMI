@@ -49,9 +49,9 @@ class MIMICDataset(VisionDataset):
         target = row[
             "disease_label"
         ]
-        # merge disease labels
-        if target == 2:
-            target = 1
+        # # merge disease labels
+        # if target == 2:
+        #     target = 1
         if self.transform is not None:
             img = self.transform(img)
         return img, attrs, target

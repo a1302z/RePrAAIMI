@@ -22,23 +22,25 @@ dataset:
   has_group_attributes: True
 metrics:
   main: 
-    accuracy_score: 
+    accuracy_score:
   logging:
+    precision_score:
     classification_report:
-      output_dict: False
+      output_dict: True
       zero_division: 0
+    class_accuracy_score:
 loader: 
   num_workers: 16
   prefetch_factor: 12
   collate_fn: numpy
-augmentations:
-  consecutive_augmentations:
-    multiplicity: 2
-    consecutive_augmentations:
-      random_img_shift:
-        max_shift: 4
-      random_vertical_flips:
-        flip_prob: 0.5
+# augmentations:
+#   consecutive_augmentations:
+#     multiplicity: 2
+#     consecutive_augmentations:
+#       random_img_shift:
+#         max_shift: 4
+#       random_vertical_flips:
+#         flip_prob: 0.5
 model:
   name: resnet9
   in_channels: 3
@@ -60,7 +62,7 @@ ema:
   decay: 0.001
 hyperparams:
   epochs: 50
-  batch_size: 128
+  batch_size: 256
   batch_size_test: 512
   lr: 2e-3
   eval_every_n: 20

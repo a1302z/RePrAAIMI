@@ -4,6 +4,7 @@ import contextlib
 from typing import Callable, List
 
 import numpy as np
+import pandas as pd
 
 import objax
 import sys
@@ -20,154 +21,22 @@ from dptraining.privacy import ClipAndAccumulateGrads
 N_DEVICES = local_device_count()
 
 
-def create_train_op(  # pylint:disable=too-many-arguments,too-many-statements
-    train_vars,
-    grad_calc,
-    opt,
-    augment_op,
-    label_op,
-    grad_accumulation: bool,
-    noise: float,
-    effective_batch_size: int,
-    n_augmentations: int = 1,
-    parallel=False,
-    ema=None,
-):
-    if grad_accumulation:
-        assert isinstance(grad_calc, ClipAndAccumulateGrads)
-
-        @objax.Function.with_vars(train_vars)
-        def calc_grads(image_batch, label_batch):
-            image_batch = augment_op(image_batch)
-            label_batch = label_op(label_batch)
-            if n_augmentations > 1:
-                if image_batch.shape[1] != n_augmentations:
-                    raise RuntimeError(
-                        "number of augmentations different than augmentation axis"
-                    )
-                label_batch = jn.repeat(
-                    label_batch[:, jn.newaxis], n_augmentations, axis=1
-                )
-            else:
-                image_batch = image_batch[:, jn.newaxis, ...]
-                label_batch = label_batch[:, jn.newaxis, ...]
-            clipped_grad, values = grad_calc.calc_per_sample_grads(
-                image_batch, label_batch
-            )
-            loss_value = values[0]
-            grad_calc.accumulate_grad(clipped_grad)
-            if parallel:
-                loss_value = objax.functional.parallel.psum(loss_value)
-            # loss_value = loss_value[0] / image_batch.shape[0]
-            return loss_value[0], values[1]
-
-        @objax.Function.with_vars(train_vars)
-        def apply_grads(learning_rate):
-            grads = grad_calc.get_accumulated_grads()
-            grad_calc.reset_accumulated_grads()
-            if parallel:
-                grads = objax.functional.parallel.psum(grads)
-            grads = grad_calc.add_noise(grads, noise, objax.random.DEFAULT_GENERATOR)
-            grads = [gx / effective_batch_size for gx in grads]
-            opt(learning_rate, grads)
-            if ema is not None:
-                ema()
-            return grads
-
-        if parallel:
-            calc_grads = objax.Parallel(
-                calc_grads,
-                reduce=lambda x: x[0],
-                vc=train_vars,
-            )
-            apply_grads = objax.Parallel(
-                apply_grads,
-                reduce=np.sum,
-                vc=train_vars,
-            )
-        else:
-            #pass
-            calc_grads = objax.Jit(calc_grads)
-            apply_grads = objax.Jit(apply_grads)
-
-        # @objax.Function.with_vars(train_vars)
-        def train_op(  # pylint:disable=inconsistent-return-statements
-            image_batch, label_batch, learning_rate: float, is_update_step: bool
-        ):
-            values = calc_grads(image_batch, label_batch)
-            if is_update_step:
-                return (
-                    values,
-                    apply_grads(learning_rate),
-                )
-
-    else:
-
-        @objax.Function.with_vars(train_vars)
-        def train_op(
-            image_batch,
-            label_batch,
-            learning_rate,
-        ):
-            # assert image_batch.shape[0] == effective_batch_size
-            image_batch = augment_op(image_batch)
-            label_batch = label_op(label_batch)
-            if n_augmentations > 1:
-                label_batch = jn.repeat(
-                    label_batch[:, jn.newaxis], n_augmentations, axis=1
-                )
-                if not isinstance(grad_calc, ClipAndAccumulateGrads):
-                    ibs = image_batch.shape
-                    image_batch = image_batch.reshape(ibs[0] * ibs[1], *ibs[2:])
-                    label_batch = label_batch.flatten()
-            elif isinstance(grad_calc, ClipAndAccumulateGrads):
-                image_batch = image_batch[:, jn.newaxis, ...]
-                label_batch = label_batch[:, jn.newaxis, ...]
-
-            grads, values = grad_calc(image_batch, label_batch)
-            if parallel:
-                if isinstance(grad_calc, ClipAndAccumulateGrads):
-                    loss = values[0]
-                    grads = objax.functional.parallel.psum(grads)
-                    loss = objax.functional.parallel.psum(loss)
-                else:
-                    grads = objax.functional.parallel.pmean(grads)
-                    loss = objax.functional.parallel.pmean(values)
-            if isinstance(grad_calc, ClipAndAccumulateGrads):
-                # loss = loss[0] / image_batch.shape[0]
-                grads = grad_calc.add_noise(
-                    grads, noise, objax.random.DEFAULT_GENERATOR
-                )
-                grads = [gx / effective_batch_size for gx in grads]
-            else:
-                loss = values[0]
-            opt(learning_rate, grads)
-            if ema is not None:
-                ema()
-            return values, grads
-
-        if parallel:
-            train_op = objax.Parallel(train_op, reduce=np.mean, vc=train_vars)
-        else:
-            train_op = objax.Jit(train_op, static_argnums=(3,))
-
-    return train_op
-
-
 def create_loss_gradient(config: Config, model_vars, loss_fn):
     if not config.DP:
         loss_gv = objax.GradValues(loss_fn, model_vars)
     else:
+        if config.DP.bam and config.DP.SAT:
+            raise ValueError("BAM and SAT are mutually exclusive")
         loss_gv = ClipAndAccumulateGrads(
             loss_fn,
             model_vars,
             config.DP.max_per_sample_grad_norm,
-            batch_axis=(0, 0),
+            batch_axis=(0, 0) if not config.DP.SAT else (0, 0, None, None),
             use_norm_accumulation=config.DP.norm_acc,
             gradient_accumulation_steps=config.DP.grad_acc_steps,
             bam=config.DP.bam,
             r=config.DP.r,
-            alpha=config.DP.alpha,
+            SAT=config.DP.SAT,
             log_grad_metrics=config.general.log_wandb,
         )
 
@@ -213,6 +82,11 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
         leave=False,
     )
     train_iter = enumerate(iter(train_loader))
+    # intialized previous grad
+    if config.DP.SAT:
+        prev_grad = None
+        prev_grad_norm = None
+
     with (train_vars).replicate() if parallel else contextlib.suppress():
         while True:
             try:
@@ -226,9 +100,15 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
             add_args = {}
             if grad_acc > 1:
                 add_args["is_update_step"] = (i + 1) % grad_acc == 0
-            train_result = train_op(img, label, np.array(learning_rate), **add_args)
+            if not config.DP.SAT:
+                train_result = train_op(img, label, np.array(learning_rate), **add_args)
+            else:
+                train_result = train_op(img, label, np.array(learning_rate), prev_grad=prev_grad, prev_grad_norm=prev_grad_norm, **add_args)
             if train_result is not None:
                 values, grads = train_result
+                if config.DP.SAT:
+                    prev_grad = grads
+                    prev_grad_norm = jn.linalg.norm([jn.linalg.norm(g) for g in grads])
                 train_loss = values[0]
                 if isinstance(train_loss, List):
                     train_loss = train_loss[0]
@@ -256,7 +136,9 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
                 try:
                     if config.dataset.has_group_attributes:
                         eval_img, eval_attr_dict, eval_label = next(val_iter)
-                        assert isinstance(eval_attr_dict, dict), "attributes should be a dict"
+                        assert isinstance(
+                            eval_attr_dict, dict
+                        ), "attributes should be a dict"
                     else:
                         eval_img, eval_label = next(val_iter)
                 except StopIteration:
@@ -362,7 +244,9 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
             y_pred, label = np.array(y_pred), np.array(label)
             if per_batch_metrics:
                 if config.dataset.has_group_attributes:
-                    raise NotImplementedError("per-batch metrics are not currently supported with group attributes")
+                    raise NotImplementedError(
+                        "per-batch metrics are not currently supported with group attributes"
+                    )
                 main_metric_batch, logging_metric_batch = calculate_metrics(
                     config.dataset.task, metrics, loss_fn, label, y_pred
                 )
@@ -385,7 +269,9 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
                 break
     if per_batch_metrics:
         if config.dataset.has_group_attributes:
-                raise NotImplementedError("per-batch metrics are not currently supported with group attributes")
+            raise NotImplementedError(
+                "per-batch metrics are not currently supported with group attributes"
+            )
         main_metric = (
             metrics[0][0],
             np.mean([batch_metric[1] for batch_metric in main_metric_list]),
@@ -405,11 +291,11 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
                 attr_main_metric, attr_log_metric = calculate_metrics(
                     config.dataset.task, metrics, loss_fn, attr_correct, attr_predicted
                 )
-                logging_metrics[attr_name] = attr_log_metric 
+                logging_metrics[attr_name] = attr_log_metric
             # calculate metrics for the everyone
             main_metric, log_metrics = calculate_metrics(
-                    config.dataset.task, metrics, loss_fn, correct, predicted
-                )
+                config.dataset.task, metrics, loss_fn, correct, predicted
+            )
             logging_metrics["all"] = log_metrics
         else:
             # only calculate general metrics
@@ -421,19 +307,8 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
         if config.dataset.has_group_attributes:
             for attr_name, attr_log_metrics in logging_metrics.items():
                 wandb.log({f"{dataset_split}_{attr_name}": logging_metrics[attr_name]})
-                for name, value in logging_metrics.items():
-                    print(name)
-                    if name == "classification_report":
-                        df = pd.DataFrame(value)
-                        table = wandb.Table(dataframe=df)
-                        wandb.log({f"cr{dataset_split}_{attr_name}": table})
         else:
             wandb.log({f"{dataset_split}_": logging_metrics})
-            for name, value in logging_metrics.items():
-                if name == "classification_report":
-                    df = pd.DataFrame(value)
-                    table = wandb.Table(dataframe=df)
-                    wandb.log({f"cr{dataset_split}": table})
     else:
         print(f"-----------------------------------------\n{dataset_split}_:")
         if config.dataset.has_group_attributes:
@@ -447,7 +322,7 @@ def test(  # pylint:disable=too-many-arguments,too-many-branches
         else:
             for name, value in logging_metrics.items():
                 if name == "classification_report":
-                        print(f"\t{name}: \n{value}")
+                    print(f"\t{name}: \n{value}")
                 else:
                     print(f"\t{name}: {value}")
         print("-----------------------------------------")

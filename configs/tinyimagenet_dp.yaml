@@ -3,7 +3,7 @@ defaults:
   - _self_
 project: tinyimagenet-dp
 general:
-  log_wandb: False
+  log_wandb: True
   parallel: False
   eval_train: False
 dataset: 
@@ -31,7 +31,7 @@ loader:
   pin_memory: True
 augmentations:
   consecutive_augmentations:
-    multiplicity: 2
+    multiplicity: 4
     consecutive_augmentations:
       random_img_shift:
         max_shift: 4
@@ -69,7 +69,7 @@ scheduler:
   min_delta: 0.01
   factor: 0.5
 DP:
-  epsilon: 8.0
+  epsilon: 10.0
   max_per_sample_grad_norm: 1.0
   delta: 8e-7
   norm_acc: False

@@ -181,7 +181,7 @@ class DPConfig:
     glrt_assumption: bool = False
     bam:Optional[bool] = False
     r:Optional[float] = None
-    alpha:Optional[float] = None
+    SAT:Optional[bool] = False
     
 
 

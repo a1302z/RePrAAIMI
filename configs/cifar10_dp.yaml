@@ -48,30 +48,31 @@ model:
   activation: mish
   normalization: gn
   pooling: avgpool
-  ensemble: 1
-  extra_args:
-    scale_norm: True
+  # extra_args:
+  #   scale_norm: True
+  #   width: 4
+  #   depth: 40
 optim:
   name: nadam
 loss: 
   type: cse
   reduction: mean
 ema:
-  use_ema: False
-  decay: 0.001
+  use_ema: True
+  decay: 0.0001
 hyperparams:
-  epochs: 50
-  batch_size: 512
+  epochs: 30
+  batch_size: 256
   batch_size_test: 512
   lr: 2e-3
-  eval_every_n: 20
+  eval_every_n: 50
   # momentum: 0.9
 scheduler:
   type: reduceonplateau
   normalize_lr: False
   patience: 15
   min_delta: 0.01
-  factor: 0.1
+  factor: 0.5
 DP:
   epsilon: 8
   max_per_sample_grad_norm: 1.0
@@ -81,6 +82,6 @@ DP:
   rsqrt_noise_adapt: False
   glrt_assumption: False
   bam: False
-  r: 0.1
-  alpha: 0.31
+  SAT: True
+  r: 0.025
  

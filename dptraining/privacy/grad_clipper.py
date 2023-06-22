@@ -20,11 +20,12 @@ class ClipAndAccumulateGrads(Module):
         num_augmented_samples: int = 1,
         log_grad_metrics: bool = True,
         bam: bool = False,
+        SAT: bool = False,
         double_backprop: bool = False,
         r: float = 0.05,
-        alpha: float = 0.8,
     ):
         super().__init__()
+        self.SAT = SAT
         self.batch_axis = batch_axis
         self.l2_norm_clip = l2_norm_clip
         self.log_grad_metrics = log_grad_metrics
@@ -34,17 +35,14 @@ class ClipAndAccumulateGrads(Module):
         self.accumulated_grads = ModuleList(
             StateVar(jnp.zeros_like(tv)) for tv in variables
         )
+        self.prev_grad = None
+        self.prev_grad_norm = None
+        self.r = r
         gv = GradValues(loss_fn, variables)
-        if not bam:
-            if use_norm_accumulation:
-                raise NotImplementedError()
-            else:
-                self.clipped_grad = self.make_clipped_grad_fn_simple(
-                    loss_fn, gv, variables
-                )
-        else:
+        if use_norm_accumulation:
+            raise NotImplementedError()
+        if bam:
             print("... creating clip function for BAM")
-            self.lambda_reg = alpha * r
             if double_backprop:
                 self.clipped_grad = self.make_clipped_grad_fn_bam_db(
                     loss_fn, gv, variables
@@ -53,8 +51,10 @@ class ClipAndAccumulateGrads(Module):
                 self.clipped_grad = self.make_clipped_grad_fn_bam(
                     loss_fn, gv, variables
                 )
-                self.alpha = alpha
-                self.r = r
+        elif SAT:
+            self.clipped_grad = self.make_clipped_grad_fn_SAT(loss_fn, gv, variables)
+        else:
+            self.clipped_grad = self.make_clipped_grad_fn_simple(loss_fn, gv, variables)
 
     def calc_per_sample_grads(self, *args):
         self.counter.value += 1
@@ -77,22 +77,24 @@ class ClipAndAccumulateGrads(Module):
             self.accumulated_grads[i].value = jnp.zeros_like(accumulated_grad)
         self.counter.value = jnp.array(0).astype(jnp.int32)
 
-    def cos_sim(self, g1, g2, batch_size:int):
+    def cos_sim(self, g1, g2, batch_size: int):
         """Computes cosine similarity between g1 and g2"""
         flatten = lambda grad_list: jnp.concatenate(
             [g.flatten() for g in grad_list], axis=0
         )
-        g1 = [g/batch_size for g in g1]
-        g2 = [g/batch_size for g in g2]
-        return jnp.dot(flatten(g1), flatten(g2)) / (jnp.linalg.norm(flatten(g1)) * jnp.linalg.norm(flatten(g2)))
+        g1 = [g / batch_size for g in g1]
+        g2 = [g / batch_size for g in g2]
+        return jnp.dot(flatten(g1), flatten(g2)) / (
+            jnp.linalg.norm(flatten(g1)) * jnp.linalg.norm(flatten(g2))
+        )
 
-    def l2_bias(self, g, g_clip, batch_size:int):
+    def l2_bias(self, g, g_clip, batch_size: int):
         """Computes L2-norm of bias vector ||Bias(\hat{g}, \hat{g}_priv)||_2"""
         flatten = lambda grad_list: jnp.concatenate(
             [g.flatten() for g in grad_list], axis=0
         )
-        g = [pg/batch_size for pg in g]
-        g_clip = [pg/batch_size for pg in g_clip]
+        g = [pg / batch_size for pg in g]
+        g_clip = [pg / batch_size for pg in g_clip]
         return jnp.linalg.norm(flatten(g_clip) - flatten(g))
 
     def __call__(self, *args):
@@ -112,7 +114,10 @@ class ClipAndAccumulateGrads(Module):
         ]
 
     def make_clipped_grad_fn_simple(
-        self, f: Callable, gv: GradValues, vc: VarCollection
+        self,
+        f: Callable,
+        gv: GradValues,
+        vc: VarCollection,
     ) -> Callable:
         @Function.with_vars(gv.vars())
         def clipped_grad_single_example(*args):
@@ -127,8 +132,10 @@ class ClipAndAccumulateGrads(Module):
             clipped_grad_single_example, batch_axis=self.batch_axis
         )
 
-        def clipped_grad(*args):
-            grads, values, unclipped_grads = clipped_grad_vectorized(*args)
+        def clipped_grad(images, targets):
+            grads, values, unclipped_grads = clipped_grad_vectorized(
+                images, targets
+            )
             batch_size = grads[0].shape[0]
             grads = jax.tree_util.tree_map(
                 functools.partial(jnp.sum, axis=0), (grads)
@@ -140,7 +147,62 @@ class ClipAndAccumulateGrads(Module):
                 unclipped_grads = jax.tree_util.tree_map(
                     functools.partial(jnp.sum, axis=0), (unclipped_grads)
                 )
-                stoch_alignment = self.cos_sim(unclipped_grads, grads, batch_size=batch_size)
+                stoch_alignment = self.cos_sim(
+                    unclipped_grads, grads, batch_size=batch_size
+                )
+                bias = self.l2_bias(unclipped_grads, grads, batch_size=batch_size)
+                values[1]["stoch_aligment"] = stoch_alignment
+                values[1]["l2_bias"] = bias
+            return grads, values
+
+        return clipped_grad
+
+    def make_clipped_grad_fn_SAT(
+        self,
+        f: Callable,
+        gv: GradValues,
+        vc: VarCollection,
+    ) -> Callable:
+        @Function.with_vars(gv.vars())
+        def clipped_grad_single_example(image, target, prev_grad, prev_grad_norm):
+            if self.prev_grad is not None:
+                # pertub parameters by scaled gradient
+                for v, g in zip(vc, prev_grad):
+                    v.assign(v.value + (self.r * g / prev_grad_norm + 1e-6))
+            grads, loss = gv(image, target)
+            if self.prev_grad is not None:
+                # undo parameter pertubation
+                for v, g in zip(vc, prev_grad):
+                    v.assign(v.value - (self.r * g / prev_grad_norm + 1e-6))
+
+            total_grad_norm = jnp.linalg.norm([jnp.linalg.norm(g) for g in grads])
+            idivisor = 1 / jnp.maximum(total_grad_norm / self.l2_norm_clip, 1.0)
+            unclipped_grads = grads if self.log_grad_metrics else None
+            values = (loss, {"sample_grad_norm": total_grad_norm})
+            return [g * idivisor for g in grads], values, unclipped_grads
+
+        clipped_grad_vectorized = Vectorize(
+            clipped_grad_single_example, batch_axis=self.batch_axis
+        )
+
+        def clipped_grad(images, targets, prev_grad, prev_grad_norm):
+            grads, values, unclipped_grads = clipped_grad_vectorized(
+                images, targets, prev_grad, prev_grad_norm
+            )
+            batch_size = grads[0].shape[0]
+            grads = jax.tree_util.tree_map(
+                functools.partial(jnp.sum, axis=0), (grads)
+            )  # sum for grads
+            values = jax.tree_util.tree_map(
+                functools.partial(jnp.mean, axis=0), (values)
+            )  # mean for metrics
+            if self.log_grad_metrics:
+                unclipped_grads = jax.tree_util.tree_map(
+                    functools.partial(jnp.sum, axis=0), (unclipped_grads)
+                )
+                stoch_alignment = self.cos_sim(
+                    unclipped_grads, grads, batch_size=batch_size
+                )
                 bias = self.l2_bias(unclipped_grads, grads, batch_size=batch_size)
                 values[1]["stoch_aligment"] = stoch_alignment
                 values[1]["l2_bias"] = bias
@@ -153,31 +215,25 @@ class ClipAndAccumulateGrads(Module):
     ) -> Callable:
         @Function.with_vars(gv.vars())
         def clipped_grad_single_example(*args):
-            grads, loss = gv(*args)
+            grads, _ = gv(*args)
             grad_norm = jnp.linalg.norm(jnp.array([jnp.linalg.norm(g) for g in grads]))
             # pertub parameters by scaled gradient
             for v, g in zip(vc, grads):
                 v.assign(v.value + (self.r * g / grad_norm))
             l_dash_grad_fn = GradValues(f, vc)
-            l_dash_grads, _ = l_dash_grad_fn(*args)
-            # BAM gradient
-            total_grad = [
-                ((1 - self.alpha) * g) + (self.alpha * dash_grad)
-                for g, dash_grad in zip(grads, l_dash_grads)
-            ]
+            bam_grads, loss = l_dash_grad_fn(*args)
             # undo parameter perturbation
             for v, g in zip(vc, grads):
                 v.assign(v.value - (self.r * g / grad_norm))
+            del grads
             # clipping business as usual
             total_grad_norm = jnp.linalg.norm(
-                jnp.array([jnp.linalg.norm(g) for g in total_grad])
+                jnp.array([jnp.linalg.norm(g) for g in bam_grads])
             )
             idivisor = 1 / jnp.maximum(total_grad_norm / self.l2_norm_clip, 1.0)
-            unclipped_grads = grads if self.log_grad_metrics else None
+            unclipped_grads = bam_grads if self.log_grad_metrics else None
             values = (loss, {"sample_grad_norm": total_grad_norm})
-            del l_dash_grads
-            del grads
-            return [g * idivisor for g in total_grad], values, unclipped_grads
+            return [g * idivisor for g in bam_grads], values, unclipped_grads
 
         clipped_grad_vectorized = Vectorize(
             clipped_grad_single_example, batch_axis=self.batch_axis
@@ -196,7 +252,9 @@ class ClipAndAccumulateGrads(Module):
                 unclipped_grads = jax.tree_util.tree_map(
                     functools.partial(jnp.sum, axis=0), (unclipped_grads)
                 )
-                stoch_alignment = self.cos_sim(unclipped_grads, grads, batch_size=batch_size)
+                stoch_alignment = self.cos_sim(
+                    unclipped_grads, grads, batch_size=batch_size
+                )
                 bias = self.l2_bias(unclipped_grads, grads, batch_size=batch_size)
                 values[1]["stoch_aligment"] = stoch_alignment
                 values[1]["l2_bias"] = bias
@@ -254,7 +312,9 @@ class ClipAndAccumulateGrads(Module):
                 unclipped_grads = jax.tree_util.tree_map(
                     functools.partial(jnp.sum, axis=0), (unclipped_grads)
                 )
-                stoch_alignment = self.cos_sim(unclipped_grads, grads, batch_size=batch_size)
+                stoch_alignment = self.cos_sim(
+                    unclipped_grads, grads, batch_size=batch_size
+                )
                 bias = self.l2_bias(unclipped_grads, grads, batch_size=batch_size)
                 values[1]["stoch_aligment"] = stoch_alignment
                 values[1]["l2_bias"] = bias
