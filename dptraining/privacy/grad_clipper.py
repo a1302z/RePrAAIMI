@@ -52,8 +52,10 @@ class ClipAndAccumulateGrads(Module):
                     loss_fn, gv, variables
                 )
         elif SAT:
+            print("... creating clip function for SAT")
             self.clipped_grad = self.make_clipped_grad_fn_SAT(loss_fn, gv, variables)
         else:
+            print("... normal clip function")
             self.clipped_grad = self.make_clipped_grad_fn_simple(loss_fn, gv, variables)
 
     def calc_per_sample_grads(self, *args):
@@ -98,7 +100,7 @@ class ClipAndAccumulateGrads(Module):
         return jnp.linalg.norm(flatten(g_clip) - flatten(g))
 
     def __call__(self, *args):
-        """Returns the computed DP-SGD gradients.
+        """Returns the computed clipped and averaged per-sample gradients.
         Note: This function is not serializable. Hence we recommend
         to use the single function calls which are serializable.
 
@@ -165,16 +167,18 @@ class ClipAndAccumulateGrads(Module):
     ) -> Callable:
         @Function.with_vars(gv.vars())
         def clipped_grad_single_example(image, target, prev_grad, prev_grad_norm):
-            if self.prev_grad is not None:
-                # pertub parameters by scaled gradient
+            if prev_grad is not None:
+                # gradient ascent step with scaled previous (private) gradient
                 for v, g in zip(vc, prev_grad):
-                    v.assign(v.value + (self.r * g / prev_grad_norm + 1e-6))
-            grads, loss = gv(image, target)
-            if self.prev_grad is not None:
+                    v.assign(v.value + (self.r * g / (prev_grad_norm + 1e-6)))
+                l_dash_grad_fn = GradValues(f, vc)
+                grads, loss = l_dash_grad_fn(image, target)
                 # undo parameter pertubation
                 for v, g in zip(vc, prev_grad):
-                    v.assign(v.value - (self.r * g / prev_grad_norm + 1e-6))
-
+                    v.assign(v.value - (self.r * g / (prev_grad_norm + 1e-6)))
+            else:
+                # at the first step, we do not have a previous gradient
+                grads, loss = gv(image, target)
             total_grad_norm = jnp.linalg.norm([jnp.linalg.norm(g) for g in grads])
             idivisor = 1 / jnp.maximum(total_grad_norm / self.l2_norm_clip, 1.0)
             unclipped_grads = grads if self.log_grad_metrics else None
@@ -217,12 +221,12 @@ class ClipAndAccumulateGrads(Module):
         def clipped_grad_single_example(*args):
             grads, _ = gv(*args)
             grad_norm = jnp.linalg.norm(jnp.array([jnp.linalg.norm(g) for g in grads]))
-            # pertub parameters by scaled gradient
+            # ascent step with scaled gradient
             for v, g in zip(vc, grads):
                 v.assign(v.value + (self.r * g / grad_norm))
             l_dash_grad_fn = GradValues(f, vc)
-            bam_grads, loss = l_dash_grad_fn(*args)
-            # undo parameter perturbation
+            bam_grads, loss = l_dash_grad_fn(*args) 
+            # undo ascent step
             for v, g in zip(vc, grads):
                 v.assign(v.value - (self.r * g / grad_norm))
             del grads
@@ -282,7 +286,7 @@ class ClipAndAccumulateGrads(Module):
             total_grad_norm = jnp.linalg.norm(
                 jnp.array([jnp.linalg.norm(g) for g in grads])
             )
-            return loss[0] + (self.lambda_reg * total_grad_norm)
+            return loss[0] + (self.r * total_grad_norm)
 
         reg_grad_fn = GradValues(reg_loss, vc)
 

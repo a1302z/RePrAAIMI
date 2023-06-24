@@ -1,0 +1,25 @@
+program: dptraining/train.py
+project: cifar10-DP
+method: random
+metric: 
+  name: val_.accuracy_score
+  goal: maximize
+parameters:
+  DP.r:
+    distribution: uniform
+    min: 0.0
+    max: 0.1
+name:
+  "BAM lambda sweep"
+
+command:
+  - ${env}
+  - python
+  - ${program}
+  - -cn 
+  - cifar10_dp_wrn.yaml
+  - general.log_wandb=True
+  - general.parallel=False
+  - DP.BAM = True
+  - DP.SAT = False
+  - ${args_no_hyphens}

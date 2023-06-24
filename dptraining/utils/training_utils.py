@@ -107,6 +107,12 @@ def train(  # pylint:disable=too-many-arguments,duplicate-code
             if train_result is not None:
                 values, grads = train_result
                 if config.DP.SAT:
+                    # TODO do this properly
+                    # calculate cosine similarity between previous and current grad
+                    #cosine_sim_SAT = cos_sim(prev_grad, grads)
+                    #if config.general.log_wandb:
+                    #    wandb.log({"SAT_grad_cosine_sim_prev_step": cosine_sim_SAT})
+                    # update previous grad
                     prev_grad = grads
                     prev_grad_norm = jn.linalg.norm([jn.linalg.norm(g) for g in grads])
                 train_loss = values[0]
@@ -334,3 +340,15 @@ def summarise_batch_metrics(metric_names, metric_list):
         func_name: np.mean([metric[func_name] for metric in metric_list])
         for func_name in metric_names
     }
+
+
+def cos_sim(g1, g2, batch_size: int):
+    """Computes cosine similarity between g1 and g2"""
+    flatten = lambda grad_list: jnp.concatenate(
+        [g.flatten() for g in grad_list], axis=0
+    )
+    g1 = [g / batch_size for g in g1]
+    g2 = [g / batch_size for g in g2]
+    return jnp.dot(flatten(g1), flatten(g2)) / (
+        jnp.linalg.norm(flatten(g1)) * jnp.linalg.norm(flatten(g2))
+    )

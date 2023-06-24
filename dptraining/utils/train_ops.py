@@ -81,7 +81,7 @@ def create_train_op_accumulate(  # pylint:disable=too-many-arguments,too-many-st
             vc=train_vars,
         )
     else:
-        # pass
+        #pass
         calc_grads = objax.Jit(calc_grads)
         apply_grads = objax.Jit(apply_grads)
 
@@ -222,7 +222,7 @@ def create_train_op_SAT(
             vc=train_vars,
         )
     else:
-        # pass
+        #pass
         calc_grads = objax.Jit(calc_grads)
         apply_grads = objax.Jit(apply_grads)
 
