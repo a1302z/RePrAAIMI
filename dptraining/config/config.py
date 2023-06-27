@@ -140,7 +140,7 @@ class HyperparamsConfig:
     lr: float = MISSING
     l2regularization: Optional[float] = None
     overfit: Optional[int] = None
-    eval_every_n: Optional[int] = -1
+    eval_every_n: Optional[int] = 100
 
 
 class SchedulerType(Enum):
