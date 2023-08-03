@@ -1,72 +1,35 @@
-from scipy.stats import norm, chi2, ncx2
+from scipy.stats import norm
 from scipy.integrate import quad
 import numpy as np
 from scipy import optimize
 
-# pylint:disable=all #this is schorschis stuff, not gonna lint it
 
-q = norm().sf
-qinv = norm().isf
+def gaussian_tradeoff(alpha, mu):
+    return norm.cdf(norm.isf(alpha) - mu)
 
 
-def compute_mu_uniform(steps, noise_multiplier, sample_rate):
-    c = sample_rate * np.sqrt(steps)
-    return (
-        np.sqrt(2)
-        * c
-        * np.sqrt(
-            np.exp(noise_multiplier ** (-2)) * norm.cdf(1.5 / noise_multiplier)
-            + 3 * norm.cdf(-0.5 / noise_multiplier)
-            - 2
-        )
+def sgm_poisson(alpha, noise_multiplier, N, p):
+    "Trade-off for DP SGM"
+    mu_tilde = np.sqrt(np.exp(noise_multiplier ** (-2)) - 1) * np.sqrt(N) * p
+    return gaussian_tradeoff(alpha, mu_tilde)
+
+
+def glrt_poisson_worst_case(alpha, noise_multiplier, N, p):
+    "GLRT trade-off curve for df=1"
+    mu_tilde = np.sqrt(np.exp(noise_multiplier ** (-2)) - 1) * np.sqrt(N) * p
+    return np.minimum(
+        1 - alpha,
+        norm.cdf(norm.isf(alpha / 2) - (mu_tilde / 2))
+        - norm.sf(norm.isf(alpha / 2) + (mu_tilde / 2)),
     )
 
 
-def real_roc(x, Delta, sigma):
-    return norm().sf(norm().isf(x) - Delta / sigma)
+def get_glrt_noise_multiplier(dp_noise_multiplier, N, p):
+    area_under = quad(sgm_poisson, 0, 1, args=(dp_noise_multiplier, N, p))[0]
 
+    def auc_for_noise(noise):
+        return quad(glrt_poisson_worst_case, 0, 1, args=(noise, N, p))[0] - area_under
 
-def glrt_real_roc(x, Delta, sigma):
-    return q(qinv(x / 2) - Delta / sigma) + q(qinv(x / 2) + Delta / sigma)
-
-
-def glrt_complex_roc(x, Delta, sigma):
-    return ncx2(df=2, scale=sigma**2 / 2, nc=2 * Delta**2 / sigma**2).sf(
-        chi2(df=2, scale=sigma**2 / 2).isf(x)
-    )
-
-
-def real_roc_auc(Delta, sigma):
-    return quad(real_roc, 0, 1, args=(Delta, sigma))[0]
-
-
-def glrt_real_roc_auc(Delta, sigma):
-    return quad(glrt_real_roc, 0, 1, args=(Delta, sigma))[0]
-
-
-def glrt_complex_roc_auc(Delta, sigma):
-    return quad(glrt_complex_roc, 0, 1, args=(Delta, sigma))[0]
-
-
-auc_funcs = {"real": glrt_real_roc_auc, "complex": glrt_complex_roc_auc}
-
-
-def new_noise_multi(old_noise_multi, steps, sample_rate, mode="complex"):
-    assert mode in ("complex", "real")
-    # find effective mu for the given parameters and uniform sampling
-    mu = compute_mu_uniform(steps, old_noise_multi, sample_rate)
-    # find corresponding AUC
-    auc = real_roc_auc(mu, 1)
-    # find new mu for the same AUC
-    def roc_of_mu(mu):
-        return auc_funcs[mode](mu, 1) - auc
-
-    new_mu = optimize.root_scalar(roc_of_mu, bracket=(0.1, 6), method="brentq")
-    # find new multiplier for the mu
-    def mu_of_noise(noise):
-        return compute_mu_uniform(steps, noise, sample_rate) - new_mu.root
-
-    new_multi = optimize.root_scalar(
-        mu_of_noise, bracket=(0.1, 6), method="brentq"
+    return optimize.root_scalar(
+        auc_for_noise, bracket=(0.05, 100), method="brentq"
     ).root
-    return new_multi

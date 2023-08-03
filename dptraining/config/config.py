@@ -308,7 +308,6 @@ class DPConfig:
     delta: float = MISSING
     sigma: Optional[float] = None
     norm_acc: bool = MISSING
-    rsqrt_noise_adapt: bool = False
     glrt_assumption: bool = False
     mechanism: str = "rdp"
     eps_tol: Optional[float] = None

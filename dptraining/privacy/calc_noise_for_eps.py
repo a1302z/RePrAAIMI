@@ -7,7 +7,7 @@ from scipy.optimize import minimize_scalar
 from opacus.accountants import IAccountant, RDPAccountant
 
 from dptraining.config import Config
-from dptraining.privacy.find_noise_mult import new_noise_multi
+from dptraining.privacy.find_noise_mult import get_glrt_noise_multiplier
 
 
 from opacus.accountants.utils import get_noise_multiplier
@@ -143,24 +143,16 @@ class EpsCalculator:
         return effective_batch_size
 
     def adapt_sigma(self):
-        rsqrt2_correction_factor = (
-            rsqrt(2.0) if self._config.DP.rsqrt_noise_adapt else 1.0
-        )
         adapted_sigma = (
-            new_noise_multi(
+            get_glrt_noise_multiplier(
                 self._config.DP.sigma,
                 self.steps,
                 self.sampling_rate,
-                mode="complex" if self._config.model.complex else "real",
             )
             if self._config.DP.glrt_assumption
             else self._config.DP.sigma
         )
-        total_noise = (
-            adapted_sigma
-            * rsqrt2_correction_factor
-            * self._config.DP.max_per_sample_grad_norm
-        )
+        total_noise = adapted_sigma * self._config.DP.max_per_sample_grad_norm
         return total_noise, adapted_sigma
 
     @property
