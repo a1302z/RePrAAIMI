@@ -32,7 +32,6 @@ def main(
     # This is absolutely disgusting but necessary to disable gpu training
     import objax
     from jax import device_count
-    from torch.random import manual_seed as torch_manual_seed
 
     from dptraining.datasets import make_loader_from_config
     from dptraining.models import make_model_from_config, setup_pretrained_model
