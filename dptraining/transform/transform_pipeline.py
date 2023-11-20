@@ -15,7 +15,7 @@ from dptraining.transform.transforms.complex import (
     MakeComplexRealAndImaginary,
 )
 from dptraining.transform.transforms.convert import PILToNumpy, PILToJAXNumpy
-from dptraining.transform.transforms.crop import CenterCrop
+from dptraining.transform.transforms.crop import CenterCrop, RandomCrop, RandomCropJAX
 from dptraining.transform.transforms.fft import FFT, JaxFFT, IFFT, JaxIFFT
 from dptraining.transform.transforms.flip import (
     RandomVerticalFlipsJax,
@@ -368,6 +368,7 @@ class TransformPipeline:
         "random_vertical_flips_batch": RandomVerticalFlipsJaxBatch,
         "random_img_shift_batch": RandomImageShiftsJaxBatch,
         "center_crop": CenterCrop,
+        "random_crop_jax": RandomCropJAX,
         "pil_to_numpy": PILToNumpy,
         "normalize_np_img": NormalizeNumpyImg,
         "normalize_np_batch": NormalizeNumpyBatch,
@@ -380,6 +381,8 @@ class TransformPipeline:
         "numpy_img_to_chw": TransposeNumpyImgToCHW,
         "consecutive_augmentations": ConsecutiveAugmentations,
         "random_augmentations": RandomTransform,
+        "random_crop": RandomCrop,
+        "random_crop_jax": RandomCropJAX,
         "fft": FFT,
         "ifft": IFFT,
         "jaxfft": JaxFFT,

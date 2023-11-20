@@ -40,7 +40,7 @@ def preprocess_scan(
     scan: np.array,
     ct_window: CTWindow,
     normalization: Normalization,
-    mean_std: tuple[float],
+    mean_std: tuple[float, float],
 ) -> np.array:
     """Performs Preprocessing:
     - clips vales to -150 to 200,
