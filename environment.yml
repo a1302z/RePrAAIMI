@@ -5,7 +5,8 @@ channels:
   - nvidia
 dependencies:
   - python==3.10
-  - pytorch::pytorch==1.11
+  - pytorch::pytorch==2.0
+  - pytorch-cuda=11.7
   - pytorch::torchvision
   - nvidia::cudatoolkit==11.4
   # - nvidia::cuda==11.4
@@ -26,6 +27,7 @@ dependencies:
   - conda-forge::opacus
   - conda-forge::seaborn
   - conda-forge::opencv
+  - photosynthesis-team::piq
   - black
   - pytest
   - pylint
@@ -38,6 +40,3 @@ dependencies:
     - deepee
     - git+https://github.com/cs-mshah/split-folders
     - pyyaml
-    - lpips
-    - kornia
-    - autodp

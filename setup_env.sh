@@ -1,6 +1,3 @@
 #!/bin/bash
 eval "$(conda shell.bash hook)"
-conda env create -f environment.yml && conda activate objaxdp && conda install -c "nvidia/label/cuda-11.4.0" cuda -y && conda install -c "nvidia/label/cuda-11.4.0" cuda-nvcc -c conda-forge -c nvidia -y && nvcc --version && conda list | grep cud && echo $(which pip) && pip install --upgrade jax[cuda]==0.3.15 jaxlib==0.3.15+cuda11.cudnn82 -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html && pip install objax==1.6.0
-# --upgrade jax==0.3 jaxlib==0.3+cuda11.cudnn805 -f https://storage.googleapis.com/jax-releases/jax_releases.html
-# && pip install --upgrade "jax[cuda11_cudnn81]"
-#  && conda install -c "nvidia/label/cuda-11.4.0" cuda-nvcc -y
+conda env create -f environment.yml && conda activate objaxdp && CONDA_OVERRIDE_CUDA="11.4" conda install jaxlib=*=*cuda* jax cuda-nvcc -c conda-forge -c nvidia -y && pip install objax==1.6.0 && python -c "import torch, jax; print(f'Cuda available: {torch.cuda.is_available()}'); print(f'jax devices: {jax.devices()}');" 

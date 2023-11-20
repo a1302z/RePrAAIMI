@@ -98,7 +98,7 @@ loss:
   binary_loss: False
 DP:
   epsilon: 8
-  max_per_sample_grad_norm: 5.66
+  max_per_sample_grad_norm:  5.66
   delta: 8e-7
   norm_acc: False
   mechanism: rdp

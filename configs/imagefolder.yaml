@@ -52,7 +52,7 @@ hyperparams:
   batch_size_test: 512
   lr: 2e-3
   # momentum: 0.9
-  grad_acc_steps: 29
+  grad_acc_steps: 1
 DP:
   epsilon: 8
   max_per_sample_grad_norm: 1
