@@ -1,12 +1,13 @@
 defaults:
   - base_config
   - _self_
-project: fmri-DP
 general:
   log_wandb: False
   parallel: False
   eval_train: False
   make_save_str_unique: True
+wandb:
+  project: fmri-DP
 # checkpoint:
 #   logdir: fmri_ckpts
 #   keep_ckpts: 2
@@ -35,6 +36,9 @@ model:
   name: unet
   in_channels: 1
   activation: cardioid
+  conv: convws_nw
+  upconv: convws_nw
+  pooling: conjavgpool
   extra_args:
     out_channels: 1
     channels: 16
@@ -43,6 +47,7 @@ optim:
 loss: 
   type: l1
   reduction: mean
+  binary_loss: False
 ema:
   use_ema: False
   decay: 0.999
@@ -53,7 +58,8 @@ hyperparams:
   lr: 2e-3
   # momentum: 0.9
   # l2regularization: 1e-5
-  overfit: 32
+  # overfit: 32
+  grad_acc_steps: 1
 metrics:
   main: 
     structural_similarity:
@@ -85,6 +91,5 @@ DP:
   max_per_sample_grad_norm: 1.0
   delta: 1e-5
   norm_acc: False
-  grad_acc_steps: 1
   rsqrt_noise_adapt: False
   glrt_assumption: False

@@ -1,4 +1,4 @@
-from typing import Callable, Union, Tuple, Optional
+from typing import Callable, Union, Optional
 from objax.typing import JaxArray, ConvPaddingInt
 from objax.constants import ConvPadding
 from objax import Module
@@ -11,8 +11,8 @@ class ConjugatePool2D(Module):
 
     def __init__(
         self,
-        size: Union[Tuple[int, int], int] = 2,
-        strides: Optional[Union[Tuple[int, int], int]] = None,
+        size: Union[tuple[int, int], int] = 2,
+        strides: Optional[Union[tuple[int, int], int]] = None,
         padding: Union[ConvPadding, str, ConvPaddingInt] = ConvPadding.VALID,
         pool_func: Callable = max_pool_2d,
     ) -> JaxArray:
@@ -36,8 +36,8 @@ class SeparablePool2D(Module):
 
     def __init__(
         self,
-        size: Union[Tuple[int, int], int] = 2,
-        strides: Optional[Union[Tuple[int, int], int]] = None,
+        size: Union[tuple[int, int], int] = 2,
+        strides: Optional[Union[tuple[int, int], int]] = None,
         padding: Union[ConvPadding, str, ConvPaddingInt] = ConvPadding.VALID,
         pool_func: Callable = max_pool_2d,
     ) -> JaxArray:

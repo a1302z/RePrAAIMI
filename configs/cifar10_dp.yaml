@@ -1,13 +1,14 @@
 defaults:
   - base_config
   - _self_
-project: cifar-DP
 general:
   log_wandb: False
   parallel: False
   eval_train: True
   use_pretrained_model: 
   save_path: cifar10dp.npz
+wandb:
+  project: cifar-DP
 # checkpoint:
 #   logdir: cifar10dpckpts
 #   keep_ckpts: 2
@@ -54,15 +55,17 @@ optim:
 loss: 
   type: cse
   reduction: sum
-ema:
-  use_ema: True
-  decay: 0.04
+  binary_loss: False
+# ema:
+#   use_ema: True
+#   decay: 0.04
 hyperparams:
-  epochs: 5
-  batch_size: 512
+  epochs: 200
+  batch_size: 4096
   batch_size_test: 512
   lr: 2e-3
   # momentum: 0.9
+  grad_acc_steps: 1
 scheduler:
   type: reduceonplateau
   normalize_lr: False
@@ -79,6 +82,5 @@ DP:
   max_per_sample_grad_norm: 1.0
   delta: 1e-5
   norm_acc: False
-  grad_acc_steps: 8
-  rsqrt_noise_adapt: False
   glrt_assumption: False
+  mechanism: rdp

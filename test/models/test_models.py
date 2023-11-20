@@ -22,6 +22,7 @@ from dptraining.config.model import (
     RealPooling,
 )
 from dptraining.config.utils import get_allowed_names
+from dptraining.config.model import ModelName
 
 from dptraining.models import (
     make_model_from_config,
@@ -117,7 +118,12 @@ def test_make_resnet9(utils):
 def test_all_options(utils):
     fake_data = np.random.randn(6, 3, 39, 39)
     for model, conv, act, norm, pool in product(
-        get_allowed_names(RealModelName),
+        (
+            ModelName.resnet9,
+            ModelName.resnet18,
+            ModelName.smoothnet,
+            ModelName.wide_resnet,
+        ),
         get_allowed_names(RealConv),
         get_allowed_names(RealActivation),
         get_allowed_names(RealNormalization),

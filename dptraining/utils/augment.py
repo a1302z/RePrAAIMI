@@ -1,5 +1,6 @@
 from math import prod
 from typing import Any, Callable
+from omegaconf import OmegaConf
 
 import objax
 from jax import numpy as jnp
@@ -14,10 +15,12 @@ from dptraining.utils.transform import (
     PILToNumpy,
     RandomHorizontalFlipsJax,
     RandomHorizontalFlipsJaxBatch,
+    RandomZFlipsJax,
     RandomImageShiftsJax,
     RandomImageShiftsJaxBatch,
     RandomVerticalFlipsJax,
     RandomVerticalFlipsJaxBatch,
+    CenterCrop,
     TransposeNumpyBatchToCHW,
     TransposeNumpyImgToCHW,
     FFT,
@@ -32,6 +35,7 @@ from omegaconf import DictConfig
 from torchvision import transforms
 
 from random import choice, seed
+from dptraining.config import Config
 
 seed(0)
 
@@ -40,6 +44,41 @@ torchvision_transforms = {
     for mn in dir(transforms)
     if callable(getattr(transforms, mn))
 }
+
+
+def make_augs(config: Config):
+    if config.augmentations:
+        augmenter = Transformation.from_dict_list(
+            OmegaConf.to_container(config.augmentations)
+        )
+        n_augmentations = augmenter.get_n_augmentations()
+        augment_op = augmenter.create_vectorized_transform()
+    else:
+        n_augmentations = 1
+        augment_op = lambda x: x
+    if config.label_augmentations:
+        label_augmenter = Transformation.from_dict_list(
+            OmegaConf.to_container(config.label_augmentations)
+        )
+        label_augment_op = label_augmenter.create_vectorized_transform()
+    else:
+        label_augment_op = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
+        # augment_op = augment_op.create_vectorized_transform()
+    if config.test_augmentations:
+        test_augmenter = Transformation.from_dict_list(
+            OmegaConf.to_container(config.test_augmentations)
+        )
+        test_aug = test_augmenter.create_vectorized_transform()
+    else:
+        test_aug = lambda x: x  # pylint:disable=unnecessary-lambda-assignment
+    if config.test_label_augmentations:
+        test_label_augmenter = Transformation.from_dict_list(
+            OmegaConf.to_container(config.test_label_augmentations)
+        )
+        test_label_aug = test_label_augmenter.create_vectorized_transform()
+    else:
+        test_label_aug = lambda _: _  # pylint:disable=unnecessary-lambda-assignment
+    return n_augmentations, augment_op, label_augment_op, test_aug, test_label_aug
 
 
 class ConsecutiveAugmentations:
@@ -169,10 +208,12 @@ class Transformation:
     _mapping: dict[str, Callable] = {
         "random_horizontal_flips": RandomHorizontalFlipsJax,
         "random_vertical_flips": RandomVerticalFlipsJax,
+        "random_z_flips": RandomZFlipsJax,
         "random_img_shift": RandomImageShiftsJax,
         "random_horizontal_flips_batch": RandomHorizontalFlipsJaxBatch,
         "random_vertical_flips_batch": RandomVerticalFlipsJaxBatch,
         "random_img_shift_batch": RandomImageShiftsJaxBatch,
+        "center_crop": CenterCrop,
         "pil_to_numpy": PILToNumpy,
         "normalize_np_img": NormalizeNumpyImg,
         "normalize_np_batch": NormalizeNumpyBatch,

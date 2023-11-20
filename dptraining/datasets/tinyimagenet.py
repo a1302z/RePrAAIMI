@@ -1,7 +1,7 @@
 from copy import deepcopy
 from pathlib import Path
 from pickle import load
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional
 
 import numpy as np
 from torch import Generator  # pylint:disable=no-name-in-module
@@ -87,13 +87,13 @@ class TinyImageNet(Dataset):
         assert self.imgs.shape[0] == len(self.labels)
         return len(self.labels)
 
-    def __getitem__(self, index: int) -> Tuple:
+    def __getitem__(self, index: int) -> tuple:
         return self.transform(self.imgs[index]), self.target_tf(self.labels[index])
 
 
 class TinyImageNetCreator(DataLoaderCreator):
     @staticmethod
-    def make_datasets(config: Config, transforms: Tuple) -> Tuple[Dataset, Dataset]:
+    def make_datasets(config: Config, transforms: tuple) -> tuple[Dataset, Dataset]:
         train_tf, val_tf, test_tf = transforms
         train_kwargs = {
             "root": config.dataset.root,
@@ -126,10 +126,14 @@ class TinyImageNetCreator(DataLoaderCreator):
             n_train = int(train_val_split * len(train_ds))
             lengths = (n_train, len(train_ds) - n_train)
             train_ds, _ = random_split(
-                train_ds, lengths, generator=Generator().manual_seed(42)
+                train_ds,
+                lengths,
+                generator=Generator().manual_seed(config.dataset.datasplit_seed),
             )
             _, val_ds = random_split(
-                val_ds, lengths, generator=Generator().manual_seed(42)
+                val_ds,
+                lengths,
+                generator=Generator().manual_seed(config.dataset.datasplit_seed),
             )
         test_ds = TinyImageNet(**test_kwargs)
         return train_ds, val_ds, test_ds

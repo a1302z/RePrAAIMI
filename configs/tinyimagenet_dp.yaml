@@ -1,11 +1,12 @@
 defaults:
   - base_config
   - _self_
-project: tinyimagenet-dp
 general:
   log_wandb: False
   parallel: False
   eval_train: False
+wandb:
+  project: tinyimagenet-dp
 dataset: 
   task: classification
   name: tinyimagenet
@@ -37,23 +38,24 @@ augmentations:
         max_shift: 4
       random_vertical_flips:
         flip_prob: 0.5
-test_augmentations:
 optim:
   name: nadam
 loss: 
   type: cse
   reduction: sum
+  binary_loss: False
 model:
   name: wide_resnet
-  depth: 40
-  width: 4
   in_channels: 3
   num_classes: 1000
   conv: conv
   activation: mish
   normalization: gn
   pooling: avgpool
-  scale_norm: True
+  extra_args:
+    scale_norm: True
+    depth: 40
+    width: 4
 ema:
   use_ema: False
   decay: 0.04
@@ -62,6 +64,7 @@ hyperparams:
   batch_size: 32
   batch_size_test: 256
   lr: 1e-3
+  grad_acc_steps: 64
 scheduler:
   type: reduceonplateau
   normalize_lr: False
@@ -73,4 +76,3 @@ DP:
   max_per_sample_grad_norm: 1.0
   delta: 8e-7
   norm_acc: False
-  grad_acc_steps: 64

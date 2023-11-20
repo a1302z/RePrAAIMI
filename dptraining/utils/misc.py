@@ -2,6 +2,12 @@ from abc import abstractmethod
 from collections import OrderedDict
 from typing import cast
 
+from objax import VarCollection
+from numpy import prod, empty
+from datetime import datetime
+
+from skimage.util import view_as_blocks
+
 
 class StateDictObject:
     @abstractmethod
@@ -21,7 +27,6 @@ class StateDictObjectMetricTracker(StateDictObject):
         cumulative_delta: bool = True,
         mode: str = "maximize",
     ):
-
         if patience < 1:
             raise ValueError("Argument patience should be positive integer.")
 
@@ -61,7 +66,6 @@ class StateDictObjectMetricTracker(StateDictObject):
         self.mode = state_dict["mode"]
 
     def update(self, score: float) -> bool:
-
         match self.mode:
             case "maximize":
                 if self.best_score is None:
@@ -89,3 +93,31 @@ class StateDictObjectMetricTracker(StateDictObject):
                     self.counter = 0
             case _:
                 raise RuntimeError("This is not supported and should not happen :/")
+
+
+def get_num_params(model_vars: VarCollection) -> int:
+    return sum([prod(v.shape) for v in model_vars.values()])
+
+
+def make_unique_str(config, id_str=""):
+    identifying_model_str = ""
+    if config.general.make_save_str_unique:
+        if config.general.log_wandb:
+            identifying_model_str += (
+                f"_{id_str}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+            )
+        else:
+            identifying_model_str += f"_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
+
+    return identifying_model_str
+
+
+def make_grid_numpy(im_in, ncols=3):
+    im_in = im_in.swapaxes(1, -1)
+    n, h, w, c = im_in.shape
+    dn = (-n) % ncols  # trailing images
+    im_out = empty((n + dn) * h * w * c, im_in.dtype).reshape(-1, w * ncols, c)
+    view = view_as_blocks(im_out, (h, w, c))
+    for k, im in enumerate(list(im_in) + dn * [0]):
+        view[k // ncols, k % ncols, 0] = im
+    return im_out

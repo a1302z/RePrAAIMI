@@ -1,0 +1,63 @@
+defaults:
+  - base_config
+  - _self_
+general:
+  log_wandb: False
+  parallel: False
+  eval_train: False
+  eval_init: False
+  print_info: False
+  save_path: cifar10_attack_data
+  make_save_str_unique: True
+wandb:
+  project: cifar_attack_generation
+dataset: 
+  task: classification
+  name: CIFAR10
+  root: ./data
+  train_val_split: 0.9
+  normalization: True
+metrics:
+  main: 
+    accuracy_score: 
+  logging:
+    classification_report:
+      output_dict: True
+      zero_division: 0
+loader: 
+  num_workers: 0
+  # prefetch_factor: 16
+  collate_fn: numpy
+# augmentations:
+# test_augmentations:
+model:
+  complex: False
+  name: mlp
+  activation: elu
+  extra_args:
+    sizes: 
+      - 100
+    inp_size: 3072
+    outp_size: 10
+optim:
+  name: nadam
+loss: 
+  type: cse
+  reduction: sum
+  binary_loss: False
+# ema:
+#   use_ema: True
+#   decay: 0.995
+hyperparams:
+  epochs: 10
+  batch_size: 1001
+  batch_size_test: 100
+  lr: 2e-3
+  # momentum: 0.9
+  grad_acc_steps: 2
+attack:
+  type: RECON_INFORMED
+  N_fixed_dataset: 34999
+  N_shadow_train: 5000
+  N_attack_eval: 1000
+  

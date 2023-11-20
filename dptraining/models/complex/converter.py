@@ -1,6 +1,6 @@
 import types
 from inspect import signature
-from typing import Tuple, Union, Callable
+from typing import Union, Callable
 from functools import partial
 from collections.abc import Iterable
 from jaxlib.xla_extension import CompiledFunction  # pylint:disable=no-name-in-module
@@ -116,13 +116,13 @@ class ComplexModelConverter:
         new_linear_class: Union[Module, Callable] = ComplexLinear,
         new_activation: Union[Module, Callable] = ConjugateMish,
         new_pooling: Union[Module, Callable] = average_pool_2d,
-        conv_classes_to_replace: Tuple[Union[Module, Callable]] = DEFAULT_CONV_CLASSES,
-        norm_classes_to_replace: Tuple[Union[Module, Callable]] = DEFAULT_NORM_CLASSES,
-        linear_classes_to_replace: Tuple[
+        conv_classes_to_replace: tuple[Union[Module, Callable]] = DEFAULT_CONV_CLASSES,
+        norm_classes_to_replace: tuple[Union[Module, Callable]] = DEFAULT_NORM_CLASSES,
+        linear_classes_to_replace: tuple[
             Union[Module, Callable]
         ] = DEFAULT_LINEAR_CLASSES,
-        activations_to_replace: Tuple[Union[Module, Callable]] = DEFAULT_ACTIVATIONS,
-        poolings_to_replace: Tuple[Union[Module, Callable]] = DEFAULT_POOLING,
+        activations_to_replace: tuple[Union[Module, Callable]] = DEFAULT_ACTIVATIONS,
+        poolings_to_replace: tuple[Union[Module, Callable]] = DEFAULT_POOLING,
     ) -> None:
         self.conversion_dict: dict[list[Union[Callable, Module]], Module] = {
             **{conv_class: new_conv_class for conv_class in conv_classes_to_replace},
