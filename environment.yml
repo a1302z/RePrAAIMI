@@ -1,4 +1,4 @@
-name: objaxdp
+name: reconciling
 channels: 
   - conda-forge
   - pytorch
