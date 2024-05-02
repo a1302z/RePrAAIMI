@@ -35,6 +35,7 @@ To reproduce our main results in the paper please first download the datasets fr
 All necessary hyperparameters are furthermore given in the methods section. For our experiments we used 10, 11, 100, 101, 110 as random seeds. 
 
 #### Realistic Risk Assessment
+Prerequisite: Clone [our modified version of breaching)[https://github.com/a1302z/objaxbreaching] into this repository. 
 1. Create reconstructions of a specific setup via ```python dptraining/vulnerability/create_reconstructions.py -cn configs/<name_of_config>.yaml -eb <minimal exponent of 10 for epsilon e.g. when input is 6 epsilon = 10^6> -ee <maximal exponent of 10 for epsilon e.g. 10^18> -es <step size between exponents>```
 2. Match the reconstructions to the original data `python dptraining/vulnerability/match_reconstructions.py --recon_folder <path_to_reconstructions> --use_<error_metric>`
 3. Visualize results `python dptraining/vulnerability/visualize_reconstructions.py --recon_csv <path_to_csv_file_created_by_previous_step> --metric_to_use <metric_from_previous_step>`
