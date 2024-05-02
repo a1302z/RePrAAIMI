@@ -1,4 +1,4 @@
-# Reconciling Privacy And Accuracy in Healthcare
+# Reconciling Privacy And Accuracy in Medical Imaging
 
 Code Base for Training of AI models Under DP Guarantees + Evaluating Risk Profiles.
 
