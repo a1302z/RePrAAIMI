@@ -1,4 +1,7 @@
 # Reconciling Privacy And Accuracy in Medical Imaging
+
+[Paper is now published at Nature Machine Intelligence](https://www.nature.com/articles/s42256-024-00858-y)
+
 What you can use this repository for: 
 - Large-scale AI trainings under DP conditions on 2D and 3D imaging data
 - Calculate theoretical risk profiles for settings under various privacy budgets
